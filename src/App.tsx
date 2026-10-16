@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 
-type Page = 'home' | 'room' | 'fun' | 'settings'
+type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
 type Tool = '人物提示' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
 
@@ -53,12 +53,13 @@ export default function App() {
 
   return <main className="shell">
     <section className="screen">
-      {page === 'home' && <Home onPerson={openPerson} time={time} />}
+      {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} worldbook={worldbook} setWorldbook={setWorldbook}
         tasks={tasks} addTask={addTask} />}
+      {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
       {page === 'settings' && <Settings />}
     </section>
@@ -68,11 +69,11 @@ export default function App() {
   </main>
 }
 
-function Home({ onPerson, time }: { onPerson: (p: Person) => void, time: string }) {
+function Home({ onPerson, onMe, time }: { onPerson: (p: Person) => void, onMe: () => void, time: string }) {
   return <div className="home-screen">
     <div className="home-people">
       <button className="avatar" onClick={() => onPerson('晏未晞')}>晏</button>
-      <button className="avatar center" onClick={() => onPerson('晏未晞')}>顾</button>
+      <button className="avatar center" onClick={onMe}>顾</button>
       <button className="avatar" onClick={() => onPerson('言朔')}>言</button>
     </div>
     <button className="calendar-card" onClick={() => onPerson('晏未晞')}>
@@ -81,6 +82,20 @@ function Home({ onPerson, time }: { onPerson: (p: Person) => void, time: string 
     <div className="home-ornament" aria-hidden="true"><i/><i/><i/><i/></div>
     <div className="clock">{time}<small>时钟</small></div>
     <p className="home-note">今天也慢慢来。</p>
+  </div>
+}
+
+function MyRoom() {
+  return <div className="room-screen">
+    <header className="room-header"><div className="room-name"><span>顾</span><div><b>我的房间</b><small>自己的工作区</small></div></div></header>
+    <div className="workspace-title">我的空间</div>
+    <div className="tool-grid">
+      <button><b>日历与日程</b><span>安排今天与之后的事情</span></button>
+      <button><b>我的备忘</b><span>只属于自己的记录</span></button>
+      <button><b>共同记忆</b><span>与两个角色共同留下的事</span></button>
+      <button><b>个人设置</b><span>头像、昵称与偏好</span></button>
+    </div>
+    <p className="home-note">这里以后就是你的房间。AI 房间和你的空间分开。</p>
   </div>
 }
 
