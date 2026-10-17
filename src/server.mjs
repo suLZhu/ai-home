@@ -24,6 +24,7 @@ db.exec(`
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
+const ALLOWED_ORIGIN = process.env.AI_HOME_ALLOWED_ORIGIN || ''
 const MAX_BODY = 2 * 1024 * 1024
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000
 const passwordHash = createHash('sha256').update(password).digest()
@@ -68,8 +69,9 @@ function getSession(req) {
 function sameOrigin(req) {
   const origin = req.headers.origin
   if (!origin) return true
+  if (ALLOWED_ORIGIN && origin === ALLOWED_ORIGIN) return true
   try {
-    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const host = req.headers['x-forwarded-host'] || req.headers['x-original-host'] || req.headers.host
     return new URL(origin).host === host
   } catch { return false }
 }
