@@ -142,3 +142,10 @@
 .conversation-bar{flex-wrap:wrap}
 .conversation-list{flex-basis:100%;order:0}
 .conversation-new,.conversation-rename,.conversation-delete{order:1}
+.room-session-switch{margin:14px 0 12px;padding:13px 14px;border:1px solid #d8cebf;border-radius:16px;background:rgba(250,246,238,.78);display:flex;flex-direction:column;gap:9px}
+.room-session-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#5e5144;font-size:13px}
+.room-session-heading small,.room-session-hint{font-size:11px;color:#8a7d6d}
+.room-session-controls{display:flex;align-items:center;gap:8px;min-width:0}
+.room-session-controls select{flex:1;min-width:0;width:0;border:1px solid #d4c8b8;border-radius:10px;padding:10px;background:#fbf8f1;color:#493d32;font:inherit;font-size:13px}
+.room-session-controls button{flex-shrink:0;border:1px solid #cfc2b0;border-radius:10px;padding:10px 12px;background:#e8dfd1;color:#665443;font-size:12px}
+.room-session-hint{line-height:1.4}
