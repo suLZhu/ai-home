@@ -306,6 +306,7 @@ function MCPSettings({person}:{person:Person}) {
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
   const [tools,setTools] = useState<Record<string,{name:string;description:string;inputSchema:unknown}[]>>({})
+  const [expandedTools,setExpandedTools] = useState<Record<string,boolean>>({})
   const [args,setArgs] = useState<Record<string,string>>({})
   const [results,setResults] = useState<Record<string,string>>({})
   async function refresh() {
@@ -314,7 +315,7 @@ function MCPSettings({person}:{person:Person}) {
     if(!r.ok) throw new Error(data.error || '读取 MCP 列表失败')
     setConnections(data.connections)
   }
-  useEffect(()=>{setConnections([]);setTools({});setResults({});setError('');setNotice('');refresh().catch(e=>setError(e.message))},[person])
+  useEffect(()=>{setConnections([]);setTools({});setExpandedTools({});setResults({});setError('');setNotice('');refresh().catch(e=>setError(e.message))},[person])
   async function add(e:FormEvent) {
     e.preventDefault();setBusy(true);setError('');setNotice('')
     try {
@@ -328,7 +329,7 @@ function MCPSettings({person}:{person:Person}) {
     try {
       const r=await fetch('/api/mcp/'+c.id+'/tools',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})})
       const data=await r.json();if(!r.ok)throw new Error(data.error||'连接失败')
-      setTools(old=>({...old,[c.id]:data.tools}));setNotice('连接成功：发现 '+data.tools.length+' 个工具。')
+      setTools(old=>({...old,[c.id]:data.tools}));setExpandedTools(old=>({...old,[c.id]:false}));setNotice('连接成功：发现 '+data.tools.length+' 个工具，可按需展开。')
     }catch(e){setError(e instanceof Error?e.message:String(e));setNotice('')}finally{setBusy(false)}
   }
   async function remove(c:MCPConnection) {
@@ -346,7 +347,8 @@ function MCPSettings({person}:{person:Person}) {
     {error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
     {connections.length===0&&<p className="muted">还没有为{person}绑定 MCP 服务。</p>}
     {connections.map(c=><section className="mcp-connection-card" key={c.id}><div className="mcp-connection"><div className="mcp-connection-info"><b>{c.name}</b><small>{c.url}</small><span>绑定人物：{c.person} · {c.transport==='httpStream'?'Streamable HTTP':'其他'}</span></div><button type="button" className="mcp-action" disabled={busy} onClick={()=>loadTools(c)}>连接 / 获取工具</button><button type="button" className="mcp-remove" onClick={()=>remove(c)}>移除</button></div>
-      {(tools[c.id]||[]).map(t=><div className="mcp-tool" key={t.name}><b>{t.name}</b>{t.description&&<p>{t.description}</p>}<label>调用参数（JSON）<textarea value={args[c.id+':'+t.name]??'{}'} onChange={e=>setArgs(old=>({...old,[c.id+':'+t.name]:e.target.value}))} rows={3}/></label><button type="button" className="mcp-action" disabled={busy} onClick={()=>callTool(c,t)}>调用工具</button>{results[c.id+':'+t.name]&&<pre>{results[c.id+':'+t.name]}</pre>}</div>)}
+      {(tools[c.id]||[]).length>0&&<button type="button" className="mcp-tools-toggle" aria-expanded={!!expandedTools[c.id]} onClick={()=>setExpandedTools(old=>({...old,[c.id]:!old[c.id]}))}><span>{expandedTools[c.id]?'收起工具列表':'展开工具列表'}</span><span className="mcp-tools-count">{tools[c.id].length} 个工具</span><span className="mcp-tools-chevron">{expandedTools[c.id]?'−':'＋'}</span></button>}
+      {expandedTools[c.id]&&(tools[c.id]||[]).map(t=><div className="mcp-tool" key={t.name}><b>{t.name}</b>{t.description&&<p>{t.description}</p>}<label>调用参数（JSON）<textarea value={args[c.id+':'+t.name]??'{}'} onChange={e=>setArgs(old=>({...old,[c.id+':'+t.name]:e.target.value}))} rows={3}/></label><button type="button" className="mcp-action" disabled={busy} onClick={()=>callTool(c,t)}>调用工具</button>{results[c.id+':'+t.name]&&<pre>{results[c.id+':'+t.name]}</pre>}</div>)}
     </section>)}
     <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>连接类型<select value={transport} onChange={e=>setTransport(e.target.value)}><option value="httpStream">Streamable HTTP（HTTP 流式）</option></select></label><label>Bearer Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="password" autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
 }
