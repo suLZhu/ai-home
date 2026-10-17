@@ -97,7 +97,7 @@ function decryptSecret(value) {
   decipher.setAuthTag(Buffer.from(tag, 'hex'))
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'hex')), decipher.final()]).toString('utf8')
 }
-function publicMcp(row) { return { id: row.id, person: row.person, name: row.name, url: row.url, transport: row.transport, enabled: !!row.enabled, updatedAt: row.updated_at, hasToken: !!row.token_enc } }
+function publicMcp(row) { let hasToken = false; try { const saved = JSON.parse(decryptSecret(row.token_enc)); hasToken = typeof saved.token === 'string' && saved.token.length > 0 } catch { hasToken = decryptSecret(row.token_enc).length > 0 }; return { id: row.id, person: row.person, name: row.name, url: row.url, transport: row.transport, enabled: !!row.enabled, updatedAt: row.updated_at, hasToken } }
 function validateRemoteUrl(raw) {
   let u
   try { u = new URL(raw) } catch { throw Object.assign(new Error('MCP 地址格式无效'), { status: 400 }) }
@@ -112,8 +112,10 @@ function validateRemoteUrl(raw) {
 async function withMcpClient(row, operation) {
   if (!row || !row.enabled) throw Object.assign(new Error('找不到已启用且绑定当前人物的 MCP 服务'), { status: 404 })
   validateRemoteUrl(row.url)
-  const token = decryptSecret(row.token_enc)
-  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+  let saved
+  try { saved = JSON.parse(decryptSecret(row.token_enc)) } catch { saved = { token: decryptSecret(row.token_enc), headers: {} } }
+  const token = typeof saved.token === 'string' ? saved.token : ''
+  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(saved.headers && typeof saved.headers === 'object' ? saved.headers : {}) }
   const transport = new StreamableHTTPClientTransport(new URL(row.url), { requestInit: { headers, redirect: 'error' } })
   const client = new Client({ name: 'ai-home', version: '0.1.0' }, { capabilities: {} })
   try { await client.connect(transport); return await operation(client) }
@@ -179,9 +181,12 @@ createServer(async (req, res) => {
       if (transportType !== 'httpStream') return send(res, 400, { error: '当前版本仅支持 Streamable HTTP 连接' })
       const token = String(body.token || '').trim()
       if (token.length > 8192) return send(res, 400, { error: 'Token 长度超出限制' })
+      const customHeaders = body.headers && typeof body.headers === 'object' && !Array.isArray(body.headers) ? body.headers : {}
+      if (Object.keys(customHeaders).length > 30) return send(res, 400, { error: '自定义请求头最多 30 项' })
+      for (const [key, value] of Object.entries(customHeaders)) { if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key) || typeof value !== 'string' || value.length > 2048 || /[\r\n]/.test(value)) return send(res, 400, { error: '自定义请求头格式无效' }) }
       if (!name) return send(res, 400, { error: '请填写服务名称' })
       const id = randomUUID(), updatedAt = new Date().toISOString()
-      db.prepare('INSERT INTO mcp_connections (id,person,name,url,transport,enabled,token_enc,updated_at) VALUES (?,?,?,?,?,1,?,?)').run(id, person, name, remote.toString(), transportType, encryptSecret(token), updatedAt)
+      db.prepare('INSERT INTO mcp_connections (id,person,name,url,transport,enabled,token_enc,updated_at) VALUES (?,?,?,?,?,1,?,?)').run(id, person, name, remote.toString(), transportType, encryptSecret(JSON.stringify({ token, headers: customHeaders })), updatedAt)
       const row = db.prepare('SELECT * FROM mcp_connections WHERE id=?').get(id)
       return send(res, 201, { connection: publicMcp(row) })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '保存 MCP 配置失败' }) }

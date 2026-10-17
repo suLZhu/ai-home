@@ -302,6 +302,7 @@ function MCPSettings({person}:{person:Person}) {
   const [url,setUrl] = useState('')
   const [transport,setTransport] = useState('httpStream')
   const [token,setToken] = useState('')
+  const [headersText,setHeadersText] = useState('{}')
   const [busy,setBusy] = useState(false)
   const [error,setError] = useState('')
   const [notice,setNotice] = useState('')
@@ -317,10 +318,12 @@ function MCPSettings({person}:{person:Person}) {
   useEffect(()=>{setConnections([]);setTools({});setResults({});setError('');setNotice('');refresh().catch(e=>setError(e.message))},[person])
   async function add(e:FormEvent) {
     e.preventDefault();setBusy(true);setError('');setNotice('')
+    let headers:unknown={}
+    try { headers=JSON.parse(headersText); if(!headers || typeof headers!=='object' || Array.isArray(headers)) throw new Error('自定义请求头必须是 JSON 对象') } catch(e) { setError(e instanceof Error?e.message:'自定义请求头 JSON 无效');setBusy(false);return }
     try {
-      const r=await fetch('/api/mcp',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name,url,transport,token})})
+      const r=await fetch('/api/mcp',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name,url,transport,token,headers})})
       const data=await r.json();if(!r.ok)throw new Error(data.error||'保存失败')
-      setName('');setUrl('');setToken('');await refresh();setNotice('配置已安全保存，可以尝试连接并读取工具。')
+      setName('');setUrl('');setToken('');setHeadersText('{}');await refresh();setNotice('配置已安全保存，可以尝试连接并读取工具。')
     } catch(e){setError(e instanceof Error?e.message:String(e))} finally{setBusy(false)}
   }
   async function loadTools(c:MCPConnection) {
@@ -348,7 +351,7 @@ function MCPSettings({person}:{person:Person}) {
     {connections.map(c=><section className="mcp-connection-card" key={c.id}><div className="mcp-connection"><div className="mcp-connection-info"><b>{c.name}</b><small>{c.url}</small><span>绑定人物：{c.person} · {c.transport==='httpStream'?'Streamable HTTP':'其他'}</span></div><button type="button" className="mcp-action" disabled={busy} onClick={()=>loadTools(c)}>连接 / 获取工具</button><button type="button" className="mcp-remove" onClick={()=>remove(c)}>移除</button></div>
       {(tools[c.id]||[]).map(t=><div className="mcp-tool" key={t.name}><b>{t.name}</b>{t.description&&<p>{t.description}</p>}<label>调用参数（JSON）<textarea value={args[c.id+':'+t.name]??'{}'} onChange={e=>setArgs(old=>({...old,[c.id+':'+t.name]:e.target.value}))} rows={3}/></label><button type="button" className="mcp-action" disabled={busy} onClick={()=>callTool(c,t)}>调用工具</button>{results[c.id+':'+t.name]&&<pre>{results[c.id+':'+t.name]}</pre>}</div>)}
     </section>)}
-    <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>连接类型<select value={transport} onChange={e=>setTransport(e.target.value)}><option value="httpStream">Streamable HTTP（HTTP 流式）</option></select></label><label>Bearer Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="password" autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
+    <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>连接类型<select value={transport} onChange={e=>setTransport(e.target.value)}><option value="httpStream">Streamable HTTP（HTTP 流式）</option></select></label><label>Bearer Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="password" autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><label>自定义请求头（JSON，可选）<textarea value={headersText} onChange={e=>setHeadersText(e.target.value)} rows={3} spellCheck={false}/></label><small>例如：{'{'}"X-Client": "ai-home"{'}'}。若填写 Authorization，会覆盖 Bearer Token 自动生成的请求头。</small><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
 }
 
 function Editor({title,value,onChange,placeholder}:{title:string,value:string,onChange:(v:string)=>void,placeholder:string}) {
