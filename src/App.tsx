@@ -68,6 +68,7 @@ export default function App() {
     const card = characters[target]
     const matched = worldEntries[target].filter(e => e.enabled && (e.always || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))))
     const system = [
+      '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
       card.description && '【角色描述】\n'+card.description,
       card.definition && '【角色设定】\n'+card.definition,
       card.language && '【语言与表达要求】\n'+card.language,
