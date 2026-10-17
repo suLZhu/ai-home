@@ -170,13 +170,59 @@ export default function App() {
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
       for(const a of attachments.filter(a=>a.dataUrl&&a.type.startsWith('image/'))) content.push({type:'image_url',image_url:{url:a.dataUrl}})
       const currentContent=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
-      const bodyMessages=[...(system?[{role:'system',content:system}]:[]),...previous,{role:'user',content:currentContent}]
-      const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey.trim()},body:JSON.stringify({model:modelConfig.model.trim(),messages:bodyMessages,stream:true})})
-      if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
-      if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
-      const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let answer=''
-      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const piece=chunk.choices?.[0]?.delta?.content;if(typeof piece==='string'&&piece){answer+=piece;setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:answer}:m)}))}}catch{}}}
-      if(!answer) setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称或接口的流式兼容性。）'}:m)}))
+      const requestMessages:any[]=[...(system?[{role:'system',content:system}]:[]),...previous,{role:'user',content:currentContent}]
+      // Load tools only from the active character's server-side MCP bindings.
+      const toolRoutes=new Map<string,{id:string;person:Person;name:string}>()
+      const openAITools:any[]=[]
+      try {
+        const listResponse=await fetch('/api/mcp?person='+encodeURIComponent(target),{credentials:'same-origin'})
+        if(listResponse.ok){
+          const listData=await listResponse.json()
+          for(const connection of (listData.connections||[]).filter((c:any)=>c.enabled)){
+            try {
+              const toolResponse=await fetch('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})})
+              if(!toolResponse.ok) continue
+              const toolData=await toolResponse.json()
+              for(const tool of (toolData.tools||[])){
+                const safeName=('mcp_'+connection.id.replace(/-/g,'').slice(0,8)+'_'+tool.name).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,64)
+                if(toolRoutes.has(safeName)) continue
+                toolRoutes.set(safeName,{id:connection.id,person:target,name:tool.name})
+                openAITools.push({type:'function',function:{name:safeName,description:('MCP 服务：'+connection.name+'；工具：'+tool.name+'。'+(tool.description||'')).slice(0,1000),parameters:tool.inputSchema&&tool.inputSchema.type==='object'?tool.inputSchema:{type:'object',properties:{},additionalProperties:true}}})
+              }
+            } catch { /* An unavailable MCP must not prevent ordinary chat. */ }
+          }
+        }
+      } catch { /* MCP is optional; continue with normal model chat. */ }
+      let answer=''
+      let finished=false
+      for(let round=0;round<5&&!finished;round++){
+        const requestBody:any={model:modelConfig.model.trim(),messages:requestMessages,stream:true}
+        if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
+        const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey.trim()},body:JSON.stringify(requestBody)})
+        if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
+        if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
+        const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
+        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:answer}:m)}))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
+        if(!toolCalls.length){finished=true;break}
+        requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
+        for(const call of toolCalls){
+          const route=toolRoutes.get(call.function.name)
+          let resultContent=''
+          try{
+            if(!route||route.person!==target) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
+            let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
+            if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
+            setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+route.name+'…'}:m)}))
+            const toolResponse=await fetch('/api/mcp/'+route.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route.name,arguments:args})})
+            const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
+            resultContent=JSON.stringify(toolData.result)
+          }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)})}
+          requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
+        }
+        if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
+      }
+      if(!answer) setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）'}:m)}))
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
       setChatError(msg.includes('Failed to fetch')?'连接失败：可能是 API 地址不可达或浏览器跨域（CORS）限制。若中转站不允许网页跨域，需要在云服务器增加安全的后端代理。':msg)
