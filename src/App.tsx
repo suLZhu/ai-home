@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, type FormEvent } from 'react'
 import './App.css'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
@@ -6,11 +6,12 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
 type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
-type ChatMessage = { role: 'user' | 'assistant'; content: string }
+type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[] }
 type ModelConfig = { endpoint: string; model: string }
 function readMessages(): Record<Person,ChatMessage[]> {
   const old = read<any>('ai-home.messages', { '晏未晞': [], '言朔': [] })
-  const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
+  const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x=>({...x,attachments:(x.attachments||[]).map((a:any)=>({name:a.name,type:a.type,size:a.size}))}))
   return {'晏未晞':migrate(old['晏未晞']||[]),'言朔':migrate(old['言朔']||[])}
 }
 
@@ -46,7 +47,7 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [])
 
-  useEffect(() => localStorage.setItem('ai-home.messages', JSON.stringify(messages)), [messages])
+  useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   useEffect(() => localStorage.setItem('ai-home.modelConfig', JSON.stringify(modelConfig)), [modelConfig])
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
@@ -56,9 +57,9 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
 
   function openPerson(p: Person) { setPerson(p); setPage('room'); setChatOpen(true); setActiveTool('') }
-  async function send() {
-    const text = draft.trim()
-    if (!text || sending) return
+  async function send(textInput: string, attachments: MessageAttachment[] = []) {
+    const text = textInput.trim()
+    if ((!text && !attachments.length) || sending) return
     if (!modelConfig.endpoint.trim() || !modelConfig.model.trim() || !apiKey.trim()) {
       setChatError('请先在房间工作区 → 模型设置中填写 API 地址、模型名称和 API Key（Key 只保存在当前会话内）。')
       return
@@ -77,12 +78,18 @@ export default function App() {
       worldbook[target] && '【世界书补充】\n'+worldbook[target],
       matched.length && '【本轮召回的世界书】\n'+matched.map(e=>'['+e.title+']\n'+e.content).join('\n\n')
     ].filter(Boolean).join('\n\n')
-    setMessages(prev=>({...prev,[target]:[...prev[target],{role:'user',content:text},{role:'assistant',content:''}]}))
+    const attachmentLabel = attachments.length ? '\n[附件：'+attachments.map(a=>a.name).join('、')+']' : ''
+    const userMessage: ChatMessage = {role:'user',content:text,attachments:attachments.map(a=>({...a,preview:a.preview||a.dataUrl,dataUrl:undefined}))}
+    setMessages(prev=>({...prev,[target]:[...prev[target],userMessage,{role:'assistant',content:''}]}))
     setDraft('');setChatError('');setSending(true)
     try {
       const base=modelConfig.endpoint.trim().replace(/\/+$/,'')
       const url=/\/chat\/completions$/.test(base)?base:base.endsWith('/v1')?base+'/chat/completions':base+'/v1/chat/completions'
-      const bodyMessages=[...(system?[{role:'system',content:system}]:[]),...history.slice(-24).map(m=>({role:m.role,content:m.content})),{role:'user',content:text}]
+      const previous=history.slice(-24).map(m=>({role:m.role,content:m.content+(m.attachments?.length?'\n[此前附件：'+m.attachments.map(a=>a.name).join('、')+']':'')}))
+      const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
+      for(const a of attachments.filter(a=>a.dataUrl&&a.type.startsWith('image/'))) content.push({type:'image_url',image_url:{url:a.dataUrl}})
+      const currentContent=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
+      const bodyMessages=[...(system?[{role:'system',content:system}]:[]),...previous,{role:'user',content:currentContent}]
       const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey.trim()},body:JSON.stringify({model:modelConfig.model.trim(),messages:bodyMessages,stream:true})})
       if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
       if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
@@ -155,7 +162,7 @@ function MyRoom() {
 
 function Room(props: {
   person: Person, setPerson: (p: Person) => void, chatOpen: boolean, setChatOpen: (v: boolean) => void,
-  draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: () => void,
+  draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
@@ -199,13 +206,54 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
 }
 
 function Chat(p: any) {
+  const [files,setFiles]=useState<MessageAttachment[]>([])
+  const [emojiOpen,setEmojiOpen]=useState(false)
+  const imageInput=useRef<HTMLInputElement>(null)
+  const fileInput=useRef<HTMLInputElement>(null)
+  async function loadFiles(list: FileList | null, imagesOnly=false) {
+    if(!list)return
+    const selected=Array.from(list).slice(0,8)
+    const loaded:MessageAttachment[]=[]
+    for(const file of selected){
+      if(imagesOnly&&!file.type.startsWith('image/'))continue
+      if(file.size>12*1024*1024){p.setChatError('单个文件不能超过 12 MB：'+file.name);continue}
+      const item:MessageAttachment={name:file.name,type:file.type||'application/octet-stream',size:file.size}
+      if(file.type.startsWith('image/')){
+        item.dataUrl=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('图片读取失败'));r.readAsDataURL(file)})
+        item.preview=URL.createObjectURL(file)
+      } else if(/\.(txt|md|json|csv|log)$/i.test(file.name)&&file.size<500*1024){
+        item.textContent=await file.text()
+      }
+      loaded.push(item)
+    }
+    setFiles(prev=>[...prev,...loaded].slice(0,8))
+    if(imageInput.current)imageInput.current.value=''
+    if(fileInput.current)fileInput.current.value=''
+  }
+  function submit(e:FormEvent){e.preventDefault();if(p.sending)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map(({preview,...a}:MessageAttachment)=>a);p.send(p.draft,payload);setFiles([]);setEmojiOpen(false)}
+  const stickers=['😊','🥺','😂','🥰','😭','😤','❤️','🤔','✨','😘','👍','🎉','🌷','💜','🫂','🐱']
   return <div className="fullscreen-chat">
     <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
-    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'bubble '+m.role} key={i}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}</div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>请先在工作区配置模型，即可开始聊天。</div>}</div>
-    <form className="compose" onSubmit={e=>{e.preventDefault();p.send()}}><input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……"/><button disabled={p.sending}>{p.sending?'生成中…':'发送'}</button></form>
+    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<img src={a.preview} alt={a.name}/>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small></div></div>}</div>)}</div></div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
+    {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
+    {emojiOpen&&<div className="emoji-panel" aria-label="表情包选择">{stickers.map((emoji,i)=><button type="button" key={i} onClick={()=>{p.setDraft(p.draft+emoji);setEmojiOpen(false)}}>{emoji}</button>)}</div>}
+    <form className="compose compose-wechat" onSubmit={submit}>
+      <input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息"/>
+      <button className="send-button" disabled={p.sending||(!p.draft.trim()&&!files.length)}>{p.sending?'生成中…':'发送'}</button>
+      <div className="compose-tools">
+        <button type="button" title="表情与贴纸" aria-label="表情与贴纸" className={emojiOpen?'tool-active':''} onClick={()=>setEmojiOpen(v=>!v)}>☺</button>
+        <button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧</button>
+        <button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>＋</button>
+        <span className="tool-hint">表情 · 图片 · 文件</span>
+        <input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/>
+        <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/>
+      </div>
+    </form>
+    <small className="attachment-note">图片会随消息发送给支持视觉的模型；TXT、MD、JSON、CSV、LOG 可读取文本。其他文件目前显示附件信息，云端文件上传功能后续接入。</small>
   </div>
 }
+function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
 
 function Fun() { return <div className="fun-screen"><h2>娱乐房</h2><p>以后这里放内嵌浏览器、可视化网页、相册、播放器，以及客厅。</p><div className="fun-grid">{['内嵌浏览器','可视化网页','相册','播放器','客厅'].map(x=><button key={x}><b>{x}</b><span>功能预留</span></button>)}</div></div> }
 function Settings() { return <div className="settings-screen"><h2>设置</h2><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>数据</b><span>第一版使用浏览器本地存储，不碰 Kelivo 数据。</span></div></div> }
