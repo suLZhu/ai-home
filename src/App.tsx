@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
@@ -19,6 +20,7 @@ export default function App() {
   const [messages, setMessages] = useState<Record<Person, string[]>>(() => read('ai-home.messages', { '晏未晞': [], '言朔': [] }))
   const [memory, setMemory] = useState<Record<Person, string>>(() => read('ai-home.memory', { '晏未晞': '', '言朔': '' }))
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => read('ai-home.prompt', { '晏未晞': '', '言朔': '' }))
+  const [worldEntries, setWorldEntries] = useState<Record<Person, WorldEntry[]>>(() => read('ai-home.worldEntries', { '晏未晞': [], '言朔': [] }))
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => read('ai-home.worldbook', { '晏未晞': '', '言朔': '' }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
@@ -35,6 +37,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
+  useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
 
   function openPerson(p: Person) { setPerson(p); setPage('room'); setChatOpen(true); setActiveTool('') }
@@ -57,7 +60,7 @@ export default function App() {
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
-        prompt={prompt} setPrompt={setPrompt} worldbook={worldbook} setWorldbook={setWorldbook}
+        prompt={prompt} setPrompt={setPrompt} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
@@ -106,6 +109,7 @@ function Room(props: {
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
+  worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void
 }) {
   if (props.chatOpen) return <Chat {...props} />
@@ -125,7 +129,7 @@ function toolHint(t: Tool) {
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '人物提示') return <Editor title="人物提示" value={p.prompt[p.person]} onChange={(v:string)=>p.setPrompt((x:any)=>({...x,[p.person]:v}))} placeholder="写下这个角色希望如何与你相处……" />
-  if (t === '世界书') return <Editor title="世界书" value={p.worldbook[p.person]} onChange={(v:string)=>p.setWorldbook((x:any)=>({...x,[p.person]:v}))} placeholder="写下会被关键词唤起的世界设定……" />
+  if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
   if (t === '长期记忆') return <Editor title="长期记忆" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="这里先作为第一版本地记忆入口。" />
   if (t === '定时任务') return <div className="tool-panel"><h3>定时任务</h3><form onSubmit={(e)=>{e.preventDefault();p.addTask()}}><input value={p.draft} onChange={(e)=>p.setDraft(e.target.value)} placeholder="例如：晚上 23:00 提醒我休息"/><button>加入</button></form>{p.tasks[p.person].map((x:string,i:number)=><p className="task-line" key={i}>{x}</p>)}<small>第一版只保存任务，不执行调度。</small></div>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
