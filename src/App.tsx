@@ -8,6 +8,7 @@ type Person = '晏未晞' | '言朔'
 type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[] }
+type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string }
 type ModelConfig = { endpoint: string; model: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
 type MemoryEntry = { id:string; title:string; content:string; keywords:string; category:'人物关系'|'经历事件'|'偏好习惯'|'项目进度'|'其他'; pinned:boolean; updatedAt:string }
@@ -22,6 +23,12 @@ const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '定时任�
 function read<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || '') as T } catch { return fallback }
 }
+function initialConversations():Record<Person,Conversation[]> {
+  const saved=read<any>('ai-home.conversations',null)
+  if(saved&&Array.isArray(saved['晏未晞'])&&Array.isArray(saved['言朔'])) return {'晏未晞':saved['晏未晞'],'言朔':saved['言朔']}
+  const old=readMessages();const now=new Date().toISOString()
+  return {'晏未晞':[{id:'legacy-yanweixi',title:'旧聊天',messages:old['晏未晞'],updatedAt:now}],'言朔':[{id:'legacy-yanshu',title:'旧聊天',messages:old['言朔'],updatedAt:now}]}
+}
 
 export default function App() {
   const [page, setPage] = useState<Page>('home')
@@ -29,6 +36,8 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [messages, setMessages] = useState<Record<Person, ChatMessage[]>>(readMessages)
+  const [conversations,setConversations] = useState<Record<Person,Conversation[]>>(initialConversations)
+  const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<Person,string>>('ai-home.activeConversationIds',{'晏未晞':'legacy-yanweixi','言朔':'legacy-yanshu'});const all=initialConversations();return {'晏未晞':all['晏未晞'].some(c=>c.id===saved['晏未晞'])?saved['晏未晞']:all['晏未晞'][0]?.id||'','言朔':all['言朔'].some(c=>c.id===saved['言朔'])?saved['言朔']:all['言朔'][0]?.id||''}})
   const [modelConfig, setModelConfig] = useState<ModelConfig>(() => read('ai-home.modelConfig', { endpoint: '', model: '' }))
   const [apiKey, setApiKey] = useState('')
   const [sending, setSending] = useState(false)
@@ -49,12 +58,20 @@ export default function App() {
   const [cloudReady, setCloudReady] = useState(false)
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
 
-  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  const getSnapshot = useCallback(() => ({ version: 2, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   const applySnapshot = useCallback((data: any) => {
-    if (data.messages && typeof data.messages === 'object') setMessages({
-      '晏未晞': Array.isArray(data.messages['晏未晞']) ? data.messages['晏未晞'] : [],
-      '言朔': Array.isArray(data.messages['言朔']) ? data.messages['言朔'] : []
-    })
+    if (data.conversations && Array.isArray(data.conversations['晏未晞']) && Array.isArray(data.conversations['言朔'])) {
+      const convs:Record<Person,Conversation[]>={'晏未晞':data.conversations['晏未晞'],'言朔':data.conversations['言朔']}
+      setConversations(convs)
+      const ids=data.activeConversationIds||{'晏未晞':convs['晏未晞'][0]?.id||'','言朔':convs['言朔'][0]?.id||''}
+      setActiveConversationIds({'晏未晞':convs['晏未晞'].some((c:Conversation)=>c.id===ids['晏未晞'])?ids['晏未晞']:convs['晏未晞'][0]?.id||'','言朔':convs['言朔'].some((c:Conversation)=>c.id===ids['言朔'])?ids['言朔']:convs['言朔'][0]?.id||''})
+      setMessages({'晏未晞':convs['晏未晞'].find((c:Conversation)=>c.id===ids['晏未晞'])?.messages||[],'言朔':convs['言朔'].find((c:Conversation)=>c.id===ids['言朔'])?.messages||[]})
+    } else if (data.messages && typeof data.messages === 'object') {
+      const legacy={'晏未晞':Array.isArray(data.messages['晏未晞'])?data.messages['晏未晞']:[],'言朔':Array.isArray(data.messages['言朔'])?data.messages['言朔']:[]}
+      setMessages(legacy)
+      const now=new Date().toISOString();const convs:Record<Person,Conversation[]>={'晏未晞':[{id:'legacy-yanweixi',title:'旧聊天',messages:legacy['晏未晞'],updatedAt:now}],'言朔':[{id:'legacy-yanshu',title:'旧聊天',messages:legacy['言朔'],updatedAt:now}]}
+      setConversations(convs);setActiveConversationIds({'晏未晞':'legacy-yanweixi','言朔':'legacy-yanshu'})
+    }
     if (data.modelConfig && typeof data.modelConfig === 'object') setModelConfig(data.modelConfig)
     if (data.memory && typeof data.memory === 'object') setMemory({'晏未晞': data.memory['晏未晞'] || '', '言朔': data.memory['言朔'] || ''})
     if (data.memoryEntries && typeof data.memoryEntries === 'object') setMemoryEntries({'晏未晞': Array.isArray(data.memoryEntries['晏未晞']) ? data.memoryEntries['晏未晞'] : [], '言朔': Array.isArray(data.memoryEntries['言朔']) ? data.memoryEntries['言朔'] : []})
@@ -121,7 +138,7 @@ export default function App() {
       } catch { setCloudStatus('error') }
     }, 700)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -130,6 +147,8 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
+  useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
   useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   useEffect(() => localStorage.setItem('ai-home.modelConfig', JSON.stringify(modelConfig)), [modelConfig])
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
@@ -142,6 +161,12 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
 
   function openPerson(p: Person) { setPerson(p); setPage('room'); setChatOpen(true); setActiveTool('') }
+  function updateActiveConversationMessages(target:Person, update:(items:ChatMessage[])=>ChatMessage[]) {
+    const id=activeConversationIds[target]
+    setMessages(prev=>({...prev,[target]:update(prev[target])}))
+    if(id) setConversations(prev=>({...prev,[target]:(prev[target]||[]).map(c=>c.id===id?{...c,messages:update(c.messages),updatedAt:new Date().toISOString()}:c)}))
+  }
+
   async function send(textInput: string, attachments: MessageAttachment[] = []) {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return
@@ -150,7 +175,7 @@ export default function App() {
       return
     }
     const target = person
-    const history = messages[target]
+    const history = (conversations[target]||[]).find(c=>c.id===activeConversationIds[target])?.messages || messages[target]
     const card = characters[target]
     const messageCount=history.length+1
     const runtimeKey='ai-home.worldbookRuntime.'+target
@@ -183,7 +208,7 @@ export default function App() {
     ].filter(Boolean).join('\n\n')
     const attachmentLabel = attachments.length ? '\n[附件：'+attachments.map(a=>a.name).join('、')+']' : ''
     const userMessage: ChatMessage = {role:'user',content:text,attachments:attachments.map(a=>({...a,preview:a.preview||a.dataUrl,dataUrl:undefined}))}
-    setMessages(prev=>({...prev,[target]:[...prev[target],userMessage,{role:'assistant',content:''}]}))
+    updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:''}])
     setDraft('');setChatError('');setSending(true)
     try {
       const base=modelConfig.endpoint.trim().replace(/\/+$/,'')
@@ -231,7 +256,7 @@ export default function App() {
         if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
-        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:answer}:m)}))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:answer}:m))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
@@ -242,7 +267,7 @@ export default function App() {
             if(!route||route.person!==target) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
-            setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+route.name+'…'}:m)}))
+            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+route.name+'…'}:m))
             const toolResponse=await fetch('/api/mcp/'+route.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route.name,arguments:args})})
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
             resultContent=JSON.stringify(toolData.result)
@@ -251,11 +276,11 @@ export default function App() {
         }
         if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
       }
-      if(!answer) setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）'}:m)}))
+      if(!answer) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）'}:m))
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
       setChatError(msg.includes('Failed to fetch')?'连接失败：可能是 API 地址不可达或浏览器跨域（CORS）限制。若中转站不允许网页跨域，需要在云服务器增加安全的后端代理。':msg)
-      setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1&&m.role==='assistant'?{role:'assistant',content:'请求失败，请查看上方错误提示并检查模型设置。'}:m)}))
+      updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1&&m.role==='assistant'?{role:'assistant',content:'请求失败，请查看上方错误提示并检查模型设置。'}:m))
     } finally {setSending(false)}
   }
 
@@ -272,7 +297,7 @@ export default function App() {
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
-        draft={draft} setDraft={setDraft} messages={messages} send={send}
+        draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey}
@@ -335,6 +360,7 @@ function MyRoom() {
 function Room(props: {
   person: Person, setPerson: (p: Person) => void, chatOpen: boolean, setChatOpen: (v: boolean) => void,
   draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
+  conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
@@ -467,6 +493,7 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
 }
 
 function Chat(p: any) {
+  const chatPerson:Person=p.person as Person
   const [files,setFiles]=useState<MessageAttachment[]>([])
   const [emojiOpen,setEmojiOpen]=useState(false)
   const [lightbox,setLightbox]=useState<{src:string;name:string}|null>(null)
@@ -497,6 +524,7 @@ function Chat(p: any) {
   const stickers=['😊','🥺','😂','🥰','😭','😤','❤️','🤔','✨','😘','👍','🎉','🌷','💜','🫂','🐱']
   return <div className="fullscreen-chat">
     <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
+    <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><button key={c.id} type="button" className={p.activeConversationIds[chatPerson]===c.id?'selected':''} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{c.title||'新对话'}</button>)}</div><button type="button" className="conversation-new" onClick={()=>{const current=p.activeConversationIds[chatPerson];const id=crypto.randomUUID();const title='新对话 '+((p.conversations[chatPerson]||[]).length+1);p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:[...(old[chatPerson]||[]).map(x=>x.id===current?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:id}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:[]}));p.setChatError('')}}>＋ 新对话</button><button type="button" className="conversation-rename" onClick={()=>{const c=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson]);if(!c)return;const name=window.prompt('给这条会话起个名字',c.title);if(name?.trim())p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===c.id?{...x,title:name.trim()}:x)}))}}>重命名</button></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div></div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}

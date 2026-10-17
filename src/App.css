@@ -125,3 +125,9 @@
 .worldbook-footnote{display:block;color:#8a7f73;margin-top:12px;line-height:1.6}
 @media(max-width:620px){.world-editor-grid{grid-template-columns:minmax(0,1fr)}.worldbook-panel{padding:12px}.world-editor{padding:11px}.world-entry{padding:11px}}
 .tool-grid>button.tool-active{border-color:#a99a84;background:#eee6d9;box-shadow:inset 0 0 0 1px #d5c7b4}
+.conversation-bar{display:flex;align-items:center;gap:7px;padding:9px 0;border-bottom:1px solid #d5cbbb;min-width:0}
+.conversation-list{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;padding:2px 0}
+.conversation-list button,.conversation-new,.conversation-rename{flex-shrink:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #d1c7b8;background:#eee8dc;border-radius:15px;padding:7px 10px;font-size:12px}
+.conversation-list button.selected{background:#dcd1c0;border-color:#a99a84;font-weight:600}
+.conversation-new{background:#d9d0c2}
+.conversation-rename{background:transparent}
