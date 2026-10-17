@@ -37,7 +37,7 @@ export default function App() {
   const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => read('ai-home.memoryEntries', { '晏未晞': [], '言朔': [] }))
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => read('ai-home.prompt', { '晏未晞': '', '言朔': '' }))
   const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => read('ai-home.characters', { '晏未晞': blankCard('晏未晞'), '言朔': blankCard('言朔') }))
-  const [worldEntries, setWorldEntries] = useState<Record<Person, WorldEntry[]>>(() => read('ai-home.worldEntries', { '晏未晞': [], '言朔': [] }))
+  const [worldEntries, setWorldEntries] = useState<WorldEntry[]>(() => { const raw:any=read('ai-home.worldEntries', []); if(Array.isArray(raw)) return raw.map((e:any)=>({...e,boundCharacters:Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:['晏未晞'])})); return ['晏未晞','言朔'].flatMap((person:any)=>Array.isArray(raw?.[person])?raw[person].map((e:any)=>({...e,boundCharacters:[person]})):[]) })
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => read('ai-home.worldbook', { '晏未晞': '', '言朔': '' }))
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => read('ai-home.mcpConnections', { '晏未晞': [], '言朔': [] }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
@@ -60,7 +60,7 @@ export default function App() {
     if (data.memoryEntries && typeof data.memoryEntries === 'object') setMemoryEntries({'晏未晞': Array.isArray(data.memoryEntries['晏未晞']) ? data.memoryEntries['晏未晞'] : [], '言朔': Array.isArray(data.memoryEntries['言朔']) ? data.memoryEntries['言朔'] : []})
     if (data.prompt && typeof data.prompt === 'object') setPrompt({'晏未晞': data.prompt['晏未晞'] || '', '言朔': data.prompt['言朔'] || ''})
     if (data.characters && typeof data.characters === 'object') setCharacters(data.characters)
-    if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries({'晏未晞': data.worldEntries['晏未晞'] || [], '言朔': data.worldEntries['言朔'] || []})
+    if (Array.isArray(data.worldEntries)) setWorldEntries(data.worldEntries.map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:['晏未晞'])}))); else if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries(['晏未晞','言朔'].flatMap((person:any)=>Array.isArray(data.worldEntries[person])?data.worldEntries[person].map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:[person]})):[]))
     if (data.worldbook && typeof data.worldbook === 'object') setWorldbook({'晏未晞': data.worldbook['晏未晞'] || '', '言朔': data.worldbook['言朔'] || ''})
     if (data.mcpConnections && typeof data.mcpConnections === 'object') setMcpConnections({'晏未晞': Array.isArray(data.mcpConnections['晏未晞']) ? data.mcpConnections['晏未晞'].map((x:MCPConnection)=>({...x,person:'晏未晞'})) : [], '言朔': Array.isArray(data.mcpConnections['言朔']) ? data.mcpConnections['言朔'].map((x:MCPConnection)=>({...x,person:'言朔'})) : []})
     if (data.tasks && typeof data.tasks === 'object') setTasks({'晏未晞': data.tasks['晏未晞'] || [], '言朔': data.tasks['言朔'] || []})
@@ -152,7 +152,23 @@ export default function App() {
     const target = person
     const history = messages[target]
     const card = characters[target]
-    const matched = worldEntries[target].filter(e => e.enabled && (e.always || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))))
+    const messageCount=history.length+1
+    const runtimeKey='ai-home.worldbookRuntime.'+target
+    let runtime:Record<string,{activeUntil?:number;cooldownUntil?:number}>={};try{runtime=JSON.parse(localStorage.getItem(runtimeKey)||'{}')}catch{}
+    const matched:WorldEntry[]=[]
+    for(const entry of worldEntries.filter(e=>e.enabled&&e.boundCharacters?.includes(target))){
+      const scanText=[text,...history.slice(-(entry.scanDepth||4)).reverse().map(m=>m.content)].join('\n')
+      const state=runtime[entry.id]||{}
+      const stickyActive=messageCount<=(state.activeUntil||0)
+      const inCooldown=messageCount<=(state.cooldownUntil||0)
+      const keywordHit=entry.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>{if(entry.useRegex){try{return new RegExp(k,entry.caseSensitive?'u':'iu').test(scanText)}catch{return false}}return entry.caseSensitive?scanText.includes(k):scanText.toLowerCase().includes(k.toLowerCase())})
+      if(stickyActive){matched.push(entry);continue}
+      if(messageCount<(entry.delay||0)||inCooldown||(!entry.always&&!keywordHit))continue
+      matched.push(entry)
+      runtime[entry.id]={activeUntil:messageCount+(entry.sticky||0),cooldownUntil:messageCount+(entry.cooldown||0)}
+    }
+    try{localStorage.setItem(runtimeKey,JSON.stringify(runtime))}catch{}
+    matched.sort((a,b)=>(b.priority||0)-(a.priority||0))
     const system = [
       '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
       card.description && '【角色描述】\n'+card.description,
@@ -162,7 +178,8 @@ export default function App() {
       memory[target] && '【长期记忆（旧版文本）】\n'+memory[target],
       memoryEntries[target].length && '【长期记忆库召回】\n'+memoryEntries[target].filter(e=>e.pinned || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))).slice(0,12).map(e=>'['+e.category+'] '+e.title+'\n'+e.content).join('\n\n'),
       worldbook[target] && '【世界书补充】\n'+worldbook[target],
-      matched.length && '【本轮召回的世界书】\n'+matched.map(e=>'['+e.title+']\n'+e.content).join('\n\n')
+      matched.some(e=>e.target==='system'&&e.position==='top') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n'),
+      matched.some(e=>e.target==='system'&&e.position==='tail') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='tail').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
     ].filter(Boolean).join('\n\n')
     const attachmentLabel = attachments.length ? '\n[附件：'+attachments.map(a=>a.name).join('、')+']' : ''
     const userMessage: ChatMessage = {role:'user',content:text,attachments:attachments.map(a=>({...a,preview:a.preview||a.dataUrl,dataUrl:undefined}))}
@@ -174,8 +191,15 @@ export default function App() {
       const previous=history.slice(-24).map(m=>({role:m.role,content:m.content+(m.attachments?.length?'\n[此前附件：'+m.attachments.map(a=>a.name).join('、')+']':'')}))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
       for(const a of attachments.filter(a=>a.dataUrl&&a.type.startsWith('image/'))) content.push({type:'image_url',image_url:{url:a.dataUrl}})
-      const currentContent=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
-      const requestMessages:any[]=[...(system?[{role:'system',content:system}]:[]),...previous,{role:'user',content:currentContent}]
+      let currentContent:any=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
+      const userTop=matched.filter(e=>e.target==='user'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
+      const userTail=matched.filter(e=>e.target==='user'&&e.position!=='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
+      if(Array.isArray(currentContent)){if(userTop)currentContent=[{type:'text',text:'【世界书】\n'+userTop+'\n\n'},...currentContent];if(userTail)currentContent=[...currentContent,{type:'text',text:'\n\n【世界书】\n'+userTail}]}else currentContent=[userTop&&'【世界书】\n'+userTop,currentContent,userTail&&'【世界书】\n'+userTail].filter(Boolean).join('\n\n')
+      const historyWithWorld:any[]=[...previous]
+      for(const e of matched.filter(e=>e.target==='assistant')){const item={role:'assistant',content:'【世界书：'+e.title+'】\n'+e.content};const at=e.position==='top'?0:e.position==='tail'?historyWithWorld.length:Math.max(0,historyWithWorld.length-Math.max(0,e.depth));historyWithWorld.splice(at,0,item)}
+      const requestMessages:any[]=[...(system?[{role:'system',content:system}]:[]),...historyWithWorld,{role:'user',content:currentContent}]
+      for(const e of matched.filter(e=>e.target==='system'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'system',content:'【世界书：'+e.title+'】\n'+e.content})}
+      for(const e of matched.filter(e=>e.target==='user'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'user',content:'【世界书：'+e.title+'】\n'+e.content})}
       // Load tools only from the active character's server-side MCP bindings.
       const toolRoutes=new Map<string,{id:string;person:Person;name:string}>()
       const openAITools:any[]=[]
@@ -316,7 +340,7 @@ function Room(props: {
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   characters: Record<Person,CharacterCard>, setCharacters: React.Dispatch<React.SetStateAction<Record<Person,CharacterCard>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
-  worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
+  worldEntries: WorldEntry[], setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>,
   memoryEntries: Record<Person,MemoryEntry[]>, setMemoryEntries: React.Dispatch<React.SetStateAction<Record<Person,MemoryEntry[]>>>,
   mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
@@ -340,7 +364,7 @@ function toolHint(t: Tool) {
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
-  if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
+  if (t === '世界书') return <WorldbookEditor entries={p.worldEntries.filter((e:WorldEntry)=>e.boundCharacters?.includes(p.person))} onChange={(v:WorldEntry[])=>p.setWorldEntries((old:WorldEntry[])=>{const visibleIds=new Set(old.filter(e=>e.boundCharacters?.includes(p.person)).map(e=>e.id));const incoming=new Map(v.map(e=>[e.id,e]));const kept=old.flatMap(e=>{if(!visibleIds.has(e.id))return [e];const replacement=incoming.get(e.id);if(replacement)return [replacement];const remaining=e.boundCharacters.filter(name=>name!==p.person);return remaining.length?[{...e,boundCharacters:remaining}]:[]});const oldIds=new Set(old.map(e=>e.id));return [...kept,...v.filter(e=>!oldIds.has(e.id))]})}/>
   if (t === 'MCP') return <MCPSettings person={p.person}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <><MemoryWorkbench person={p.person} entries={p.memoryEntries[p.person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[p.person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>

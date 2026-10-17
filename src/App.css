@@ -75,3 +75,52 @@
 .memory-item>div:first-child b{font-weight:500}.memory-item>div:first-child span,.memory-item>small{color:#81786d;font-size:11px}
 .memory-item p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font-size:13px}
 .memory-actions{display:flex;gap:7px;margin-top:9px}.memory-actions button{border:1px solid #c9c0b4;background:transparent;border-radius:8px;padding:5px 9px;font-size:12px}
+
+/* Worldbook editor inspired by the reference screenshot */
+.worldbook-panel{padding:16px}
+.worldbook-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.worldbook-title-row h3{margin:0 0 4px;font-weight:500}
+.worldbook-toolbar{display:flex;gap:7px;flex-wrap:wrap}
+.worldbook-toolbar button,.world-actions button{border:1px solid #c9c0b4;background:#f7f2e9;color:#675548;border-radius:10px;padding:8px 12px}
+.world-entry{border:1px solid #d6ccbe;border-radius:13px;padding:13px;margin:12px 0;background:#f8f4ec}
+.world-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.world-heading>b{font-weight:500;overflow-wrap:anywhere}
+.world-heading label,.world-entry-bindings label,.world-bound-roles label{display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.world-heading input,.world-entry-bindings input,.world-bound-roles input,.world-inline-toggles input{accent-color:#52649f}
+.world-entry>small{display:block;color:#83776b;margin-top:6px;line-height:1.6}
+.world-entry>p{font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;max-height:110px;overflow:auto}
+.world-entry-meta{display:flex;gap:6px;flex-wrap:wrap}
+.world-entry-meta span{font-size:11px;color:#766b60;background:#eee7db;border-radius:20px;padding:4px 8px}
+.world-entry-bindings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.world-entry-bindings>small{color:#83776b}
+.world-actions{display:flex;gap:8px;margin-top:11px}
+.world-editor{margin-top:18px;border:1px solid #d6ccbe;border-radius:15px;padding:14px;background:#f3ede2}
+.world-editor>h4{font-size:17px;font-weight:500;margin:0 0 13px}
+.world-editor-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:12px;align-items:start}
+.world-editor-main,.world-editor-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.world-editor-main>label,.world-editor-side>label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:13px;color:#5e554c}
+.world-editor input:not([type=checkbox]),.world-editor textarea,.world-editor select{width:100%;min-width:0;border:1px solid #cec4b7;border-radius:10px;background:#faf7f1;padding:10px 11px;color:#332e29;font:inherit}
+.world-editor textarea{resize:vertical;line-height:1.65}
+.world-editor label>small,.world-editor-side label>small{font-size:11px;color:#8a7f73;line-height:1.5}
+.world-keyword-row{display:flex;gap:6px;align-items:center}
+.world-keyword-row input{flex:1}
+.world-keyword-row button{flex-shrink:0;border:1px solid #c9c0b4;border-radius:10px;background:#e9e0d3;width:38px;height:39px;font-size:21px}
+.world-inline-toggles{display:flex;gap:15px;flex-wrap:wrap}
+.world-inline-toggles label{display:flex;align-items:center;gap:6px;font-size:12px}
+.world-switch-row{display:flex!important;flex-direction:row!important;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #e0d7cb}
+.world-switch-row span{display:flex;flex-direction:column;gap:4px}
+.world-switch-row b{font-size:13px;font-weight:500;color:#5e554c}
+.world-switch-row small{font-size:11px;color:#8a7f73}
+.world-switch-row input{appearance:none;width:38px!important;height:22px;border-radius:20px;background:#d8d7d3;position:relative;flex-shrink:0;cursor:pointer}
+.world-switch-row input:checked{background:#52649f}
+.world-switch-row input:after{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:white;transition:transform .15s}
+.world-switch-row input:checked:after{transform:translateX(16px)}
+.world-bound-roles{margin-top:14px;padding-top:12px;border-top:1px solid #d7cdbf;display:flex;flex-direction:column;gap:8px}
+.world-bound-roles>b{font-size:14px;font-weight:500}
+.world-bound-roles>small{font-size:11px;color:#83776b;line-height:1.5}
+.world-bound-roles>div{display:flex;gap:18px;flex-wrap:wrap}
+.world-save-actions{margin-top:14px}
+.world-save-actions button:first-child{background:#52649f;color:white;border-color:#52649f;padding:10px 20px}
+.world-save-actions button:disabled{opacity:.5}
+.worldbook-footnote{display:block;color:#8a7f73;margin-top:12px;line-height:1.6}
+@media(max-width:620px){.world-editor-grid{grid-template-columns:minmax(0,1fr)}.worldbook-panel{padding:12px}.world-editor{padding:11px}.world-entry{padding:11px}}
