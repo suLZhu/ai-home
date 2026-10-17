@@ -57,6 +57,8 @@ export default function App() {
   const [authError, setAuthError] = useState('')
   const [cloudReady, setCloudReady] = useState(false)
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
+  const cloudSaveInFlight = useRef(false)
+  const queuedCloudSnapshot = useRef<any>(null)
 
   const getSnapshot = useCallback(() => ({ version: 2, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   const applySnapshot = useCallback((data: any) => {
@@ -129,13 +131,28 @@ export default function App() {
   useEffect(() => {
     if (!cloudReady || authStatus !== 'signedIn') return
     const timer = window.setTimeout(async () => {
+      const snapshot = getSnapshot()
+      if (cloudSaveInFlight.current) {
+        queuedCloudSnapshot.current = snapshot
+        return
+      }
+      cloudSaveInFlight.current = true
+      let nextSnapshot: any = snapshot
       setCloudStatus('saving')
       try {
-        const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:getSnapshot()})})
-        if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
-        if (!response.ok) throw new Error('HTTP '+response.status)
+        while (nextSnapshot) {
+          queuedCloudSnapshot.current = null
+          const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:nextSnapshot})})
+          if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
+          if (!response.ok) throw new Error('HTTP '+response.status)
+          nextSnapshot = queuedCloudSnapshot.current
+        }
         setCloudStatus('saved')
-      } catch { setCloudStatus('error') }
+      } catch {
+        setCloudStatus('error')
+      } finally {
+        cloudSaveInFlight.current = false
+      }
     }, 700)
     return ()=>window.clearTimeout(timer)
   }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
@@ -522,9 +539,42 @@ function Chat(p: any) {
   function submit(e:FormEvent){e.preventDefault();if(p.sending)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));p.send(p.draft,payload);setFiles([]);setEmojiOpen(false)}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   const stickers=['😊','🥺','😂','🥰','😭','😤','❤️','🤔','✨','😘','👍','🎉','🌷','💜','🫂','🐱']
+  const creatingConversation = useRef(false)
+  function createConversation(){
+    if(creatingConversation.current)return
+    creatingConversation.current=true
+    const current=p.activeConversationIds[chatPerson]
+    const id=crypto.randomUUID()
+    const existing=p.conversations[chatPerson]||[]
+    const title='新对话 '+(existing.length+1)
+    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:[...(old[chatPerson]||[]).map(x=>x.id===current?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x),{id,title,messages:[],updatedAt:new Date().toISOString()}]}))
+    p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:id}))
+    p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:[]}))
+    p.setChatError('')
+    window.setTimeout(()=>{creatingConversation.current=false},350)
+  }
+  function renameConversation(){
+    const current=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson])
+    if(!current)return
+    const name=window.prompt('给这条会话起个名字',current.title)
+    if(!name?.trim())return
+    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===current.id?{...x,title:name.trim(),updatedAt:new Date().toISOString()}:x)}))
+  }
+  function deleteConversation(){
+    const currentId=p.activeConversationIds[chatPerson]
+    const current=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===currentId)
+    if(!current||!window.confirm('删除「'+current.title+'」？此操作会删除这条会话及其消息，无法撤销。'))return
+    const remaining=(p.conversations[chatPerson]||[]).filter((x:Conversation)=>x.id!==currentId)
+    const next=remaining.length?remaining:[{id:crypto.randomUUID(),title:'新对话',messages:[],updatedAt:new Date().toISOString()}]
+    const nextActive=next[Math.max(0,(p.conversations[chatPerson]||[]).findIndex((x:Conversation)=>x.id===currentId)-1)]||next[0]
+    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:next}))
+    p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextActive.id}))
+    p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:nextActive.messages}))
+    p.setChatError('')
+  }
   return <div className="fullscreen-chat">
     <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
-    <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><button key={c.id} type="button" className={p.activeConversationIds[chatPerson]===c.id?'selected':''} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{c.title||'新对话'}</button>)}</div><button type="button" className="conversation-new" onClick={()=>{const current=p.activeConversationIds[chatPerson];const id=crypto.randomUUID();const title='新对话 '+((p.conversations[chatPerson]||[]).length+1);p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:[...(old[chatPerson]||[]).map(x=>x.id===current?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:id}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:[]}));p.setChatError('')}}>＋ 新对话</button><button type="button" className="conversation-rename" onClick={()=>{const c=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson]);if(!c)return;const name=window.prompt('给这条会话起个名字',c.title);if(name?.trim())p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===c.id?{...x,title:name.trim()}:x)}))}}>重命名</button></div>
+    <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><button key={c.id} type="button" className={p.activeConversationIds[chatPerson]===c.id?'selected':''} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{c.title||'新对话'}</button>)}</div><button type="button" className="conversation-new" disabled={creatingConversation.current} onClick={createConversation}>＋ 新对话</button><button type="button" className="conversation-rename" onClick={renameConversation}>重命名</button><button type="button" className="conversation-delete" onClick={deleteConversation}>删除当前</button></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div></div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}

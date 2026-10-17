@@ -137,3 +137,8 @@
 .cloud-status.saved{animation:cloud-status-dismiss 1.8s ease forwards}
 @keyframes cloud-status-dismiss{0%,65%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-5px);visibility:hidden}}
 .settings-logout{margin-top:18px;border:1px solid #d0c4b4;border-radius:10px;background:#eee5d8;color:#705d49;padding:10px 14px}
+.conversation-delete{flex-shrink:0;max-width:110px;border:1px solid #ddc8bd;background:#f6e8e1;color:#965743;border-radius:15px;padding:7px 10px;font-size:12px;white-space:nowrap}
+.conversation-new:disabled{opacity:.55;cursor:wait}
+.conversation-bar{flex-wrap:wrap}
+.conversation-list{flex-basis:100%;order:0}
+.conversation-new,.conversation-rename,.conversation-delete{order:1}
