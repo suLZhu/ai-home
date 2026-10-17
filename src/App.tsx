@@ -305,9 +305,9 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
-      {page === 'settings' && <Settings />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} />}
     </section>
-    <div className={'cloud-status '+cloudStatus}><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='saved'?'云端已保存':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span><button onClick={logout}>退出</button></div>
+    {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
       {(['home','room','fun','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => { setPage(p); setActiveTool('') }}>{['主页','房间','娱乐房','设置'][i]}</button>)}
     </nav>}
@@ -556,4 +556,4 @@ function Fun() {
   function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
   return <div className="fun-screen"><h2>娱乐房</h2><p>公共空间与扩展模块。先把入口搭好，后续再逐个接入实际能力。</p><div className="fun-tabs">{rooms.map(x=><button type="button" className={active===x?'selected':''} key={x} onClick={()=>setActive(x)}>{x}</button>)}</div>{active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是以后大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{active}</h3><p className="muted">模块入口已预留。后续接入真实组件时，不需要重做房间导航。</p><div className="module-placeholder"><span>⌂</span><b>{active}工作区</b><small>框架已预留 · 等待接入</small></div></section>}</div>
 }
-function Settings() { return <div className="settings-screen"><h2>设置</h2><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>数据</b><span>第一版使用浏览器本地存储，不碰 Kelivo 数据。</span></div></div> }
+function Settings({onLogout,cloudStatus}:{onLogout:()=>void;cloudStatus:string}) { return <div className="settings-screen"><h2>设置</h2><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>云端数据</b><span>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改会话名称后请稍等片刻，数据会自动同步。'}</span></div><button className="settings-logout" onClick={onLogout}>退出登录</button></div> }

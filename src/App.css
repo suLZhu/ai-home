@@ -131,3 +131,9 @@
 .conversation-list button.selected{background:#dcd1c0;border-color:#a99a84;font-weight:600}
 .conversation-new{background:#d9d0c2}
 .conversation-rename{background:transparent}
+/* Keep cloud sync feedback out of the way while editing room/conversation names. */
+.cloud-status{transition:opacity .25s ease,transform .25s ease;pointer-events:none}
+.cloud-status button{pointer-events:auto}
+.cloud-status.saved{animation:cloud-status-dismiss 1.8s ease forwards}
+@keyframes cloud-status-dismiss{0%,65%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-5px);visibility:hidden}}
+.settings-logout{margin-top:18px;border:1px solid #d0c4b4;border-radius:10px;background:#eee5d8;color:#705d49;padding:10px 14px}
