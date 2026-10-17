@@ -9,6 +9,7 @@ type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MC
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[] }
 type ModelConfig = { endpoint: string; model: string }
+type MCPConnection = { id: string; person: Person; name: string; url: string; enabled: boolean }
 function readMessages(): Record<Person,ChatMessage[]> {
   const old = read<any>('ai-home.messages', { '晏未晞': [], '言朔': [] })
   const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x=>({...x,attachments:(x.attachments||[]).map((a:any)=>({name:a.name,type:a.type,size:a.size}))}))
@@ -36,6 +37,7 @@ export default function App() {
   const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => read('ai-home.characters', { '晏未晞': blankCard('晏未晞'), '言朔': blankCard('言朔') }))
   const [worldEntries, setWorldEntries] = useState<Record<Person, WorldEntry[]>>(() => read('ai-home.worldEntries', { '晏未晞': [], '言朔': [] }))
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => read('ai-home.worldbook', { '晏未晞': '', '言朔': '' }))
+  const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => read('ai-home.mcpConnections', { '晏未晞': [], '言朔': [] }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   const [time, setTime] = useState('')
@@ -45,7 +47,7 @@ export default function App() {
   const [cloudReady, setCloudReady] = useState(false)
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
 
-  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks }), [messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
+  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   const applySnapshot = useCallback((data: any) => {
     if (data.messages && typeof data.messages === 'object') setMessages({
       '晏未晞': Array.isArray(data.messages['晏未晞']) ? data.messages['晏未晞'] : [],
@@ -57,6 +59,7 @@ export default function App() {
     if (data.characters && typeof data.characters === 'object') setCharacters(data.characters)
     if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries({'晏未晞': data.worldEntries['晏未晞'] || [], '言朔': data.worldEntries['言朔'] || []})
     if (data.worldbook && typeof data.worldbook === 'object') setWorldbook({'晏未晞': data.worldbook['晏未晞'] || '', '言朔': data.worldbook['言朔'] || ''})
+    if (data.mcpConnections && typeof data.mcpConnections === 'object') setMcpConnections({'晏未晞': Array.isArray(data.mcpConnections['晏未晞']) ? data.mcpConnections['晏未晞'].map((x:MCPConnection)=>({...x,person:'晏未晞'})) : [], '言朔': Array.isArray(data.mcpConnections['言朔']) ? data.mcpConnections['言朔'].map((x:MCPConnection)=>({...x,person:'言朔'})) : []})
     if (data.tasks && typeof data.tasks === 'object') setTasks({'晏未晞': data.tasks['晏未晞'] || [], '言朔': data.tasks['言朔'] || []})
   }, [])
   const loadCloudState = useCallback(async () => {
@@ -115,7 +118,7 @@ export default function App() {
       } catch { setCloudStatus('error') }
     }, 700)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
+  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -130,6 +133,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
   useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
+  useEffect(() => localStorage.setItem('ai-home.mcpConnections', JSON.stringify(mcpConnections)), [mcpConnections])
   useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
 
@@ -195,7 +199,7 @@ export default function App() {
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
-        prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries}
+        prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey}
         sending={sending} chatError={chatError} setChatError={setChatError}
         tasks={tasks} addTask={addTask} />}
@@ -262,6 +266,7 @@ function Room(props: {
   characters: Record<Person,CharacterCard>, setCharacters: React.Dispatch<React.SetStateAction<Record<Person,CharacterCard>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
+  mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
   sending: boolean, chatError: string, setChatError: (v:string)=>void
@@ -284,10 +289,18 @@ function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
+  if (t === 'MCP') return <MCPSettings person={p.person} connections={p.mcpConnections[p.person]} onChange={(next:MCPConnection[])=>p.setMcpConnections((old:Record<Person,MCPConnection[]>)=>({...old,[p.person]:next.map(x=>({...x,person:p.person}))}))}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <Editor title="长期记忆" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="这里先作为第一版本地记忆入口。" />
   if (t === '定时任务') return <div className="tool-panel"><h3>定时任务</h3><form onSubmit={(e)=>{e.preventDefault();p.addTask()}}><input value={p.draft} onChange={(e)=>p.setDraft(e.target.value)} placeholder="例如：晚上 23:00 提醒我休息"/><button>加入</button></form>{p.tasks[p.person].map((x:string,i:number)=><p className="task-line" key={i}>{x}</p>)}<small>第一版只保存任务，不执行调度。</small></div>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
+}
+
+function MCPSettings({person,connections,onChange}:{person:Person,connections:MCPConnection[],onChange:(v:MCPConnection[])=>void}) {
+  const [name,setName]=useState('')
+  const [url,setUrl]=useState('')
+  const add=(e:FormEvent)=>{e.preventDefault();const n=name.trim(),u=url.trim();if(!n||!u)return;onChange([...connections,{id:crypto.randomUUID(),person,name:n,url:u,enabled:true}]);setName('');setUrl('')}
+  return <div className="tool-panel mcp-panel"><h3>{person} · MCP 工具</h3><p className="muted">此处的连接配置只归属于当前人物。另一个人物不会自动继承或调用这些配置。</p><div className="mcp-boundary"><b>当前绑定：{person}</b><span>切换房间后只显示该人物自己的 MCP 列表。</span></div>{connections.length===0&&<p className="muted">还没有为{person}绑定 MCP 服务。</p>}{connections.map(item=><div className="mcp-connection" key={item.id}><div className="mcp-connection-info"><b>{item.name}</b><small>{item.url}</small><span>绑定人物：{item.person}</span></div><label className="mcp-toggle"><input type="checkbox" checked={item.enabled} onChange={e=>onChange(connections.map(x=>x.id===item.id?{...x,enabled:e.target.checked}:x))}/>启用</label><button type="button" className="mcp-remove" onClick={()=>onChange(connections.filter(x=>x.id!==item.id))}>移除</button></div>)}<form className="mcp-add-form" onSubmit={add}><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：雾潮群岛工具" required/></label><label>服务地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://你的 MCP 服务地址" type="url" required/></label><button type="submit">绑定到{person}</button></form><small>当前完成的是人物级配置隔离和云端保存；MCP 协议握手、工具发现与实际调用尚未接入，不会假报连接成功。</small></div>
 }
 
 function Editor({title,value,onChange,placeholder}:{title:string,value:string,onChange:(v:string)=>void,placeholder:string}) {
