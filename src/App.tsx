@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, useRef, type FormEvent } from 'react'
 import './App.css'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
@@ -45,10 +45,8 @@ export default function App() {
   const [cloudReady, setCloudReady] = useState(false)
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
 
-  function getSnapshot() {
-    return { version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks }
-  }
-  function applySnapshot(data: any) {
+  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks }), [messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
+  const applySnapshot = useCallback((data: any) => {
     if (data.messages && typeof data.messages === 'object') setMessages({
       '晏未晞': Array.isArray(data.messages['晏未晞']) ? data.messages['晏未晞'] : [],
       '言朔': Array.isArray(data.messages['言朔']) ? data.messages['言朔'] : []
@@ -60,8 +58,8 @@ export default function App() {
     if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries({'晏未晞': data.worldEntries['晏未晞'] || [], '言朔': data.worldEntries['言朔'] || []})
     if (data.worldbook && typeof data.worldbook === 'object') setWorldbook({'晏未晞': data.worldbook['晏未晞'] || '', '言朔': data.worldbook['言朔'] || ''})
     if (data.tasks && typeof data.tasks === 'object') setTasks({'晏未晞': data.tasks['晏未晞'] || [], '言朔': data.tasks['言朔'] || []})
-  }
-  async function loadCloudState() {
+  }, [])
+  const loadCloudState = useCallback(async () => {
     const response = await fetch('/api/state', { credentials: 'same-origin' })
     if (!response.ok) throw new Error(response.status === 401 ? '登录已过期，请重新登录。' : '读取云端数据失败：HTTP ' + response.status)
     const result = await response.json()
@@ -72,8 +70,8 @@ export default function App() {
     }
     setCloudReady(true)
     setCloudStatus('saved')
-  }
-  async function login(e: FormEvent) {
+  }, [applySnapshot, getSnapshot])
+  const login = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     setAuthError('')
     try {
@@ -86,13 +84,13 @@ export default function App() {
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : String(error))
     }
-  }
-  async function logout() {
+  }, [loginPassword, loadCloudState])
+  const logout = useCallback(async () => {
     await fetch('/api/logout', {method:'POST',credentials:'same-origin'}).catch(()=>{})
     setCloudReady(false)
     setAuthStatus('signedOut')
     setCloudStatus('loading')
-  }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -103,12 +101,12 @@ export default function App() {
       catch(error){ if(!cancelled){setAuthError(error instanceof Error?error.message:String(error));setAuthStatus('signedOut')} }
     }).catch(()=>{if(!cancelled){setAuthError('无法连接云端数据服务，请稍后重试。');setAuthStatus('signedOut')}})
     return ()=>{cancelled=true}
-  }, [])
+  }, [loadCloudState])
 
   useEffect(() => {
     if (!cloudReady || authStatus !== 'signedIn') return
-    setCloudStatus('saving')
     const timer = window.setTimeout(async () => {
+      setCloudStatus('saving')
       try {
         const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:getSnapshot()})})
         if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
@@ -117,7 +115,7 @@ export default function App() {
       } catch { setCloudStatus('error') }
     }, 700)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
+  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -326,7 +324,7 @@ function Chat(p: any) {
     if(imageInput.current)imageInput.current.value=''
     if(fileInput.current)fileInput.current.value=''
   }
-  function submit(e:FormEvent){e.preventDefault();if(p.sending)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map(({preview,...a}:MessageAttachment)=>a);p.send(p.draft,payload);setFiles([]);setEmojiOpen(false)}
+  function submit(e:FormEvent){e.preventDefault();if(p.sending)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));p.send(p.draft,payload);setFiles([]);setEmojiOpen(false)}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   const stickers=['😊','🥺','😂','🥰','😭','😤','❤️','🤔','✨','😘','👍','🎉','🌷','💜','🫂','🐱']
   return <div className="fullscreen-chat">
