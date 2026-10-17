@@ -28,6 +28,14 @@ db.exec(`
     name TEXT NOT NULL, url TEXT NOT NULL, transport TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
     token_enc TEXT NOT NULL, updated_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS scheduled_tasks (
+    id TEXT PRIMARY KEY, person TEXT NOT NULL CHECK(person IN ('晏未晞','言朔')),
+    title TEXT NOT NULL, prompt TEXT NOT NULL, run_at TEXT NOT NULL,
+    recurrence TEXT NOT NULL DEFAULT 'once' CHECK(recurrence IN ('once','daily','weekly')),
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','ready','completed','paused')),
+    last_run_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS scheduled_tasks_due_idx ON scheduled_tasks(status, run_at);
 `)
 const sessions = new Map()
 const failures = new Map()
@@ -221,6 +229,49 @@ createServer(async (req, res) => {
     } catch (error) { return send(res, error.status || 502, { error: error.message || 'MCP 调用失败' }) }
   }
 
+  if (url.pathname === '/api/tasks' && req.method === 'GET') {
+    const person = url.searchParams.get('person')
+    if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+    const rows = db.prepare('SELECT * FROM scheduled_tasks WHERE person=? ORDER BY run_at ASC').all(person)
+    return send(res, 200, { tasks: rows })
+  }
+  if (url.pathname === '/api/tasks' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const person = body.person
+      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+      const title = String(body.title || '').trim().slice(0, 160)
+      const prompt = String(body.prompt || '').trim().slice(0, 12000)
+      const runAt = String(body.runAt || '')
+      const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
+      if (!title || !prompt || !runAt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '请填写任务名称、执行内容和有效执行时间' })
+      const now = new Date().toISOString(), id = randomUUID()
+      db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'scheduled',?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now)
+      return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '创建任务失败' }) }
+  }
+  const taskMatch = url.pathname.match(/^\/api\/tasks\/([a-f0-9-]+)$/)
+  if (taskMatch && req.method === 'PUT') {
+    try {
+      const body = await readBody(req), person = body.person
+      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+      const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND person=?').get(taskMatch[1],person)
+      if (!row) return send(res, 404, { error: '找不到该人物的任务' })
+      const status = ['scheduled','paused','completed'].includes(body.status) ? body.status : row.status
+      let runAt = row.run_at
+      if (body.runAt !== undefined) { if (!Number.isFinite(Date.parse(String(body.runAt)))) return send(res, 400, { error: '执行时间无效' }); runAt = new Date(body.runAt).toISOString() }
+      const now = new Date().toISOString()
+      db.prepare('UPDATE scheduled_tasks SET status=?,run_at=?,updated_at=? WHERE id=? AND person=?').run(status,runAt,now,taskMatch[1],person)
+      return send(res, 200, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(taskMatch[1]) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '更新任务失败' }) }
+  }
+  if (taskMatch && req.method === 'DELETE') {
+    const body = await readBody(req).catch(() => ({}))
+    if (!['晏未晞','言朔'].includes(body.person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+    const result = db.prepare('DELETE FROM scheduled_tasks WHERE id=? AND person=?').run(taskMatch[1],body.person)
+    return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '找不到该人物的任务' })
+  }
+
   if (url.pathname === '/api/state' && req.method === 'GET') {
     const row = db.prepare('SELECT payload, updated_at FROM app_state WHERE id=1').get()
     return send(res, 200, { state: row ? JSON.parse(row.payload) : null, updatedAt: row?.updated_at || null })
@@ -238,3 +289,22 @@ createServer(async (req, res) => {
   }
   return send(res, 404, { error: 'not found' })
 }).listen(4180, '127.0.0.1', () => console.log('AI Home private data API listening on 127.0.0.1:4180'))
+
+// Durable scheduler scaffold: persist due events instead of silently losing them on restart.
+// Model execution is intentionally an adapter boundary until the user selects a provider.
+setInterval(() => {
+  const now = new Date()
+  const due = db.prepare("SELECT * FROM scheduled_tasks WHERE status='scheduled' AND run_at<=?").all(now.toISOString())
+  for (const task of due) {
+    const timestamp = now.toISOString()
+    if (task.recurrence === 'once') {
+      db.prepare("UPDATE scheduled_tasks SET status='ready',last_run_at=?,updated_at=? WHERE id=? AND status='scheduled'").run(timestamp,timestamp,task.id)
+      console.log(`[scheduler] task ready person=${task.person} id=${task.id}`)
+    } else {
+      const next = new Date(task.run_at)
+      do { next.setTime(next.getTime() + (task.recurrence === 'daily' ? 86400000 : 604800000)) } while (next <= now)
+      db.prepare("UPDATE scheduled_tasks SET status='scheduled',last_run_at=?,run_at=?,updated_at=? WHERE id=? AND status='scheduled'").run(timestamp,next.toISOString(),timestamp,task.id)
+      console.log(`[scheduler] recurring task ready person=${task.person} id=${task.id}; next=${next.toISOString()}`)
+    }
+  }
+}, 15000).unref()

@@ -26,3 +26,52 @@
 .mcp-connection-card .mcp-connection-info{width:100%;overflow-wrap:anywhere}
 .mcp-connection-card .mcp-action,.mcp-connection-card .mcp-remove{align-self:flex-start;min-height:36px;padding:8px 12px}
 .mcp-tools-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:12px;border:0;border-top:1px solid #ded4c7;background:#f1e9dc;color:#72553f;text-align:left;font-size:12px}.mcp-tools-count{color:#918371;font-size:11px}.mcp-tools-chevron{margin-left:auto;font-size:17px;line-height:1}
+
+/* Framework modules: scheduled tasks and the shared lounge */
+.task-create{display:grid!important;grid-template-columns:1fr;gap:12px!important;margin:14px 0 20px}
+.task-create label,.mcp-add-form label{display:block;font-size:13px;color:#71675c}
+.task-create input,.task-create textarea,.task-create select{display:block;width:100%;margin-top:6px;background:#f8f4ec;border:1px solid #c9c0b4;border-radius:11px;padding:11px;min-width:0}
+.task-create textarea{resize:vertical;line-height:1.6}
+.task-create>button,.lounge-compose>button{min-height:42px;border:0;border-radius:12px;background:#d9d0c2;padding:10px 16px}
+.task-list-heading{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #c9c0b4;padding-top:15px}
+.task-list-heading button,.scheduled-task-actions button{border:1px solid #c9c0b4;border-radius:9px;background:transparent;padding:6px 10px;font-size:12px}
+.scheduled-task{padding:14px 0;border-bottom:1px solid #d5ccbf}
+.scheduled-task-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.scheduled-task-top>b{font-weight:500;line-height:1.5}
+.task-status{font-size:11px;white-space:normal;color:#786d61;background:#e3dbce;border-radius:20px;padding:4px 8px}
+.task-status.ready{background:#e9d7c8;color:#7e4b31}
+.task-status.paused{opacity:.7}
+.scheduled-task p{font-size:13px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.scheduled-task small{display:block;color:#81786d;line-height:1.6}
+.scheduled-task-actions{display:flex;gap:8px;margin-top:10px}
+.fun-tabs{display:flex;gap:7px;overflow-x:auto;padding:4px 0 16px;scrollbar-width:thin}
+.fun-tabs button{flex-shrink:0;border:1px solid #d0c6b9;border-radius:20px;background:transparent;padding:8px 12px;font-size:13px}
+.fun-tabs button.selected{background:#e6ddcf;border-color:#b8aa98}
+.lounge-panel{background:#eee8dc;border-radius:18px;padding:17px}
+.lounge-panel h3{font-size:20px;font-weight:500;margin:0 0 8px}
+.lounge-panel>.muted{font-size:13px}
+.lounge-messages{display:flex;flex-direction:column;gap:10px;max-height:44dvh;overflow:auto;padding:8px 0 14px}
+.lounge-messages article{background:#f8f4ec;border:1px solid #e0d7ca;border-radius:12px;padding:11px 12px}
+.lounge-messages article>b{font-weight:500}
+.lounge-messages article>small{float:right;color:#93887b;font-size:10px}
+.lounge-messages article>p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;margin:8px 0 0;font-size:14px}
+.lounge-compose{display:grid!important;grid-template-columns:1fr;gap:8px!important}
+.lounge-compose textarea{width:100%;resize:vertical;border:1px solid #c9c0b4;background:#f8f4ec;border-radius:12px;padding:12px;line-height:1.6}
+.lounge-compose>button{justify-self:end;min-width:90px}
+.module-placeholder{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;border:1px dashed #c9c0b4;border-radius:14px;color:#81786d}
+.module-placeholder span{font-size:32px}.module-placeholder b{font-size:16px;font-weight:500}.module-placeholder small{font-size:12px}
+.memory-workbench .memory-search{width:100%;margin:8px 0 12px;padding:10px 12px;border:1px solid #c9c0b4;border-radius:10px;background:#f8f4ec}
+.memory-create{display:grid!important;grid-template-columns:1fr;gap:10px!important}
+.memory-create label{font-size:13px;color:#71675c}
+.memory-create input:not([type=checkbox]),.memory-create select,.memory-create textarea{display:block;width:100%;margin-top:5px;padding:10px;background:#f8f4ec;border:1px solid #c9c0b4;border-radius:10px;min-width:0}
+.memory-create textarea{resize:vertical;line-height:1.6}
+.memory-create .memory-pin{display:flex;align-items:center;gap:8px}
+.memory-create .memory-pin input{accent-color:#98745a}
+.memory-create>button{border:0;border-radius:10px;background:#d9d0c2;padding:11px}
+.memory-list-heading{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #c9c0b4;margin-top:18px;padding-top:13px}
+.memory-list-heading b{font-weight:500}.memory-list-heading small{color:#81786d}
+.memory-item{padding:13px 0;border-bottom:1px solid #d5ccbf}
+.memory-item>div:first-child{display:flex;justify-content:space-between;gap:8px;align-items:start}
+.memory-item>div:first-child b{font-weight:500}.memory-item>div:first-child span,.memory-item>small{color:#81786d;font-size:11px}
+.memory-item p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font-size:13px}
+.memory-actions{display:flex;gap:7px;margin-top:9px}.memory-actions button{border:1px solid #c9c0b4;background:transparent;border-radius:8px;padding:5px 9px;font-size:12px}

@@ -10,6 +10,7 @@ type MessageAttachment = { name: string; type: string; size: number; preview?: s
 type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[] }
 type ModelConfig = { endpoint: string; model: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
+type MemoryEntry = { id:string; title:string; content:string; keywords:string; category:'人物关系'|'经历事件'|'偏好习惯'|'项目进度'|'其他'; pinned:boolean; updatedAt:string }
 function readMessages(): Record<Person,ChatMessage[]> {
   const old = read<any>('ai-home.messages', { '晏未晞': [], '言朔': [] })
   const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x=>({...x,attachments:(x.attachments||[]).map((a:any)=>({name:a.name,type:a.type,size:a.size}))}))
@@ -33,6 +34,7 @@ export default function App() {
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState('')
   const [memory, setMemory] = useState<Record<Person, string>>(() => read('ai-home.memory', { '晏未晞': '', '言朔': '' }))
+  const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => read('ai-home.memoryEntries', { '晏未晞': [], '言朔': [] }))
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => read('ai-home.prompt', { '晏未晞': '', '言朔': '' }))
   const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => read('ai-home.characters', { '晏未晞': blankCard('晏未晞'), '言朔': blankCard('言朔') }))
   const [worldEntries, setWorldEntries] = useState<Record<Person, WorldEntry[]>>(() => read('ai-home.worldEntries', { '晏未晞': [], '言朔': [] }))
@@ -47,7 +49,7 @@ export default function App() {
   const [cloudReady, setCloudReady] = useState(false)
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
 
-  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  const getSnapshot = useCallback(() => ({ version: 1, messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   const applySnapshot = useCallback((data: any) => {
     if (data.messages && typeof data.messages === 'object') setMessages({
       '晏未晞': Array.isArray(data.messages['晏未晞']) ? data.messages['晏未晞'] : [],
@@ -55,6 +57,7 @@ export default function App() {
     })
     if (data.modelConfig && typeof data.modelConfig === 'object') setModelConfig(data.modelConfig)
     if (data.memory && typeof data.memory === 'object') setMemory({'晏未晞': data.memory['晏未晞'] || '', '言朔': data.memory['言朔'] || ''})
+    if (data.memoryEntries && typeof data.memoryEntries === 'object') setMemoryEntries({'晏未晞': Array.isArray(data.memoryEntries['晏未晞']) ? data.memoryEntries['晏未晞'] : [], '言朔': Array.isArray(data.memoryEntries['言朔']) ? data.memoryEntries['言朔'] : []})
     if (data.prompt && typeof data.prompt === 'object') setPrompt({'晏未晞': data.prompt['晏未晞'] || '', '言朔': data.prompt['言朔'] || ''})
     if (data.characters && typeof data.characters === 'object') setCharacters(data.characters)
     if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries({'晏未晞': data.worldEntries['晏未晞'] || [], '言朔': data.worldEntries['言朔'] || []})
@@ -118,7 +121,7 @@ export default function App() {
       } catch { setCloudStatus('error') }
     }, 700)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  }, [cloudReady, authStatus, getSnapshot, messages, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -130,6 +133,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   useEffect(() => localStorage.setItem('ai-home.modelConfig', JSON.stringify(modelConfig)), [modelConfig])
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
+  useEffect(() => localStorage.setItem('ai-home.memoryEntries', JSON.stringify(memoryEntries)), [memoryEntries])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
   useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
@@ -155,7 +159,8 @@ export default function App() {
       card.definition && '【角色设定】\n'+card.definition,
       card.language && '【语言与表达要求】\n'+card.language,
       prompt[target] && '【补充人物提示】\n'+prompt[target],
-      memory[target] && '【长期记忆】\n'+memory[target],
+      memory[target] && '【长期记忆（旧版文本）】\n'+memory[target],
+      memoryEntries[target].length && '【长期记忆库召回】\n'+memoryEntries[target].filter(e=>e.pinned || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))).slice(0,12).map(e=>'['+e.category+'] '+e.title+'\n'+e.content).join('\n\n'),
       worldbook[target] && '【世界书补充】\n'+worldbook[target],
       matched.length && '【本轮召回的世界书】\n'+matched.map(e=>'['+e.title+']\n'+e.content).join('\n\n')
     ].filter(Boolean).join('\n\n')
@@ -245,7 +250,7 @@ export default function App() {
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
-        prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
+        prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey}
         sending={sending} chatError={chatError} setChatError={setChatError}
         tasks={tasks} addTask={addTask} />}
@@ -312,6 +317,7 @@ function Room(props: {
   characters: Record<Person,CharacterCard>, setCharacters: React.Dispatch<React.SetStateAction<Record<Person,CharacterCard>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
+  memoryEntries: Record<Person,MemoryEntry[]>, setMemoryEntries: React.Dispatch<React.SetStateAction<Record<Person,MemoryEntry[]>>>,
   mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
@@ -337,9 +343,38 @@ function ToolPanel(p: any) {
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
   if (t === 'MCP') return <MCPSettings person={p.person}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
-  if (t === '长期记忆') return <Editor title="长期记忆" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="这里先作为第一版本地记忆入口。" />
-  if (t === '定时任务') return <div className="tool-panel"><h3>定时任务</h3><form onSubmit={(e)=>{e.preventDefault();p.addTask()}}><input value={p.draft} onChange={(e)=>p.setDraft(e.target.value)} placeholder="例如：晚上 23:00 提醒我休息"/><button>加入</button></form>{p.tasks[p.person].map((x:string,i:number)=><p className="task-line" key={i}>{x}</p>)}<small>第一版只保存任务，不执行调度。</small></div>
+  if (t === '长期记忆') return <><MemoryWorkbench person={p.person} entries={p.memoryEntries[p.person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[p.person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>
+  if (t === '定时任务') return <TaskManager person={p.person}/>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
+}
+
+function MemoryWorkbench({person,entries,onChange}:{person:Person;entries:MemoryEntry[];onChange:(v:MemoryEntry[])=>void}) {
+  const [title,setTitle]=useState('');const [content,setContent]=useState('');const [keywords,setKeywords]=useState('');const [category,setCategory]=useState<MemoryEntry['category']>('其他');const [pinned,setPinned]=useState(false);const [query,setQuery]=useState('')
+  const visible=entries.filter(e=>(e.title+' '+e.content+' '+e.keywords+' '+e.category).toLowerCase().includes(query.toLowerCase()))
+  function add(e:FormEvent){e.preventDefault();if(!title.trim()||!content.trim())return;onChange([{id:crypto.randomUUID(),title:title.trim(),content:content.trim(),keywords:keywords.trim(),category,pinned,updatedAt:new Date().toISOString()},...entries]);setTitle('');setContent('');setKeywords('');setPinned(false)}
+  return <div className="tool-panel memory-workbench"><h3>{person} · 长期记忆库</h3><p className="muted">人物独立存储。固定记忆每轮注入；其他记忆按关键词匹配召回。模型自动总结、去重和重要性评分留到模型接入后。</p><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索这位角色的记忆……"/><form className="memory-create" onSubmit={add}><label>记忆标题<input value={title} onChange={e=>setTitle(e.target.value)} required placeholder="例如：我们正在搭建新房子"/></label><label>分类<select value={category} onChange={e=>setCategory(e.target.value as MemoryEntry['category'])}>{['人物关系','经历事件','偏好习惯','项目进度','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>关键词（逗号分隔）<input value={keywords} onChange={e=>setKeywords(e.target.value)} placeholder="新房子, MCP, 框架"/></label><label>记忆内容<textarea rows={4} value={content} onChange={e=>setContent(e.target.value)} required placeholder="记录需要以后继续使用的事实、约定或进度。"/></label><label className="memory-pin"><input type="checkbox" checked={pinned} onChange={e=>setPinned(e.target.checked)}/> 固定记忆（每轮都注入提示词）</label><button disabled={!title.trim()||!content.trim()}>保存记忆</button></form><div className="memory-list-heading"><b>已保存 {entries.length} 条</b><small>当前显示 {visible.length} 条</small></div>{visible.length===0?<p className="muted">没有匹配的记忆，可以新增一条。</p>:visible.map(item=><article className="memory-item" key={item.id}><div><b>{item.title}</b><span>{item.category}{item.pinned?' · 固定记忆':''}</span></div><p>{item.content}</p>{item.keywords&&<small>关键词：{item.keywords}</small>}<div className="memory-actions"><button type="button" onClick={()=>onChange(entries.map(e=>e.id===item.id?{...e,pinned:!e.pinned,updatedAt:new Date().toISOString()}:e))}>{item.pinned?'取消固定':'固定'}</button><button type="button" onClick={()=>{setTitle(item.title);setContent(item.content);setKeywords(item.keywords);setCategory(item.category);setPinned(item.pinned);onChange(entries.filter(e=>e.id!==item.id))}}>编辑</button><button type="button" onClick={()=>onChange(entries.filter(e=>e.id!==item.id))}>删除</button></div></article>)}</div>
+}
+
+type ScheduledTask = { id:string; person:Person; title:string; prompt:string; run_at:string; recurrence:'once'|'daily'|'weekly'; status:'scheduled'|'ready'|'completed'|'paused'; last_run_at:string|null; created_at:string; updated_at:string }
+function TaskManager({person}:{person:Person}) {
+  const [tasks,setTasks]=useState<ScheduledTask[]>([])
+  const [title,setTitle]=useState('')
+  const [prompt,setPrompt]=useState('')
+  const [runAt,setRunAt]=useState('')
+  const [recurrence,setRecurrence]=useState<'once'|'daily'|'weekly'>('once')
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  const [notice,setNotice]=useState('')
+  const refresh=useCallback(async()=>{const r=await fetch('/api/tasks?person='+encodeURIComponent(person),{credentials:'same-origin'});const d=await r.json();if(!r.ok)throw new Error(d.error||'读取任务失败');setTasks(d.tasks||[])},[person])
+  useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
+  async function create(e:FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const r=await fetch('/api/tasks',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,title,prompt,runAt:new Date(runAt).toISOString(),recurrence})});const d=await r.json();if(!r.ok)throw new Error(d.error||'创建任务失败');setTitle('');setPrompt('');setNotice('任务已保存到云端调度队列。');await refresh()}catch(e){setError(e instanceof Error?e.message:'创建任务失败')}finally{setBusy(false)}}
+  async function update(task:ScheduledTask,patch:Record<string,unknown>){setError('');setNotice('');try{const r=await fetch('/api/tasks/'+task.id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...patch})});const d=await r.json();if(!r.ok)throw new Error(d.error||'更新任务失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'更新任务失败')}}
+  async function remove(task:ScheduledTask){if(!window.confirm('删除任务“'+task.title+'”？'))return;try{const r=await fetch('/api/tasks/'+task.id,{method:'DELETE',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
+  const localDate=(iso:string)=>{const d=new Date(iso);return Number.isNaN(d.getTime())?'时间无效':d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})}
+  const statusLabel=(s:ScheduledTask['status'])=>({scheduled:'等待执行',ready:'已到期 · 待接入模型执行',completed:'已完成',paused:'已暂停'}[s])
+  return <div className="tool-panel task-manager"><h3>{person} · 定时任务</h3><p className="muted">任务保存在云端数据库。调度器会在服务器后台检查到期时间；模型接入后，再由执行适配器把任务写回绑定人物的会话。</p>{error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
+    <form className="task-create" onSubmit={create}><label>任务名称<input required maxLength={160} value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：早上检查雾潮群岛进度"/></label><label>执行时间<input required type="datetime-local" value={runAt} onChange={e=>setRunAt(e.target.value)}/></label><label>重复规则<select value={recurrence} onChange={e=>setRecurrence(e.target.value as typeof recurrence)}><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></label><label>任务内容<textarea required rows={4} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="写清楚到时间后要检查什么、执行什么，以及结果应该写回哪里。"/></label><button type="submit" disabled={busy||!title.trim()||!prompt.trim()||!runAt}>{busy?'保存中…':'保存任务'}</button></form>
+    <div className="task-list-heading"><b>任务列表</b><button type="button" onClick={()=>refresh().catch(e=>setError(e.message))}>刷新</button></div>{tasks.length===0?<p className="muted">这里还没有任务。</p>:tasks.map(task=><article className="scheduled-task" key={task.id}><div className="scheduled-task-top"><b>{task.title}</b><span className={'task-status '+task.status}>{statusLabel(task.status)}</span></div><p>{task.prompt}</p><small>执行时间：{localDate(task.run_at)} · {task.recurrence==='once'?'仅一次':task.recurrence==='daily'?'每天':'每周'}{task.last_run_at?' · 上次触发：'+localDate(task.last_run_at):''}</small><div className="scheduled-task-actions">{task.status==='scheduled'&&<button type="button" onClick={()=>update(task,{status:'paused'})}>暂停</button>}{task.status==='paused'&&<button type="button" onClick={()=>update(task,{status:'scheduled'})}>恢复</button>}{task.status==='ready'&&<button type="button" onClick={()=>update(task,{status:'completed'})}>标记完成</button>}<button type="button" onClick={()=>remove(task)}>删除</button></div></article>)}</div>
 }
 
 function MCPSettings({person}:{person:Person}) {
@@ -355,13 +390,13 @@ function MCPSettings({person}:{person:Person}) {
   const [expandedTools,setExpandedTools] = useState<Record<string,boolean>>({})
   const [args,setArgs] = useState<Record<string,string>>({})
   const [results,setResults] = useState<Record<string,string>>({})
-  async function refresh() {
+  const refresh = useCallback(async()=>{
     const r = await fetch('/api/mcp?person='+encodeURIComponent(person),{credentials:'same-origin'})
     const data = await r.json()
     if(!r.ok) throw new Error(data.error || '读取 MCP 列表失败')
     setConnections(data.connections)
-  }
-  useEffect(()=>{setConnections([]);setTools({});setExpandedTools({});setResults({});setError('');setNotice('');refresh().catch(e=>setError(e.message))},[person])
+  },[person])
+  useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
   async function add(e:FormEvent) {
     e.preventDefault();setBusy(true);setError('');setNotice('')
     try {
@@ -460,5 +495,13 @@ function Chat(p: any) {
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
 
-function Fun() { return <div className="fun-screen"><h2>娱乐房</h2><p>以后这里放内嵌浏览器、可视化网页、相册、播放器，以及客厅。</p><div className="fun-grid">{['内嵌浏览器','可视化网页','相册','播放器','客厅'].map(x=><button key={x}><b>{x}</b><span>功能预留</span></button>)}</div></div> }
+function Fun() {
+  const [active,setActive]=useState('客厅')
+  const [draft,setDraft]=useState('')
+  const [messages,setMessages]=useState<{id:string;author:string;content:string;at:string}[]>(()=>read('ai-home.loungeMessages',[]))
+  useEffect(()=>{localStorage.setItem('ai-home.loungeMessages',JSON.stringify(messages))},[messages])
+  const rooms=['客厅','内嵌浏览器','可视化网页','相册','播放器','待定']
+  function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
+  return <div className="fun-screen"><h2>娱乐房</h2><p>公共空间与扩展模块。先把入口搭好，后续再逐个接入实际能力。</p><div className="fun-tabs">{rooms.map(x=><button type="button" className={active===x?'selected':''} key={x} onClick={()=>setActive(x)}>{x}</button>)}</div>{active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是以后大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{active}</h3><p className="muted">模块入口已预留。后续接入真实组件时，不需要重做房间导航。</p><div className="module-placeholder"><span>⌂</span><b>{active}工作区</b><small>框架已预留 · 等待接入</small></div></section>}</div>
+}
 function Settings() { return <div className="settings-screen"><h2>设置</h2><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>数据</b><span>第一版使用浏览器本地存储，不碰 Kelivo 数据。</span></div></div> }
