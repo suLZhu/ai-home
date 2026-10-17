@@ -61,6 +61,11 @@ export default function App() {
   const queuedCloudSnapshot = useRef<any>(null)
 
   const getSnapshot = useCallback(() => ({ version: 2, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  // Keep the latest snapshot available without making the one-time cloud-load callback
+  // change identity on every edit. Otherwise the session-check effect reloads stale cloud
+  // state after every local change and can resurrect deleted conversations.
+  const latestSnapshot = useRef<any>(null)
+  useEffect(() => { latestSnapshot.current = getSnapshot() }, [getSnapshot])
   const applySnapshot = useCallback((data: any) => {
     if (data.conversations && Array.isArray(data.conversations['晏未晞']) && Array.isArray(data.conversations['言朔'])) {
       const convs:Record<Person,Conversation[]>={'晏未晞':data.conversations['晏未晞'],'言朔':data.conversations['言朔']}
@@ -90,12 +95,12 @@ export default function App() {
     const result = await response.json()
     if (result.state) applySnapshot(result.state)
     else {
-      const saved = await fetch('/api/state', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:getSnapshot()}) })
+      const saved = await fetch('/api/state', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:latestSnapshot.current}) })
       if (!saved.ok) throw new Error('首次迁移本机数据到云端失败：HTTP ' + saved.status)
     }
     setCloudReady(true)
     setCloudStatus('saved')
-  }, [applySnapshot, getSnapshot])
+  }, [applySnapshot])
   const login = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     setAuthError('')
