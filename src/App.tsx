@@ -39,6 +39,85 @@ export default function App() {
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   const [time, setTime] = useState('')
+  const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [cloudReady, setCloudReady] = useState(false)
+  const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
+
+  function getSnapshot() {
+    return { version: 1, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks }
+  }
+  function applySnapshot(data: any) {
+    if (data.messages && typeof data.messages === 'object') setMessages({
+      '晏未晞': Array.isArray(data.messages['晏未晞']) ? data.messages['晏未晞'] : [],
+      '言朔': Array.isArray(data.messages['言朔']) ? data.messages['言朔'] : []
+    })
+    if (data.modelConfig && typeof data.modelConfig === 'object') setModelConfig(data.modelConfig)
+    if (data.memory && typeof data.memory === 'object') setMemory({'晏未晞': data.memory['晏未晞'] || '', '言朔': data.memory['言朔'] || ''})
+    if (data.prompt && typeof data.prompt === 'object') setPrompt({'晏未晞': data.prompt['晏未晞'] || '', '言朔': data.prompt['言朔'] || ''})
+    if (data.characters && typeof data.characters === 'object') setCharacters(data.characters)
+    if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries({'晏未晞': data.worldEntries['晏未晞'] || [], '言朔': data.worldEntries['言朔'] || []})
+    if (data.worldbook && typeof data.worldbook === 'object') setWorldbook({'晏未晞': data.worldbook['晏未晞'] || '', '言朔': data.worldbook['言朔'] || ''})
+    if (data.tasks && typeof data.tasks === 'object') setTasks({'晏未晞': data.tasks['晏未晞'] || [], '言朔': data.tasks['言朔'] || []})
+  }
+  async function loadCloudState() {
+    const response = await fetch('/api/state', { credentials: 'same-origin' })
+    if (!response.ok) throw new Error(response.status === 401 ? '登录已过期，请重新登录。' : '读取云端数据失败：HTTP ' + response.status)
+    const result = await response.json()
+    if (result.state) applySnapshot(result.state)
+    else {
+      const saved = await fetch('/api/state', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:getSnapshot()}) })
+      if (!saved.ok) throw new Error('首次迁移本机数据到云端失败：HTTP ' + saved.status)
+    }
+    setCloudReady(true)
+    setCloudStatus('saved')
+  }
+  async function login(e: FormEvent) {
+    e.preventDefault()
+    setAuthError('')
+    try {
+      const response = await fetch('/api/login', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:loginPassword}) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || '登录失败')
+      await loadCloudState()
+      setLoginPassword('')
+      setAuthStatus('signedIn')
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : String(error))
+    }
+  }
+  async function logout() {
+    await fetch('/api/logout', {method:'POST',credentials:'same-origin'}).catch(()=>{})
+    setCloudReady(false)
+    setAuthStatus('signedOut')
+    setCloudStatus('loading')
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/session', {credentials:'same-origin'}).then(r=>r.json()).then(async result=>{
+      if(cancelled)return
+      if(!result.authenticated){setAuthStatus('signedOut');return}
+      try { await loadCloudState(); if(!cancelled)setAuthStatus('signedIn') }
+      catch(error){ if(!cancelled){setAuthError(error instanceof Error?error.message:String(error));setAuthStatus('signedOut')} }
+    }).catch(()=>{if(!cancelled){setAuthError('无法连接云端数据服务，请稍后重试。');setAuthStatus('signedOut')}})
+    return ()=>{cancelled=true}
+  }, [])
+
+  useEffect(() => {
+    if (!cloudReady || authStatus !== 'signedIn') return
+    setCloudStatus('saving')
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:getSnapshot()})})
+        if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
+        if (!response.ok) throw new Error('HTTP '+response.status)
+        setCloudStatus('saved')
+      } catch { setCloudStatus('error') }
+    }, 700)
+    return ()=>window.clearTimeout(timer)
+  }, [cloudReady, authStatus, messages, modelConfig, memory, prompt, characters, worldEntries, worldbook, tasks])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -110,6 +189,8 @@ export default function App() {
     setDraft('')
   }
 
+  if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
+
   return <main className="shell">
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} />}
@@ -124,10 +205,24 @@ export default function App() {
       {page === 'fun' && <Fun />}
       {page === 'settings' && <Settings />}
     </section>
+    <div className={'cloud-status '+cloudStatus}><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='saved'?'云端已保存':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span><button onClick={logout}>退出</button></div>
     {!chatOpen && <nav className="bottom-nav">
       {(['home','room','fun','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => { setPage(p); setActiveTool('') }}>{['主页','房间','娱乐房','设置'][i]}</button>)}
     </nav>}
   </main>
+}
+
+function LoginScreen({status,password,setPassword,error,onSubmit}:{status:'checking'|'signedOut'|'signedIn',password:string,setPassword:(v:string)=>void,error:string,onSubmit:(e:FormEvent)=>void}) {
+  return <main className="login-shell"><form className="login-card" onSubmit={onSubmit}>
+    <div className="login-mark">居</div><p className="login-eyebrow">A SMALL PRIVATE SPACE</p><h1>回到自己的房间</h1>
+    <p className="login-copy">登录后，聊天记录、人物设置、世界书和长期记忆会保存到你的云服务器。</p>
+    {status==='checking'?<p className="login-copy">正在检查登录状态……</p>:<>
+      <label>房间密码<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder="输入房间密码" autoFocus/></label>
+      {error&&<p className="login-error">{error}</p>}
+      <button className="login-submit" type="submit" disabled={!password}>进入房间</button>
+      <small>这是私人预览版。请勿把房间密码分享给别人。</small>
+    </>}
+  </form></main>
 }
 
 function Home({ onPerson, onMe, time }: { onPerson: (p: Person) => void, onMe: () => void, time: string }) {
