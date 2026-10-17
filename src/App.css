@@ -124,3 +124,4 @@
 .world-save-actions button:disabled{opacity:.5}
 .worldbook-footnote{display:block;color:#8a7f73;margin-top:12px;line-height:1.6}
 @media(max-width:620px){.world-editor-grid{grid-template-columns:minmax(0,1fr)}.worldbook-panel{padding:12px}.world-editor{padding:11px}.world-entry{padding:11px}}
+.tool-grid>button.tool-active{border-color:#a99a84;background:#eee6d9;box-shadow:inset 0 0 0 1px #d5c7b4}
