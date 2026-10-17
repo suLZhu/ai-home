@@ -6,6 +6,13 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
 type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
+type ChatMessage = { role: 'user' | 'assistant'; content: string }
+type ModelConfig = { endpoint: string; model: string }
+function readMessages(): Record<Person,ChatMessage[]> {
+  const old = read<any>('ai-home.messages', { '晏未晞': [], '言朔': [] })
+  const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string')
+  return {'晏未晞':migrate(old['晏未晞']||[]),'言朔':migrate(old['言朔']||[])}
+}
 
 const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '定时任务', 'MCP', '模型设置']
 
@@ -18,7 +25,11 @@ export default function App() {
   const [person, setPerson] = useState<Person>('晏未晞')
   const [chatOpen, setChatOpen] = useState(false)
   const [draft, setDraft] = useState('')
-  const [messages, setMessages] = useState<Record<Person, string[]>>(() => read('ai-home.messages', { '晏未晞': [], '言朔': [] }))
+  const [messages, setMessages] = useState<Record<Person, ChatMessage[]>>(readMessages)
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(() => read('ai-home.modelConfig', { endpoint: '', model: '' }))
+  const [apiKey, setApiKey] = useState('')
+  const [sending, setSending] = useState(false)
+  const [chatError, setChatError] = useState('')
   const [memory, setMemory] = useState<Record<Person, string>>(() => read('ai-home.memory', { '晏未晞': '', '言朔': '' }))
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => read('ai-home.prompt', { '晏未晞': '', '言朔': '' }))
   const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => read('ai-home.characters', { '晏未晞': blankCard('晏未晞'), '言朔': blankCard('言朔') }))
@@ -36,6 +47,7 @@ export default function App() {
   }, [])
 
   useEffect(() => localStorage.setItem('ai-home.messages', JSON.stringify(messages)), [messages])
+  useEffect(() => localStorage.setItem('ai-home.modelConfig', JSON.stringify(modelConfig)), [modelConfig])
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
   useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
@@ -44,12 +56,45 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
 
   function openPerson(p: Person) { setPerson(p); setPage('room'); setChatOpen(true); setActiveTool('') }
-  function send() {
+  async function send() {
     const text = draft.trim()
-    if (!text) return
-    setMessages(prev => ({ ...prev, [person]: [...prev[person], text] }))
-    setDraft('')
+    if (!text || sending) return
+    if (!modelConfig.endpoint.trim() || !modelConfig.model.trim() || !apiKey.trim()) {
+      setChatError('请先在房间工作区 → 模型设置中填写 API 地址、模型名称和 API Key（Key 只保存在当前会话内）。')
+      return
+    }
+    const target = person
+    const history = messages[target]
+    const card = characters[target]
+    const matched = worldEntries[target].filter(e => e.enabled && (e.always || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))))
+    const system = [
+      card.description && '【角色描述】\n'+card.description,
+      card.definition && '【角色设定】\n'+card.definition,
+      card.language && '【语言与表达要求】\n'+card.language,
+      prompt[target] && '【补充人物提示】\n'+prompt[target],
+      memory[target] && '【长期记忆】\n'+memory[target],
+      worldbook[target] && '【世界书补充】\n'+worldbook[target],
+      matched.length && '【本轮召回的世界书】\n'+matched.map(e=>'['+e.title+']\n'+e.content).join('\n\n')
+    ].filter(Boolean).join('\n\n')
+    setMessages(prev=>({...prev,[target]:[...prev[target],{role:'user',content:text},{role:'assistant',content:''}]}))
+    setDraft('');setChatError('');setSending(true)
+    try {
+      const base=modelConfig.endpoint.trim().replace(/\/+$/,'')
+      const url=/\/chat\/completions$/.test(base)?base:base.endsWith('/v1')?base+'/chat/completions':base+'/v1/chat/completions'
+      const bodyMessages=[...(system?[{role:'system',content:system}]:[]),...history.slice(-24).map(m=>({role:m.role,content:m.content})),{role:'user',content:text}]
+      const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey.trim()},body:JSON.stringify({model:modelConfig.model.trim(),messages:bodyMessages,stream:true})})
+      if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
+      if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
+      const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let answer=''
+      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const piece=chunk.choices?.[0]?.delta?.content;if(typeof piece==='string'&&piece){answer+=piece;setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:answer}:m)}))}}catch{}}}
+      if(!answer) setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称或接口的流式兼容性。）'}:m)}))
+    } catch(err) {
+      const msg=err instanceof Error?err.message:String(err)
+      setChatError(msg.includes('Failed to fetch')?'连接失败：可能是 API 地址不可达或浏览器跨域（CORS）限制。若中转站不允许网页跨域，需要在云服务器增加安全的后端代理。':msg)
+      setMessages(prev=>({...prev,[target]:prev[target].map((m,i)=>i===prev[target].length-1&&m.role==='assistant'?{role:'assistant',content:'请求失败，请查看上方错误提示并检查模型设置。'}:m)}))
+    } finally {setSending(false)}
   }
+
   function addTask() {
     const text = draft.trim()
     if (!text) return
@@ -64,6 +109,8 @@ export default function App() {
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries}
+        modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey}
+        sending={sending} chatError={chatError} setChatError={setChatError}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
@@ -107,14 +154,16 @@ function MyRoom() {
 
 function Room(props: {
   person: Person, setPerson: (p: Person) => void, chatOpen: boolean, setChatOpen: (v: boolean) => void,
-  draft: string, setDraft: (v: string) => void, messages: Record<Person,string[]>, send: () => void,
+  draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: () => void,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   characters: Record<Person,CharacterCard>, setCharacters: React.Dispatch<React.SetStateAction<Record<Person,CharacterCard>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
-  tasks: Record<Person,string[]>, addTask: () => void
+  tasks: Record<Person,string[]>, addTask: () => void,
+  modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
+  sending: boolean, chatError: string, setChatError: (v:string)=>void
 }) {
   if (props.chatOpen) return <Chat {...props} />
   return <div className="room-screen">
@@ -134,6 +183,7 @@ function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
+  if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <Editor title="长期记忆" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="这里先作为第一版本地记忆入口。" />
   if (t === '定时任务') return <div className="tool-panel"><h3>定时任务</h3><form onSubmit={(e)=>{e.preventDefault();p.addTask()}}><input value={p.draft} onChange={(e)=>p.setDraft(e.target.value)} placeholder="例如：晚上 23:00 提醒我休息"/><button>加入</button></form>{p.tasks[p.person].map((x:string,i:number)=><p className="task-line" key={i}>{x}</p>)}<small>第一版只保存任务，不执行调度。</small></div>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
@@ -143,11 +193,16 @@ function Editor({title,value,onChange,placeholder}:{title:string,value:string,on
   return <div className="tool-panel"><h3>{title}</h3><textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}/><small>自动保存在本机浏览器。</small></div>
 }
 
+function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onChange:(v:ModelConfig)=>void,apiKey:string,setApiKey:(v:string)=>void}) {
+ return <div className="tool-panel"><h3>模型连接</h3><p className="muted">支持 OpenAI 兼容接口，例如 One API / New API。API Key 只保存在当前页面内存，不写入浏览器存储；刷新后需要重新填写。</p><label className="model-field">API 地址<input value={value.endpoint} onChange={e=>onChange({...value,endpoint:e.target.value})} placeholder="https://你的中转站/v1"/></label><label className="model-field">模型名称<input value={value.model} onChange={e=>onChange({...value,model:e.target.value})} placeholder="例如 gpt-4o-mini"/></label><label className="model-field">API Key（本次打开有效）<input type="password" autoComplete="off" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-…"/></label><small>地址与模型名自动保存在此浏览器。当前为浏览器直连；若接口不支持 CORS，需加云端代理，不能靠前端绕过。</small></div>
+}
+
 function Chat(p: any) {
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞')}>切换</button></header>
-    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:string,i:number)=><div className="bubble user" key={i}>{m}</div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>第一版先把房子搭稳，AI 接口随后接上。</div>}</div>
-    <form className="compose" onSubmit={e=>{e.preventDefault();p.send()}}><input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……"/><button>发送</button></form>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
+    {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
+    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'bubble '+m.role} key={i}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}</div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>请先在工作区配置模型，即可开始聊天。</div>}</div>
+    <form className="compose" onSubmit={e=>{e.preventDefault();p.send()}}><input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……"/><button disabled={p.sending}>{p.sending?'生成中…':'发送'}</button></form>
   </div>
 }
 
