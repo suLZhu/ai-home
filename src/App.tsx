@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
-type Tool = '人物提示' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
+type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
 
-const tools: Tool[] = ['人物提示', '世界书', '长期记忆', '定时任务', 'MCP', '模型设置']
+const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '定时任务', 'MCP', '模型设置']
 
 function read<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || '') as T } catch { return fallback }
@@ -20,6 +21,7 @@ export default function App() {
   const [messages, setMessages] = useState<Record<Person, string[]>>(() => read('ai-home.messages', { '晏未晞': [], '言朔': [] }))
   const [memory, setMemory] = useState<Record<Person, string>>(() => read('ai-home.memory', { '晏未晞': '', '言朔': '' }))
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => read('ai-home.prompt', { '晏未晞': '', '言朔': '' }))
+  const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => read('ai-home.characters', { '晏未晞': blankCard('晏未晞'), '言朔': blankCard('言朔') }))
   const [worldEntries, setWorldEntries] = useState<Record<Person, WorldEntry[]>>(() => read('ai-home.worldEntries', { '晏未晞': [], '言朔': [] }))
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => read('ai-home.worldbook', { '晏未晞': '', '言朔': '' }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
@@ -36,6 +38,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.messages', JSON.stringify(messages)), [messages])
   useEffect(() => localStorage.setItem('ai-home.memory', JSON.stringify(memory)), [memory])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
+  useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
   useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
@@ -60,7 +63,7 @@ export default function App() {
       {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
-        prompt={prompt} setPrompt={setPrompt} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries}
+        prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
@@ -108,6 +111,7 @@ function Room(props: {
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
+  characters: Record<Person,CharacterCard>, setCharacters: React.Dispatch<React.SetStateAction<Record<Person,CharacterCard>>>,
   worldbook: Record<Person,string>, setWorldbook: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   worldEntries: Record<Person,WorldEntry[]>, setWorldEntries: React.Dispatch<React.SetStateAction<Record<Person,WorldEntry[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void
@@ -123,12 +127,12 @@ function Room(props: {
 }
 
 function toolHint(t: Tool) {
-  return ({'人物提示':'角色设定与系统提示','世界书':'世界观与关键词','长期记忆':'值得长期留下的事','定时任务':'稍后提醒与主动消息','MCP':'外部工具连接','模型设置':'接口与模型'} as Record<Tool,string>)[t]
+  return ({'人物设置':'角色卡、头像、开场白与语言','世界书':'世界观与关键词','长期记忆':'值得长期留下的事','定时任务':'稍后提醒与主动消息','MCP':'外部工具连接','模型设置':'接口与模型'} as Record<Tool,string>)[t]
 }
 
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
-  if (t === '人物提示') return <Editor title="人物提示" value={p.prompt[p.person]} onChange={(v:string)=>p.setPrompt((x:any)=>({...x,[p.person]:v}))} placeholder="写下这个角色希望如何与你相处……" />
+  if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries[p.person]} onChange={(v:WorldEntry[])=>p.setWorldEntries((x:Record<Person,WorldEntry[]>)=>({...x,[p.person]:v}))}/>
   if (t === '长期记忆') return <Editor title="长期记忆" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="这里先作为第一版本地记忆入口。" />
   if (t === '定时任务') return <div className="tool-panel"><h3>定时任务</h3><form onSubmit={(e)=>{e.preventDefault();p.addTask()}}><input value={p.draft} onChange={(e)=>p.setDraft(e.target.value)} placeholder="例如：晚上 23:00 提醒我休息"/><button>加入</button></form>{p.tasks[p.person].map((x:string,i:number)=><p className="task-line" key={i}>{x}</p>)}<small>第一版只保存任务，不执行调度。</small></div>
