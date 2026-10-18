@@ -224,6 +224,7 @@ export default function App() {
     matched.sort((a,b)=>(b.priority||0)-(a.priority||0))
     const system = [
       '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
+      '【用户浏览器当前日期】'+new Date().toLocaleDateString('en-CA')+'。记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
       card.description && '【角色描述】\n'+card.description,
       card.definition && '【角色设定】\n'+card.definition,
       card.language && '【语言与表达要求】\n'+card.language,
@@ -256,6 +257,9 @@ export default function App() {
       // Load tools only from the active character's server-side MCP bindings.
       const toolRoutes=new Map<string,{id:string;person:Person;name:string}>()
       const openAITools:any[]=[]
+      // Both characters may add entries to the same authenticated shared ledger.
+      openAITools.push({type:'function',function:{name:'ledger_add_entry',description:'仅当用户明确要求记账时，将一笔真实收入或支出写入用户的共享记账单。不得虚构金额；不确定的日期、币种或金额应先询问。写入后向用户确认。',parameters:{type:'object',properties:{kind:{type:'string',enum:['income','expense']},amount:{type:'number',description:'金额，正数'},currency:{type:'string',enum:['CNY','JPY','USD','EUR','HKD'],description:'币种，元默认CNY，日元JPY'},category:{type:'string'},note:{type:'string'},date:{type:'string',description:'YYYY-MM-DD，用户所在日期'},},required:['kind','amount','currency','category','date'],additionalProperties:false}}})
+
       try {
         const listResponse=await fetch('/api/mcp?person='+encodeURIComponent(target),{credentials:'same-origin'})
         if(listResponse.ok){
@@ -292,13 +296,15 @@ export default function App() {
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
           try{
-            if(!route||route.person!==target) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
+            if(call.function.name!=='ledger_add_entry' && (!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
-            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+route.name+'…'}:m))
-            const toolResponse=await fetch('/api/mcp/'+route.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route.name,arguments:args})})
+            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+(route?.name||'共享记账单')+'…'}:m))
+            const toolResponse=call.function.name==='ledger_add_entry'
+              ? await fetch('/api/ledger',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...args,actor:target,requestId:call.id})})
+              : await fetch('/api/mcp/'+route!.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route!.name,arguments:args})})
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
-            resultContent=JSON.stringify(toolData.result)
+            resultContent=JSON.stringify(call.function.name==='ledger_add_entry'?toolData:toolData.result)
           }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)})}
           requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
         }

@@ -36,6 +36,17 @@ db.exec(`
     last_run_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS scheduled_tasks_due_idx ON scheduled_tasks(status, run_at);
+  CREATE TABLE IF NOT EXISTS ledger_entries (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('income','expense')),
+    amount_cents INTEGER NOT NULL CHECK(amount_cents>0), currency TEXT NOT NULL,
+    category TEXT NOT NULL, note TEXT NOT NULL, entry_date TEXT NOT NULL,
+    created_by TEXT NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS ledger_operations (
+    request_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS ledger_entries_date_idx ON ledger_entries(entry_date);
+
 `)
 const sessions = new Map()
 const failures = new Map()
@@ -171,6 +182,45 @@ createServer(async (req, res) => {
   }
 
   if (!getSession(req)) return send(res, 401, { error: '请先登录' })
+
+  // Shared ledger for both assistants. All routes require the existing authenticated session.
+  if (url.pathname === '/api/ledger' && req.method === 'GET') {
+    const rows = db.prepare('SELECT id,kind,amount_cents,currency,category,note,entry_date,created_by,created_at FROM ledger_entries ORDER BY entry_date DESC,created_at DESC LIMIT 2000').all()
+    return send(res, 200, { entries: rows.map(r=>({ id:r.id,kind:r.kind,amount:r.amount_cents/100,currency:r.currency,category:r.category,note:r.note,date:r.entry_date,createdBy:r.created_by,createdAt:r.created_at })) })
+  }
+  if (url.pathname === '/api/ledger' && req.method === 'POST') {
+    try {
+      const b = await readBody(req)
+      if (!['income','expense'].includes(b.kind)) return send(res,400,{error:'收支类型无效'})
+      const cents = Math.round(Number(b.amount)*100)
+      if (!Number.isSafeInteger(cents)||cents<=0||cents>1e12) return send(res,400,{error:'金额无效'})
+      const currency=String(b.currency||'CNY').toUpperCase()
+      if (!['CNY','JPY','USD','EUR','HKD'].includes(currency)) return send(res,400,{error:'暂不支持此币种'})
+      const date=String(b.date||'')
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) return send(res,400,{error:'日期无效'})
+      const category=String(b.category||'其他').trim().slice(0,40)
+      const note=String(b.note||'').trim().slice(0,300)
+      const actor=String(b.actor||'user')
+      if (!['user','晏未晞','言朔'].includes(actor)) return send(res,400,{error:'操作者无效'})
+      const requestId=String(b.requestId||'')
+      if (!/^[a-zA-Z0-9-]{12,100}$/.test(requestId)) return send(res,400,{error:'请求编号无效'})
+      const prior=db.prepare('SELECT entry_id FROM ledger_operations WHERE request_id=?').get(requestId)
+      if(prior)return send(res,200,{ok:true,id:prior.entry_id,duplicate:true})
+      const id=randomUUID(),now=new Date().toISOString()
+      db.exec('BEGIN IMMEDIATE')
+      try{
+        db.prepare('INSERT INTO ledger_entries (id,kind,amount_cents,currency,category,note,entry_date,created_by,created_at) VALUES (?,?,?,?,?,?,?,?,?)').run(id,b.kind,cents,currency,category,note,date,actor,now)
+        db.prepare('INSERT INTO ledger_operations (request_id,entry_id,actor,created_at) VALUES (?,?,?,?)').run(requestId,id,actor,now)
+        db.exec('COMMIT')
+      }catch(e){db.exec('ROLLBACK');throw e}
+      return send(res,201,{ok:true,id})
+    } catch(e){return send(res,e.status||400,{error:e.message||'记账失败'})}
+  }
+  const ledgerDelete=url.pathname.match(/^\/api\/ledger\/([0-9a-f-]{36})$/)
+  if (ledgerDelete && req.method === 'DELETE') {
+    const result=db.prepare('DELETE FROM ledger_entries WHERE id=?').run(ledgerDelete[1])
+    return send(res,result.changes?200:404,result.changes?{ok:true}:{error:'账目不存在'})
+  }
 
   if (url.pathname === '/api/mcp' && req.method === 'GET') {
     const person = url.searchParams.get('person')
