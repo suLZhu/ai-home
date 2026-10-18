@@ -322,7 +322,7 @@ export default function App() {
 
   return <main className="shell">
     <section className="screen">
-      {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} />}
+      {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
@@ -354,12 +354,19 @@ function LoginScreen({status,password,setPassword,error,onSubmit}:{status:'check
   </form></main>
 }
 
-function Home({ onPerson, onMe, time, displayName }: { onPerson: (p: Person) => void, onMe: () => void, time: string, displayName:(p:Person)=>string }) {
+function Home({ onPerson, onMe, time, displayName, characters }: { onPerson: (p: Person) => void, onMe: () => void, time: string, displayName:(p:Person)=>string, characters:Record<Person,CharacterCard> }) {
   return <div className="home-screen">
-    <div className="home-people">
-      <button className="avatar" onClick={() => onPerson('晏未晞')}>{displayName('晏未晞').slice(0,1)}</button>
-      <button className="avatar center" onClick={onMe}>顾</button>
-      <button className="avatar" onClick={() => onPerson('言朔')}>{displayName('言朔').slice(0,1)}</button>
+    <div className="home-people" aria-label="房间入口">
+      {(['晏未晞', 'me', '言朔'] as const).map(item => {
+        const mine = item === 'me'
+        const name = mine ? '我的房间' : displayName(item)
+        const avatar = mine ? '' : characters[item]?.avatar
+        return <button key={item} type="button" className={'home-person'+(mine?' is-me':'')} onClick={() => mine ? onMe() : onPerson(item)} aria-label={'进入'+name}>
+          <span className="home-person-circle">{avatar ? <img src={avatar} alt="" /> : <span aria-hidden="true">{mine?'我':name.slice(0,1)||'助'}</span>}</span>
+          <span className="home-person-label">{name}</span>
+          <span className="home-person-caption">{mine?'我的空间':'进入聊天'}</span>
+        </button>
+      })}
     </div>
     <button className="calendar-card" onClick={() => onPerson('晏未晞')}>
       <b>日历或日程表</b><span>日程模块 · 待接入</span>
