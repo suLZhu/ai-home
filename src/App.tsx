@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef, type FormEvent } from 'react'
 import './App.css'
+import { LEGACY_ASSISTANTS, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
@@ -32,6 +33,8 @@ function initialConversations():Record<Person,Conversation[]> {
 
 export default function App() {
   const [page, setPage] = useState<Page>('home')
+  const [assistants, setAssistants] = useState<AssistantRecord[]>(() => read('ai-home.assistants', LEGACY_ASSISTANTS.map(a => ({...a, createdAt:'1970-01-01T00:00:00.000Z'}))))
+  const displayName = (name: Person) => assistants.find(a => a.id === LEGACY_ASSISTANTS.find(x => x.name === name)?.id)?.name || name
   const [person, setPerson] = useState<Person>('晏未晞')
   const [chatOpen, setChatOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -60,13 +63,14 @@ export default function App() {
   const cloudSaveInFlight = useRef(false)
   const queuedCloudSnapshot = useRef<any>(null)
 
-  const getSnapshot = useCallback(() => ({ version: 2, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  const getSnapshot = useCallback(() => ({ version: 2, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
   const latestSnapshot = useRef<any>(null)
   useEffect(() => { latestSnapshot.current = getSnapshot() }, [getSnapshot])
   const applySnapshot = useCallback((data: any) => {
+    if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(data.assistants)
     if (data.conversations && Array.isArray(data.conversations['晏未晞']) && Array.isArray(data.conversations['言朔'])) {
       const convs:Record<Person,Conversation[]>={'晏未晞':data.conversations['晏未晞'],'言朔':data.conversations['言朔']}
       setConversations(convs)
@@ -160,7 +164,7 @@ export default function App() {
       }
     }, 700)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -169,6 +173,7 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => { localStorage.setItem('ai-home.assistants', JSON.stringify(assistants)) }, [assistants])
   useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
   useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
   useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
@@ -317,8 +322,8 @@ export default function App() {
 
   return <main className="shell">
     <section className="screen">
-      {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} />}
-      {page === 'room' && <Room person={person} setPerson={setPerson} chatOpen={chatOpen} setChatOpen={setChatOpen}
+      {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} />}
+      {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
@@ -327,7 +332,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} />}
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
@@ -349,12 +354,12 @@ function LoginScreen({status,password,setPassword,error,onSubmit}:{status:'check
   </form></main>
 }
 
-function Home({ onPerson, onMe, time }: { onPerson: (p: Person) => void, onMe: () => void, time: string }) {
+function Home({ onPerson, onMe, time, displayName }: { onPerson: (p: Person) => void, onMe: () => void, time: string, displayName:(p:Person)=>string }) {
   return <div className="home-screen">
     <div className="home-people">
-      <button className="avatar" onClick={() => onPerson('晏未晞')}>晏</button>
+      <button className="avatar" onClick={() => onPerson('晏未晞')}>{displayName('晏未晞').slice(0,1)}</button>
       <button className="avatar center" onClick={onMe}>顾</button>
-      <button className="avatar" onClick={() => onPerson('言朔')}>言</button>
+      <button className="avatar" onClick={() => onPerson('言朔')}>{displayName('言朔').slice(0,1)}</button>
     </div>
     <button className="calendar-card" onClick={() => onPerson('晏未晞')}>
       <b>日历或日程表</b><span>日程模块 · 待接入</span>
@@ -380,7 +385,7 @@ function MyRoom() {
 }
 
 function Room(props: {
-  person: Person, setPerson: (p: Person) => void, chatOpen: boolean, setChatOpen: (v: boolean) => void,
+  person: Person, setPerson: (p: Person) => void, displayName:(p:Person)=>string, chatOpen: boolean, setChatOpen: (v: boolean) => void,
   draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
   conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
@@ -397,7 +402,7 @@ function Room(props: {
 }) {
   if (props.chatOpen) return <Chat {...props} />
   return <div className="room-screen">
-    <header className="room-header"><div className="room-name"><span>{props.person === '晏未晞' ? '晏' : '言'}</span><div><b>{props.person} 的房间</b><small>独立工作区</small></div><div className="room-person-switch" aria-label="切换房间">{(['晏未晞','言朔'] as Person[]).map(name=><button key={name} type="button" className={props.person===name?'selected':''} aria-pressed={props.person===name} onClick={()=>{props.setPerson(name);props.setActiveTool('')}}>{name==='晏未晞'?'晏':'言'}<small>{name}</small></button>)}</div></div></header>
+    <header className="room-header"><div className="room-name"><span>{props.person === '晏未晞' ? '晏' : '言'}</span><div><b>{props.displayName(props.person)} 的房间</b><small>独立工作区</small></div><div className="room-person-switch" aria-label="切换房间">{(['晏未晞','言朔'] as Person[]).map(name=><button key={name} type="button" className={props.person===name?'selected':''} aria-pressed={props.person===name} onClick={()=>{props.setPerson(name);props.setActiveTool('')}}>{props.displayName(name).slice(0,1)}<small>{props.displayName(name)}</small></button>)}</div></div></header>
     <div className="room-session-switch"><div className="room-session-heading"><b>独立会话</b><small>{(props.conversations[props.person]||[]).length} 条对话</small></div><div className="room-session-controls"><select aria-label="切换聊天会话" value={props.activeConversationIds[props.person]||''} onChange={e=>{const nextId=e.target.value;const currentId=props.activeConversationIds[props.person];props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[props.person]:(old[props.person]||[]).map(c=>c.id===currentId?{...c,messages:props.messages[props.person],updatedAt:new Date().toISOString()}:c)}));const next=(props.conversations[props.person]||[]).find((c:Conversation)=>c.id===nextId);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[props.person]:nextId}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[props.person]:next?.messages||[]}));props.setChatError('')}}>{(props.conversations[props.person]||[]).map((c:Conversation)=><option key={c.id} value={c.id}>{c.title||'未命名会话'}</option>)}</select><button type="button" onClick={()=>{const id=crypto.randomUUID();const list=props.conversations[props.person]||[];const currentId=props.activeConversationIds[props.person];const title='新对话 '+(list.length+1);props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[props.person]:[...(old[props.person]||[]).map(c=>c.id===currentId?{...c,messages:props.messages[props.person],updatedAt:new Date().toISOString()}:c),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[props.person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[props.person]:[]}));props.setChatError('')}}>＋ 新会话</button></div><small className="room-session-hint">可以在这里切换对话，不必先打开聊天窗口。</small></div>
     <button className="chat-entry" onClick={() => props.setChatOpen(true)}><b>聊天窗口</b><span>点击进入 {props.person} 的全屏聊天</span><em>→</em></button>
     <div className="workspace-title">工作区</div>
@@ -579,7 +584,7 @@ function Chat(p: any) {
     p.setChatError('')
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.person}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><b>{p.displayName(p.person)}</b><button onClick={()=>{p.setPerson(p.person === '晏未晞' ? '言朔' : '晏未晞');p.setChatError('')}}>切换</button></header>
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><button key={c.id} type="button" className={p.activeConversationIds[chatPerson]===c.id?'selected':''} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{c.title||'新对话'}</button>)}</div><button type="button" className="conversation-new" disabled={creatingConversation.current} onClick={createConversation}>＋ 新对话</button><button type="button" className="conversation-rename" onClick={renameConversation}>重命名</button><button type="button" className="conversation-delete" onClick={deleteConversation}>删除当前</button></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div></div>) : <div className="empty-chat">这里是 {p.person} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
@@ -612,4 +617,4 @@ function Fun() {
   function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
   return <div className="fun-screen"><h2>娱乐房</h2><p>公共空间与扩展模块。先把入口搭好，后续再逐个接入实际能力。</p><div className="fun-tabs">{rooms.map(x=><button type="button" className={active===x?'selected':''} key={x} onClick={()=>setActive(x)}>{x}</button>)}</div>{active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是以后大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{active}</h3><p className="muted">模块入口已预留。后续接入真实组件时，不需要重做房间导航。</p><div className="module-placeholder"><span>⌂</span><b>{active}工作区</b><small>框架已预留 · 等待接入</small></div></section>}</div>
 }
-function Settings({onLogout,cloudStatus}:{onLogout:()=>void;cloudStatus:string}) { return <div className="settings-screen"><h2>设置</h2><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>云端数据</b><span>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改会话名称后请稍等片刻，数据会自动同步。'}</span></div><button className="settings-logout" onClick={onLogout}>退出登录</button></div> }
+function Settings({onLogout,cloudStatus,assistants,setAssistants}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>}) { return <div className="settings-screen"><h2>设置</h2><div className="setting-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。新增助手功能仍在施工中。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>云端数据</b><span>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改会话名称后请稍等片刻，数据会自动同步。'}</span></div><button className="settings-logout" onClick={onLogout}>退出登录</button></div> }
