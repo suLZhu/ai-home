@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { randomBytes, createHash, timingSafeEqual, createCipheriv, createDecipheriv, randomUUID } from 'node:crypto'
+import { randomBytes, createHash, timingSafeEqual, createCipheriv, createDecipheriv, randomUUID, scryptSync } from 'node:crypto'
 import { isIP } from 'node:net'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -46,6 +46,12 @@ db.exec(`
     request_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS ledger_entries_date_idx ON ledger_entries(entry_date);
+  CREATE TABLE IF NOT EXISTS diary_entries (
+    id TEXT PRIMARY KEY, owner TEXT NOT NULL, title TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK(visibility IN ('public','locked')),
+    body TEXT NOT NULL, salt TEXT, iv TEXT, tag TEXT, created_at TEXT NOT NULL
+  );
+
 
 `)
 const sessions = new Map()
@@ -184,6 +190,54 @@ createServer(async (req, res) => {
   if (!getSession(req)) return send(res, 401, { error: '请先登录' })
 
   // Shared ledger for both assistants. All routes require the existing authenticated session.
+  if (url.pathname === '/api/diary' && req.method === 'GET') {
+    const rows=db.prepare('SELECT id,owner,title,visibility,body,created_at FROM diary_entries ORDER BY created_at DESC LIMIT 500').all()
+    return send(res,200,{entries:rows.map(r=>({id:r.id,owner:r.owner,title:r.title,visibility:r.visibility,date:r.created_at.slice(0,10),...(r.visibility==='public'?{content:r.body}:{})}))})
+  }
+  if (url.pathname === '/api/diary' && req.method === 'POST') {
+    try {
+      const b=await readBody(req)
+      if(!['阿懒','晏未晞','言朔'].includes(b.owner))return send(res,400,{error:'作者无效'})
+      if(!['public','locked'].includes(b.visibility))return send(res,400,{error:'公开状态无效'})
+      const title=String(b.title||'').trim(),content=String(b.content||'')
+      if(!title||title.length>100||!content.trim()||content.length>20000)return send(res,400,{error:'标题或正文无效'})
+      let body=content,salt=null,iv=null,tag=null
+      if(b.visibility==='locked'){
+        const secret=String(b.secret||'')
+        if(secret.length<6||secret.length>100)return send(res,400,{error:'暗号需为6至100位'})
+        salt=randomBytes(16).toString('hex');iv=randomBytes(12).toString('hex')
+        const key=scryptSync(secret,Buffer.from(salt,'hex'),32)
+        const cipher=createCipheriv('aes-256-gcm',key,Buffer.from(iv,'hex'))
+        body=Buffer.concat([cipher.update(content,'utf8'),cipher.final()]).toString('base64')
+        tag=cipher.getAuthTag().toString('hex')
+      }
+      const id=randomUUID()
+      db.prepare('INSERT INTO diary_entries(id,owner,title,visibility,body,salt,iv,tag,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,b.owner,title,b.visibility,body,salt,iv,tag,new Date().toISOString())
+      return send(res,201,{ok:true,id})
+    }catch(e){return send(res,400,{error:e.message||'保存失败'})}
+  }
+  const diaryRead=url.pathname.match(/^\/api\/diary\/([0-9a-f-]{36})\/read$/)
+  if(diaryRead&&req.method==='POST'){
+    try{
+      const b=await readBody(req)
+      const row=db.prepare('SELECT * FROM diary_entries WHERE id=?').get(diaryRead[1])
+      if(!row)return send(res,404,{error:'日记不存在'})
+      if(row.visibility==='public')return send(res,200,{content:row.body})
+      const secret=String(b.secret||'')
+      if(!secret||secret.length>100)return send(res,400,{error:'请提供暗号'})
+      const key=scryptSync(secret,Buffer.from(row.salt,'hex'),32)
+      const decipher=createDecipheriv('aes-256-gcm',key,Buffer.from(row.iv,'hex'))
+      decipher.setAuthTag(Buffer.from(row.tag,'hex'))
+      const content=Buffer.concat([decipher.update(Buffer.from(row.body,'base64')),decipher.final()]).toString('utf8')
+      return send(res,200,{content})
+    }catch{return send(res,403,{error:'暗号错误或日记无法解锁'})}
+  }
+  const diaryDelete=url.pathname.match(/^\/api\/diary\/([0-9a-f-]{36})$/)
+  if(diaryDelete&&req.method==='DELETE'){
+    const result=db.prepare('DELETE FROM diary_entries WHERE id=?').run(diaryDelete[1])
+    return send(res,result.changes?200:404,result.changes?{ok:true}:{error:'日记不存在'})
+  }
+
   if (url.pathname === '/api/ledger' && req.method === 'GET') {
     const rows = db.prepare('SELECT id,kind,amount_cents,currency,category,note,entry_date,created_by,created_at FROM ledger_entries ORDER BY entry_date DESC,created_at DESC LIMIT 2000').all()
     return send(res, 200, { entries: rows.map(r=>({ id:r.id,kind:r.kind,amount:r.amount_cents/100,currency:r.currency,category:r.category,note:r.note,date:r.entry_date,createdBy:r.created_by,createdAt:r.created_at })) })
