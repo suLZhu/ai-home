@@ -161,3 +161,19 @@
 .home-person-label{max-width:100%;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .home-person-caption{font-size:11px;color:#8c8176}
 @media(prefers-reduced-motion:reduce){.home-person{transition:none}}
+
+/* Theme layer: overrides legacy fixed palette without rewriting existing layouts. */
+.shell{background:var(--surface);color:var(--ink);font-family:var(--font-family);font-size:calc(16px * var(--font-scale))}
+.shell .bottom-nav{background:var(--surface);border-color:var(--line)}
+.shell .calendar-card,.shell .tool-grid button,.shell .fun-grid button,.shell .tool-panel,.shell .character-editor,.shell .lounge-panel,.shell .ledger-form,.shell .ledger-summary>div,.shell .diary-editor{background:var(--card)}
+.shell .bubble.user{background:var(--user-bubble);color:var(--ink)}
+.shell .bubble.assistant{background:var(--assistant-bubble);color:var(--ink)}
+.shell.bubble-outlined .bubble{background:transparent;border:1px solid var(--line)}
+.shell.chatbg-plain .chat-body{background:var(--field)}
+.shell .compose-wechat,.shell .compose-wechat>input,.shell .tool-panel textarea,.shell .tool-panel input,.shell .character-field input,.shell .character-field textarea,.shell .model-field input,.shell .ledger-fields input,.shell .ledger-fields select,.shell .ledger-month input,.shell .diary-editor input:not([type=checkbox]),.shell .diary-editor select,.shell .diary-editor textarea{background:var(--field);color:var(--ink);border-color:var(--line)}
+.shell .tool-panel,.shell .tool-grid button,.shell .fun-grid button,.shell .character-editor,.shell .calendar-card,.shell .ledger-form,.shell .diary-editor{border-radius:var(--radius)}
+.shell .room-person-switch,.shell .chat-entry,.shell .setting-card,.shell .chat-header,.shell .world-entry{border-color:var(--line)}
+.shell .muted,.shell .setting-card span,.shell .calendar-card span,.shell .room-name small,.shell .tool-grid span,.shell .fun-grid span,.shell .home-note,.shell .clock small{color:var(--muted)}
+.shell .room-person-switch button.selected,.shell .compose-wechat .send-button,.shell .tool-panel form button{background:var(--card);color:var(--ink)}
+.shell .ledger-add,.shell .diary-editor>button,.shell .diary-unlock button{background:var(--accent);color:var(--surface)}
+.shell .bottom-nav .active{color:var(--accent)}

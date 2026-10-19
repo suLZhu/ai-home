@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, useRef, type FormEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
+import { ThemeSettings } from './ThemeSettings'
+import { DEFAULT_THEME,themeStyle,type ThemePrefs } from './theme'
 import { LEGACY_ASSISTANTS, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
@@ -35,6 +37,7 @@ function initialConversations():Record<Person,Conversation[]> {
 
 export default function App() {
   const [page, setPage] = useState<Page>('home')
+  const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>read('ai-home.themePrefs',DEFAULT_THEME))
   const [assistants, setAssistants] = useState<AssistantRecord[]>(() => read('ai-home.assistants', LEGACY_ASSISTANTS.map(a => ({...a, createdAt:'1970-01-01T00:00:00.000Z'}))))
   const displayName = (name: Person) => assistants.find(a => a.id === LEGACY_ASSISTANTS.find(x => x.name === name)?.id)?.name || name
   const [person, setPerson] = useState<Person>('晏未晞')
@@ -65,13 +68,14 @@ export default function App() {
   const cloudSaveInFlight = useRef(false)
   const queuedCloudSnapshot = useRef<any>(null)
 
-  const getSnapshot = useCallback(() => ({ version: 2, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
+  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
   const latestSnapshot = useRef<any>(null)
   useEffect(() => { latestSnapshot.current = getSnapshot() }, [getSnapshot])
   const applySnapshot = useCallback((data: any) => {
+    if (data.themePrefs && typeof data.themePrefs==='object' && ['lavender','paper','forest','night'].includes(data.themePrefs.theme)) setThemePrefs({...DEFAULT_THEME,...data.themePrefs})
     if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(data.assistants)
     if (data.conversations && Array.isArray(data.conversations['晏未晞']) && Array.isArray(data.conversations['言朔'])) {
       const convs:Record<Person,Conversation[]>={'晏未晞':data.conversations['晏未晞'],'言朔':data.conversations['言朔']}
@@ -328,7 +332,7 @@ export default function App() {
 
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
 
-  return <main className="shell">
+  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
@@ -340,7 +344,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
       {page === 'fun' && <Fun />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} />}
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
@@ -632,4 +636,4 @@ function Fun() {
   function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
   return <div className="fun-screen"><h2>娱乐房</h2><p>公共空间与扩展模块。先把入口搭好，后续再逐个接入实际能力。</p><div className="fun-tabs">{rooms.map(x=><button type="button" className={active===x?'selected':''} key={x} onClick={()=>setActive(x)}>{x}</button>)}</div>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是以后大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{active}</h3><p className="muted">模块入口已预留。后续接入真实组件时，不需要重做房间导航。</p><div className="module-placeholder"><span>⌂</span><b>{active}工作区</b><small>框架已预留 · 等待接入</small></div></section>}</div>
 }
-function Settings({onLogout,cloudStatus,assistants,setAssistants}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>}) { return <div className="settings-screen"><h2>设置</h2><div className="setting-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。新增助手功能仍在施工中。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>云端数据</b><span>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改会话名称后请稍等片刻，数据会自动同步。'}</span></div><button className="settings-logout" onClick={onLogout}>退出登录</button></div> }
+function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void}) { return <div className="settings-screen"><h2>设置</h2><ThemeSettings value={themePrefs} onChange={setThemePrefs}/><div className="setting-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。新增助手功能仍在施工中。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div><p>全局主题先保持书页感。模型、记忆、MCP 等能力逐步接入。</p><div className="setting-card"><b>当前主题</b><span>暖米白 · 书页</span></div><div className="setting-card"><b>云端数据</b><span>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改会话名称后请稍等片刻，数据会自动同步。'}</span></div><button className="settings-logout" onClick={onLogout}>退出登录</button></div> }
