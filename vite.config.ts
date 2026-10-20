@@ -8,7 +8,7 @@ export default defineConfig({
     proxy: { '/api': 'http://127.0.0.1:4180' },
   },
   preview: {
-    allowedHosts: ['.trycloudflare.com', 'rhythm-repeated-start-prices.trycloudflare.com', 'attendance-lamps-ist-unavailable.trycloudflare.com'],
+    allowedHosts: true,
     proxy: { '/api': 'http://127.0.0.1:4180' },
   },
 })
