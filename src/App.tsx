@@ -60,6 +60,8 @@ export default function App() {
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => read('ai-home.mcpConnections', { '晏未晞': [], '言朔': [] }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
+  const [sidebarOpen,setSidebarOpen]=useState(false)
+  const [funShortcut,setFunShortcut]=useState('')
   const [time, setTime] = useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   const [loginPassword, setLoginPassword] = useState('')
@@ -364,8 +366,12 @@ export default function App() {
 
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
 
-  const navigate=(next:Page)=>{setPage(next);setActiveTool('')}
+  const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
+  const openFunShortcut=(key:string)=>{setFunShortcut(key);setPage('fun');setSidebarOpen(false);setActiveTool('')}
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
+    <button className="mobile-menu-toggle" aria-label="打开娱乐房快捷方式" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>快捷方式</b></button>
+    {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭快捷方式" onClick={()=>setSidebarOpen(false)}/>}
+    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>娱乐房快捷方式</b><small>QUICK ACCESS</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">直接打开模块</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 快捷入口</span></div></aside>
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
@@ -376,7 +382,7 @@ export default function App() {
         sending={sending} chatError={chatError} setChatError={setChatError}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
-      {page === 'fun' && <Fun />}
+      {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} />}
       {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} conversations={conversations} modelConfig={modelConfig} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} />}
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
@@ -710,8 +716,9 @@ function Chat(p: any) {
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
 
-function Fun() {
+function Fun({shortcut,onShortcutUsed}:{shortcut:string;onShortcutUsed:()=>void}) {
   const [active,setActive]=useState('')
+  useEffect(()=>{if(shortcut){setActive(shortcut);onShortcutUsed()}},[shortcut,onShortcutUsed])
   const [draft,setDraft]=useState('')
   const [messages,setMessages]=useState<{id:string;author:string;content:string;at:string}[]>(()=>read('ai-home.loungeMessages',[]))
   useEffect(()=>{localStorage.setItem('ai-home.loungeMessages',JSON.stringify(messages))},[messages])
