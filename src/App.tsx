@@ -387,7 +387,7 @@ export default function App() {
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
-      {(['home','room','fun','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => navigate(p)}>{['主页','房间','娱乐房','设置'][i]}</button>)}
+      {(['home','room','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => navigate(p)}>{['主页','房间','设置'][i]}</button>)}
     </nav>}
   </main>
 }
