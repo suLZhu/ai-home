@@ -10,7 +10,7 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
-type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置'
+type Tool = '人物设置' | '世界书' | '长期记忆' | '定时任务' | 'MCP' | '模型设置' | 'SKILL 技能库'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[]; usage?: TokenUsage }
@@ -463,18 +463,31 @@ function Room(props: {
 }
 
 function toolHint(t: Tool) {
-  return ({'人物设置':'角色卡、头像、开场白与语言','世界书':'世界观与关键词','长期记忆':'值得长期留下的事','定时任务':'稍后提醒与主动消息','MCP':'外部工具连接','模型设置':'接口与模型'} as Record<Tool,string>)[t]
+  return ({'人物设置':'角色卡、头像、开场白与语言','世界书':'世界观与关键词','长期记忆':'值得长期留下的事','定时任务':'稍后提醒与主动消息','MCP':'外部工具连接','模型设置':'接口与模型','SKILL 技能库':'技能说明与工作流程'} as Record<Tool,string>)[t]
 }
 
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries.filter((e:WorldEntry)=>e.boundCharacters?.includes(p.person))} onChange={(v:WorldEntry[])=>p.setWorldEntries((old:WorldEntry[])=>{const visibleIds=new Set(old.filter(e=>e.boundCharacters?.includes(p.person)).map(e=>e.id));const incoming=new Map(v.map(e=>[e.id,e]));const kept=old.flatMap(e=>{if(!visibleIds.has(e.id))return [e];const replacement=incoming.get(e.id);if(replacement)return [replacement];const remaining=e.boundCharacters.filter(name=>name!==p.person);return remaining.length?[{...e,boundCharacters:remaining}]:[]});const oldIds=new Set(old.map(e=>e.id));return [...kept,...v.filter(e=>!oldIds.has(e.id))]})}/>
+  if (t === 'SKILL 技能库') return <SkillWorkbench person={p.person}/>
   if (t === 'MCP') return <MCPSettings person={p.person}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <><MemoryWorkbench person={p.person} entries={p.memoryEntries[p.person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[p.person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>
   if (t === '定时任务') return <TaskManager person={p.person}/>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
+}
+
+type SkillRecord={id:string;name:string;description:string;instructions:string;enabled:boolean;updatedAt:string}
+function SkillWorkbench({person}:{person:Person}) {
+ const storageKey='ai-home.skills.'+person
+ const [skills,setSkills]=useState<SkillRecord[]>(()=>{try{const v=JSON.parse(localStorage.getItem(storageKey)||'[]');return Array.isArray(v)?v:[]}catch{return []}})
+ const [name,setName]=useState('');const [description,setDescription]=useState('');const [instructions,setInstructions]=useState('');const [editing,setEditing]=useState<string|null>(null);const [query,setQuery]=useState('')
+ useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(skills))},[storageKey,skills])
+ const visible=skills.filter(s=>(s.name+' '+s.description+' '+s.instructions).toLowerCase().includes(query.toLowerCase()))
+ function save(e:FormEvent){e.preventDefault();if(!name.trim()||!instructions.trim())return;const item:SkillRecord={id:editing||crypto.randomUUID(),name:name.trim(),description:description.trim(),instructions:instructions.trim(),enabled:editing?skills.find(s=>s.id===editing)?.enabled??true:true,updatedAt:new Date().toISOString()};setSkills(old=>editing?old.map(s=>s.id===editing?item:s):[item,...old]);clear()}
+ function clear(){setName('');setDescription('');setInstructions('');setEditing(null)}
+ return <div className="tool-panel skill-workbench"><h3>{person} · SKILL 技能库</h3><p className="muted">创建、编辑、搜索、启用或停用技能说明。当前保存于此浏览器并按助手分开；这版是技能管理基础，尚未自动注入模型提示或执行技能中的代码。</p><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索技能" aria-label="搜索技能"/><form className="memory-create" onSubmit={save}><h4>{editing?'编辑技能':'新增技能'}</h4><label>技能名称<input required maxLength={100} value={name} onChange={e=>setName(e.target.value)} placeholder="例如：旅行日志整理"/></label><label>简介<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="这个技能解决什么问题"/></label><label>工作流程与规则<textarea required rows={5} value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="写清触发条件、步骤、限制与输出格式"/></label><div className="memory-form-actions"><button disabled={!name.trim()||!instructions.trim()}>{editing?'保存修改':'保存技能'}</button>{editing&&<button type="button" onClick={clear}>取消</button>}</div></form><div className="skill-list">{visible.map(skill=><article key={skill.id} className="skill-card"><div><b>{skill.name}</b><span className={skill.enabled?'skill-enabled':'skill-disabled'}>{skill.enabled?'已启用':'已停用'}</span></div>{skill.description&&<p>{skill.description}</p>}<pre>{skill.instructions}</pre><small>更新于 {new Date(skill.updatedAt).toLocaleString('zh-CN')}</small><div className="memory-form-actions"><button type="button" onClick={()=>{setEditing(skill.id);setName(skill.name);setDescription(skill.description);setInstructions(skill.instructions)}}>编辑</button><button type="button" onClick={()=>setSkills(old=>old.map(s=>s.id===skill.id?{...s,enabled:!s.enabled,updatedAt:new Date().toISOString()}:s))}>{skill.enabled?'停用':'启用'}</button><button type="button" onClick={()=>{if(window.confirm('删除技能“'+skill.name+'”？'))setSkills(old=>old.filter(s=>s.id!==skill.id))}}>删除</button></div></article>)}</div>{visible.length===0&&<p className="muted">还没有匹配的技能，可以先创建一个。</p>}</div>
 }
 
 function MemoryWorkbench({person,entries,onChange}:{person:Person;entries:MemoryEntry[];onChange:(v:MemoryEntry[])=>void}) {
