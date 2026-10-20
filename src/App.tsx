@@ -46,8 +46,8 @@ export default function App() {
   const [messages, setMessages] = useState<Record<Person, ChatMessage[]>>(readMessages)
   const [conversations,setConversations] = useState<Record<Person,Conversation[]>>(initialConversations)
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<Person,string>>('ai-home.activeConversationIds',{'晏未晞':'legacy-yanweixi','言朔':'legacy-yanshu'});const all=initialConversations();return {'晏未晞':all['晏未晞'].some(c=>c.id===saved['晏未晞'])?saved['晏未晞']:all['晏未晞'][0]?.id||'','言朔':all['言朔'].some(c=>c.id===saved['言朔'])?saved['言朔']:all['言朔'][0]?.id||''}})
-  const [modelConfig, setModelConfig] = useState<ModelConfig>(() => read('ai-home.modelConfig', { endpoint: '', model: '' }))
-  const [apiKey, setApiKey] = useState('')
+  const [modelConfig, setModelConfig] = useState<Record<Person,ModelConfig>>(() => { const saved:any=read('ai-home.modelConfig',null); if(saved&&saved['晏未晞']&&saved['言朔']) return saved; const legacy=saved&&typeof saved.endpoint==='string'?saved:{endpoint:'',model:''}; return {'晏未晞':legacy,'言朔':legacy} })
+  const [apiKey, setApiKey] = useState<Record<Person,string>>({'晏未晞':'','言朔':''})
   const [sending, setSending] = useState(false)
   const [chatError, setChatError] = useState('')
   const [memory, setMemory] = useState<Record<Person, string>>(() => read('ai-home.memory', { '晏未晞': '', '言朔': '' }))
@@ -89,7 +89,7 @@ export default function App() {
       const now=new Date().toISOString();const convs:Record<Person,Conversation[]>={'晏未晞':[{id:'legacy-yanweixi',title:'旧聊天',messages:legacy['晏未晞'],updatedAt:now}],'言朔':[{id:'legacy-yanshu',title:'旧聊天',messages:legacy['言朔'],updatedAt:now}]}
       setConversations(convs);setActiveConversationIds({'晏未晞':'legacy-yanweixi','言朔':'legacy-yanshu'})
     }
-    if (data.modelConfig && typeof data.modelConfig === 'object') setModelConfig(data.modelConfig)
+    if (data.modelConfig && typeof data.modelConfig === 'object') { const saved:any=data.modelConfig; if(saved['晏未晞']&&saved['言朔']) setModelConfig(saved); else setModelConfig({'晏未晞':saved,'言朔':saved}) }
     if (data.memory && typeof data.memory === 'object') setMemory({'晏未晞': data.memory['晏未晞'] || '', '言朔': data.memory['言朔'] || ''})
     if (data.memoryEntries && typeof data.memoryEntries === 'object') setMemoryEntries({'晏未晞': Array.isArray(data.memoryEntries['晏未晞']) ? data.memoryEntries['晏未晞'] : [], '言朔': Array.isArray(data.memoryEntries['言朔']) ? data.memoryEntries['言朔'] : []})
     if (data.prompt && typeof data.prompt === 'object') setPrompt({'晏未晞': data.prompt['晏未晞'] || '', '言朔': data.prompt['言朔'] || ''})
@@ -203,11 +203,13 @@ export default function App() {
   async function send(textInput: string, attachments: MessageAttachment[] = []) {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return
-    if (!modelConfig.endpoint.trim() || !modelConfig.model.trim() || !apiKey.trim()) {
-      setChatError('请先在房间工作区 → 模型设置中填写 API 地址、模型名称和 API Key（Key 只保存在当前会话内）。')
+    const target = person
+    const activeModel = modelConfig[target]
+    const activeApiKey = apiKey[target] || ''
+    if (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim()) {
+      setChatError('请先在当前助手的工作区 → 模型设置中填写 API 地址、模型名称和 API Key（Key 只保存在当前会话内）。')
       return
     }
-    const target = person
     const history = (conversations[target]||[]).find(c=>c.id===activeConversationIds[target])?.messages || messages[target]
     const card = characters[target]
     const messageCount=history.length+1
@@ -245,7 +247,7 @@ export default function App() {
     updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:''}])
     setDraft('');setChatError('');setSending(true)
     try {
-      const base=modelConfig.endpoint.trim().replace(/\/+$/,'')
+      const base=activeModel.endpoint.trim().replace(/\/+$/,'')
       const url=/\/chat\/completions$/.test(base)?base:base.endsWith('/v1')?base+'/chat/completions':base+'/v1/chat/completions'
       const previous=history.slice(-24).map(m=>({role:m.role,content:m.content+(m.attachments?.length?'\n[此前附件：'+m.attachments.map(a=>a.name).join('、')+']':'')}))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
@@ -287,9 +289,9 @@ export default function App() {
       let answer=''
       let finished=false
       for(let round=0;round<5&&!finished;round++){
-        const requestBody:any={model:modelConfig.model.trim(),messages:requestMessages,stream:true}
+        const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
-        const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey.trim()},body:JSON.stringify(requestBody)})
+        const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+activeApiKey.trim()},body:JSON.stringify(requestBody)})
         if(!response.ok) throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
@@ -339,7 +341,7 @@ export default function App() {
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
-        modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey}
+        modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
         sending={sending} chatError={chatError} setChatError={setChatError}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom />}
