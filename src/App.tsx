@@ -60,6 +60,7 @@ export default function App() {
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => read('ai-home.mcpConnections', { '晏未晞': [], '言朔': [] }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
+  const [sidebarOpen,setSidebarOpen] = useState(false)
   const [time, setTime] = useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   const [loginPassword, setLoginPassword] = useState('')
@@ -364,7 +365,11 @@ export default function App() {
 
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
 
+  const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
+    <button className="mobile-menu-toggle" aria-label="打开导航菜单" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>小家导航</b></button>
+    {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭导航菜单" onClick={()=>setSidebarOpen(false)}/>}
+    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">居</div><div><b>AI 小家</b><small>OUR LITTLE SPACE</small></div><button className="sidebar-close" aria-label="关闭导航" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">空间导航</div><nav className="sidebar-links">{([{id:'home',icon:'⌂',label:'主页',sub:'回到小家首页'},{id:'room',icon:'◉',label:'助手房间',sub:'晏未晞 · 言朔'},{id:'fun',icon:'✿',label:'娱乐房',sub:'日记、相册与记账'},{id:'settings',icon:'⚙',label:'设置',sub:'模型、记忆与外观'}] as {id:Page;icon:string;label:string;sub:string}[]).map(item=><button key={item.id} className={page===item.id?'sidebar-link active':'sidebar-link'} onClick={()=>navigate(item.id)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.sub}</small></span>{page===item.id&&<i/>}</button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>私人空间 · 云端同步</span></div></aside>
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
@@ -380,7 +385,7 @@ export default function App() {
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
-      {(['home','room','fun','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => { setPage(p); setActiveTool('') }}>{['主页','房间','娱乐房','设置'][i]}</button>)}
+      {(['home','room','fun','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => navigate(p)}>{['主页','房间','娱乐房','设置'][i]}</button>)}
     </nav>}
   </main>
 }
