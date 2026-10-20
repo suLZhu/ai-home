@@ -60,7 +60,6 @@ export default function App() {
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => read('ai-home.mcpConnections', { '晏未晞': [], '言朔': [] }))
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
-  const [sidebarOpen,setSidebarOpen] = useState(false)
   const [time, setTime] = useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   const [loginPassword, setLoginPassword] = useState('')
@@ -365,11 +364,8 @@ export default function App() {
 
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
 
-  const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
+  const navigate=(next:Page)=>{setPage(next);setActiveTool('')}
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
-    <button className="mobile-menu-toggle" aria-label="打开导航菜单" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>小家导航</b></button>
-    {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭导航菜单" onClick={()=>setSidebarOpen(false)}/>}
-    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">居</div><div><b>AI 小家</b><small>OUR LITTLE SPACE</small></div><button className="sidebar-close" aria-label="关闭导航" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">空间导航</div><nav className="sidebar-links">{([{id:'home',icon:'⌂',label:'主页',sub:'回到小家首页'},{id:'room',icon:'◉',label:'助手房间',sub:'晏未晞 · 言朔'},{id:'fun',icon:'✿',label:'娱乐房',sub:'日记、相册与记账'},{id:'settings',icon:'⚙',label:'设置',sub:'模型、记忆与外观'}] as {id:Page;icon:string;label:string;sub:string}[]).map(item=><button key={item.id} className={page===item.id?'sidebar-link active':'sidebar-link'} onClick={()=>navigate(item.id)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.sub}</small></span>{page===item.id&&<i/>}</button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>私人空间 · 云端同步</span></div></aside>
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
@@ -715,13 +711,14 @@ function Chat(p: any) {
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
 
 function Fun() {
-  const [active,setActive]=useState('客厅')
+  const [active,setActive]=useState('')
   const [draft,setDraft]=useState('')
   const [messages,setMessages]=useState<{id:string;author:string;content:string;at:string}[]>(()=>read('ai-home.loungeMessages',[]))
   useEffect(()=>{localStorage.setItem('ai-home.loungeMessages',JSON.stringify(messages))},[messages])
-  const rooms=['客厅','内嵌浏览器','可视化网页','相册','播放器','记账单','日记本','待定']
+  const rooms=[{name:'公共客厅',key:'客厅',icon:'☕',desc:'一起聊天、分享日常'},{name:'内嵌浏览器',key:'内嵌浏览器',icon:'⌘',desc:'在小家里浏览网页'},{name:'可视化网页',key:'可视化网页',icon:'▧',desc:'查看互动网页与小工具'},{name:'相册',key:'相册',icon:'▧',desc:'收藏图片与共同回忆'},{name:'播放器',key:'播放器',icon:'♫',desc:'音乐、音频与播放列表'},{name:'记账单',key:'记账单',icon:'¥',desc:'记录真实人民币收支'},{name:'日记本',key:'日记本',icon:'✎',desc:'写下公开或上锁的日记'},{name:'更多工具',key:'待定',icon:'＋',desc:'以后继续扩展新模块'}]
   function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
-  return <div className="fun-screen"><h2>娱乐房</h2><p>公共空间与扩展模块。先把入口搭好，后续再逐个接入实际能力。</p><div className="fun-tabs">{rooms.map(x=><button type="button" className={active===x?'selected':''} key={x} onClick={()=>setActive(x)}>{x}</button>)}</div>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是以后大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{active}</h3><p className="muted">模块入口已预留。后续接入真实组件时，不需要重做房间导航。</p><div className="module-placeholder"><span>⌂</span><b>{active}工作区</b><small>框架已预留 · 等待接入</small></div></section>}</div>
+  const selected=rooms.find(x=>x.key===active)
+  return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
 }
 function UsagePanel({conversations,modelConfig}:{conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>}) {
  const [range,setRange]=useState<'today'|'7d'|'30d'|'all'>('7d')
