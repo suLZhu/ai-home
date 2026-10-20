@@ -607,6 +607,8 @@ function Chat(p: any) {
   const chatPerson:Person=p.person as Person
   const [historyQuery,setHistoryQuery]=useState('')
   const [files,setFiles]=useState<MessageAttachment[]>([])
+  const [localContext,setLocalContext]=useState<{time:boolean;weather:boolean;location:boolean}>(()=>read('ai-home.localContext',{time:false,weather:false,location:false}))
+  const [contextBusy,setContextBusy]=useState(false)
   const [emojiOpen,setEmojiOpen]=useState(false)
   const [lightbox,setLightbox]=useState<{src:string;name:string}|null>(null)
   const imageInput=useRef<HTMLInputElement>(null)
@@ -631,7 +633,7 @@ function Chat(p: any) {
     if(imageInput.current)imageInput.current.value=''
     if(fileInput.current)fileInput.current.value=''
   }
-  function submit(e:FormEvent){e.preventDefault();if(p.sending)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));p.send(p.draft,payload);setFiles([]);setEmojiOpen(false)}
+  async function submit(e:FormEvent){e.preventDefault();if(p.sending||contextBusy)return;if(!p.draft.trim()&&!files.length)return;const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));let message=p.draft;if(localContext.time||localContext.weather||localContext.location){setContextBusy(true);try{const facts:string[]=[];if(localContext.time)facts.push('当前设备时间：'+new Date().toLocaleString(undefined,{dateStyle:'full',timeStyle:'short'}));let coords:{latitude:number;longitude:number}|null=null;if((localContext.location||localContext.weather)&&navigator.geolocation)coords=await new Promise(resolve=>navigator.geolocation.getCurrentPosition(pos=>resolve({latitude:pos.coords.latitude,longitude:pos.coords.longitude}),()=>resolve(null),{timeout:7000,maximumAge:300000,enableHighAccuracy:false}));if(localContext.location)facts.push(coords?'用户授权的约略位置坐标：'+coords.latitude.toFixed(3)+', '+coords.longitude.toFixed(3):'当前位置未能获取，请询问用户地点，不要猜测。');if(localContext.weather){if(coords){try{const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+coords.latitude+'&longitude='+coords.longitude+'&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=auto');if(r.ok){const d=await r.json();facts.push('当前位置天气（Open-Meteo，'+(d.current?.time||'当前')+'）：'+JSON.stringify(d.current||{}))}else facts.push('天气查询失败，HTTP '+r.status)}catch{facts.push('天气查询失败；不要编造实时天气。')}}else facts.push('未获得位置授权，无法按当前位置查询天气。')}if(facts.length)message=(message?message+'\n\n':'')+'【本次启用的本地上下文】\n'+facts.join('\n')+'\n（仅本次消息附带。）'}finally{setContextBusy(false)}}p.send(message,payload);setFiles([]);setEmojiOpen(false)}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   const stickers=['😊','🥺','😂','🥰','😭','😤','❤️','🤔','✨','😘','👍','🎉','🌷','💜','🫂','🐱']
   function estimatedCost(usage:TokenUsage):number|null {
@@ -690,8 +692,9 @@ function Chat(p: any) {
     {emojiOpen&&<div className="emoji-panel" aria-label="表情包选择">{stickers.map((emoji,i)=><button type="button" key={i} onClick={()=>{p.setDraft(p.draft+emoji);setEmojiOpen(false)}}>{emoji}</button>)}</div>}
     <form className="compose compose-wechat" onSubmit={submit}>
       <input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息"/>
-      <button className="send-button" disabled={p.sending||(!p.draft.trim()&&!files.length)}>{p.sending?'生成中…':'发送'}</button>
+      <button className="send-button" disabled={p.sending||contextBusy||(!p.draft.trim()&&!files.length)}>{contextBusy?'获取上下文…':p.sending?'生成中…':'发送'}</button>
       <div className="compose-tools">
+        <div className="local-context-controls" aria-label="本地上下文开关"><span>本地上下文</span><label><input type="checkbox" checked={localContext.time} onChange={e=>{const v={...localContext,time:e.target.checked};setLocalContext(v);localStorage.setItem('ai-home.localContext',JSON.stringify(v))}}/>时间</label><label><input type="checkbox" checked={localContext.weather} onChange={e=>{const v={...localContext,weather:e.target.checked};setLocalContext(v);localStorage.setItem('ai-home.localContext',JSON.stringify(v))}}/>天气</label><label><input type="checkbox" checked={localContext.location} onChange={e=>{const v={...localContext,location:e.target.checked};setLocalContext(v);localStorage.setItem('ai-home.localContext',JSON.stringify(v))}}/>地点</label>{contextBusy&&<small>获取中…</small>}</div>
         <button type="button" title="表情与贴纸" aria-label="表情与贴纸" className={emojiOpen?'tool-active':''} onClick={()=>setEmojiOpen(v=>!v)}>☺</button>
         <button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧</button>
         <button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>＋</button>
