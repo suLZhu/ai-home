@@ -177,3 +177,4 @@
 .shell .room-person-switch button.selected,.shell .compose-wechat .send-button,.shell .tool-panel form button{background:var(--card);color:var(--ink)}
 .shell .ledger-add,.shell .diary-editor>button,.shell .diary-unlock button{background:var(--accent);color:var(--surface)}
 .shell .bottom-nav .active{color:var(--accent)}
+.model-test-ok,.model-test-error{padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.5}.model-test-ok{background:#e4efe6;color:#285c3b}.model-test-error{background:#f7e7e3;color:#873d32}.tool-panel button:disabled{opacity:.6;cursor:wait}
