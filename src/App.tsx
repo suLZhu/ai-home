@@ -267,6 +267,10 @@ export default function App() {
       // Load tools only from the active character's server-side MCP bindings.
       const toolRoutes=new Map<string,{id:string;person:Person;name:string}>()
       const openAITools:any[]=[]
+      // The active assistant may manage only worldbook entries bound to itself.
+      openAITools.push({type:'function',function:{name:'worldbook_create_entry',description:'在当前助手自己的世界书中新增条目。仅当用户明确要求记录或更新世界设定时使用；不要写入用户未确认的重大设定。',parameters:{type:'object',properties:{title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['title','keywords','content'],additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'worldbook_search_entries',description:'搜索当前助手有权限访问的世界书条目。',parameters:{type:'object',properties:{query:{type:'string'}},required:['query'],additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'worldbook_update_entry',description:'更新当前助手已绑定的世界书条目；必须先搜索并使用准确条目 ID。',parameters:{type:'object',properties:{id:{type:'string'},title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['id'],additionalProperties:false}}})
       // Both characters may add entries to the same authenticated shared ledger.
       openAITools.push({type:'function',function:{name:'ledger_add_entry',description:'仅当用户明确要求记账时，将一笔真实收入或支出写入用户的共享记账单。不得虚构金额；不确定的日期、币种或金额应先询问。写入后向用户确认。',parameters:{type:'object',properties:{kind:{type:'string',enum:['income','expense']},amount:{type:'number',description:'金额，正数'},currency:{type:'string',enum:['CNY','JPY','USD','EUR','HKD'],description:'币种，元默认CNY，日元JPY'},category:{type:'string'},note:{type:'string'},date:{type:'string',description:'YYYY-MM-DD，用户所在日期'},},required:['kind','amount','currency','category','date'],additionalProperties:false}}})
 
@@ -306,15 +310,33 @@ export default function App() {
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
           try{
-            if(call.function.name!=='ledger_add_entry' && (!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
+            const localWorldbookTool=['worldbook_create_entry','worldbook_search_entries','worldbook_update_entry'].includes(call.function.name)
+            if(call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
             updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+(route?.name||'共享记账单')+'…'}:m))
+            if(localWorldbookTool){
+              const owned=worldEntries.filter(e=>e.boundCharacters?.includes(target))
+              if(call.function.name==='worldbook_search_entries'){
+                const q=String(args.query||'').trim().toLowerCase()
+                const found=owned.filter(e=>(e.title+' '+e.keywords+' '+e.content).toLowerCase().includes(q)).slice(0,20).map(e=>({id:e.id,title:e.title,keywords:e.keywords,content:e.content.slice(0,1200),enabled:e.enabled,always:e.always}))
+                resultContent=JSON.stringify({person:target,entries:found})
+              }else if(call.function.name==='worldbook_create_entry'){
+                if(!String(args.title||'').trim()||!String(args.content||'').trim())throw new Error('新增世界书条目需要标题和内容。')
+                const entry:WorldEntry={id:crypto.randomUUID(),title:String(args.title).trim().slice(0,160),keywords:String(args.keywords||'').slice(0,500),content:String(args.content).trim().slice(0,12000),enabled:args.enabled!==false,always:Boolean(args.always),boundCharacters:[target],useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0}
+                setWorldEntries(old=>[entry,...old]);resultContent=JSON.stringify({ok:true,person:target,id:entry.id,title:entry.title,message:'世界书条目已新增并绑定当前助手。'})
+              }else{
+                const existing=owned.find(e=>e.id===String(args.id||''));if(!existing)throw new Error('找不到属于当前助手的条目，拒绝修改。')
+                const patch:any={};for(const key of ['title','keywords','content','always','enabled'])if(args[key]!==undefined)patch[key]=args[key]
+                setWorldEntries(old=>old.map(e=>e.id===existing.id?{...e,...patch,updatedAt:new Date().toISOString()}:e));resultContent=JSON.stringify({ok:true,person:target,id:existing.id,message:'世界书条目已更新。'})
+              }
+            }else{
             const toolResponse=call.function.name==='ledger_add_entry'
               ? await fetch('/api/ledger',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...args,actor:target,requestId:call.id})})
               : await fetch('/api/mcp/'+route!.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route!.name,arguments:args})})
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
             resultContent=JSON.stringify(call.function.name==='ledger_add_entry'?toolData:toolData.result)
+            }
           }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)})}
           requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
         }
