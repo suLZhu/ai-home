@@ -215,3 +215,147 @@
 .inbox-toast-main span{font-size:13px;line-height:1.5;max-height:4.5em;overflow:hidden}
 .inbox-toast-main small{font-size:11px;color:#8d728c}
 .inbox-toast-dismiss{background:transparent;border:0;color:#796779;font-size:22px;cursor:pointer}
+
+/* ═══════════ 奶灰＋浅紫统一美化层 ═══════════
+   追加覆盖层：只做视觉统一，不改业务结构。
+   颜色一律引用主题变量（--accent/--accent-soft/--ok/--danger/--shadow-*），
+   四套主题切换时全部自动跟随，避免各页面出现不同紫色。 */
+
+/* ── 全局：防横向溢出 ── */
+.shell{overflow-x:hidden}
+
+/* ── 底部导航：安全区 + 胶囊高亮 ── */
+.bottom-nav{padding:10px 4px max(14px,env(safe-area-inset-bottom,0px))}
+.bottom-nav button{min-height:44px;padding:7px 15px;border-radius:13px;color:var(--muted);transition:background .15s,color .15s}
+.bottom-nav .active{color:var(--accent);background:var(--accent-soft);font-weight:600;text-decoration:none}
+
+/* ── 聊天页：气泡、输入区、长文本 ── */
+.chat-header{border-color:var(--line);padding:10px 2px 14px}
+.chat-header button{min-height:40px;padding:0 14px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font-size:13px}
+.chat-header b{font-size:15px;letter-spacing:.01em}
+.chat-body{padding:18px 6px}
+.bubble{max-width:82%;padding:11px 15px;border-radius:calc(var(--radius,16px) + 8px);line-height:1.7;white-space:pre-wrap;box-shadow:0 2px 10px rgba(64,50,74,.05)}
+.shell.bubble-outlined .bubble{box-shadow:none}
+.chat-error{border-radius:12px;background:var(--danger-soft);color:var(--danger)}
+.empty-chat{color:var(--muted);line-height:1.9;font-size:14px;text-align:center;padding:30px 12px}
+.sent-file{background:var(--field);border:1px solid var(--line)}
+.attachment-chip{border-color:var(--line);background:var(--card)}
+.attachment-note{color:var(--muted)}
+.compose-wechat{border-radius:calc(var(--radius,16px) + 4px);border-color:var(--line);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.06))}
+.compose-wechat>input{border-radius:12px;padding:12px 14px;font-size:16px}
+.compose-wechat .send-button{border-radius:12px;background:var(--accent);color:#fbf9fd;font-weight:600;padding:0 20px}
+.compose-tools{padding-top:4px;gap:6px}
+.compose-tools>button{width:40px;height:40px;border-radius:12px;color:var(--muted)}
+.compose-tools>button:hover,.compose-tools>button.tool-active{background:var(--accent-soft);color:var(--accent)}
+.emoji-panel{border-color:var(--line);background:var(--surface);border-radius:16px}
+.emoji-panel button:hover{background:var(--accent-soft)}
+.history-search{background:var(--surface)}
+.history-search input{font-size:16px;border-radius:12px}
+.history-search-results{background:var(--surface)}
+.local-context-controls{color:var(--muted)}
+.local-context-controls input{accent-color:var(--accent)}
+.message-usage{color:var(--muted)}
+
+/* ── 房间页：聊天入口卡、工具格 ── */
+.chat-entry{border:1px solid var(--line);border-radius:calc(var(--radius,16px) + 4px);background:var(--card);margin:6px 0 4px;padding:24px 20px;box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.05))}
+.chat-entry em{color:var(--accent);font-style:normal;font-size:18px}
+.chat-entry span{color:var(--muted);font-size:13px}
+.tool-grid button{border-color:var(--line);border-radius:var(--radius,16px);background:var(--card);box-shadow:0 2px 10px rgba(64,50,74,.04);min-height:64px;transition:border-color .15s,background .15s}
+.tool-grid>button.tool-active{border-color:var(--accent);background:var(--accent-soft);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.07))}
+.tool-grid>button.tool-active b{color:var(--accent)}
+.workspace-title{color:var(--ink)}
+.room-session-switch{background:var(--card);border-color:var(--line)}
+.room-session-heading{color:var(--ink)}
+.room-session-heading small,.room-session-hint{color:var(--muted)}
+.room-session-controls select{background:var(--field);color:var(--ink);border-color:var(--line)}
+.room-session-controls button{background:var(--accent-soft);color:var(--ink);border-color:var(--line)}
+.room-person-switch{border-color:var(--line)}
+.room-person-switch button.selected{background:var(--accent-soft)}
+.room-person-switch button small{color:var(--muted)}
+.room-person-switch button.selected small{color:var(--ink)}
+.calendar-card{border-radius:0 0 var(--radius,16px) 0;box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.05))}
+.workspace-title{padding:22px 5px 14px}
+
+/* ── 首页入口 ── */
+.home-person-circle{border-color:var(--line);background:var(--card)}
+.home-person:hover{background:var(--accent-soft)}
+.home-person.is-me .home-person-circle{background:var(--accent-soft)}
+.home-person-caption{color:var(--muted)}
+
+/* ── 会话条 ── */
+.conversation-list button,.conversation-new,.conversation-rename{background:var(--card);border-color:var(--line);color:var(--ink)}
+.conversation-list button.selected{background:var(--accent-soft);border-color:var(--accent)}
+.conversation-new{background:var(--accent);color:#fbf9fd;border-color:var(--accent)}
+.conversation-delete{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
+
+/* ── 侧边栏（百宝箱）→ 主题变量 ── */
+.app-sidebar{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.sidebar-logo{background:var(--accent-soft);color:var(--accent)}
+.sidebar-brand small,.sidebar-caption{color:var(--muted)}
+.sidebar-link{border-radius:12px;min-height:46px}
+.sidebar-link.active{background:var(--accent-soft)}
+.sidebar-link-icon{background:var(--card);color:var(--accent)}
+.sidebar-link.active .sidebar-link-icon{background:var(--accent);color:var(--surface)}
+.sidebar-link small{color:var(--muted)}
+.sidebar-footer{border-color:var(--line);color:var(--muted)}
+.mobile-menu-toggle{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.sidebar-scrim{background:rgba(30,23,39,.35)}
+
+/* ── 娱乐房：模块卡统一为浅紫家族 ── */
+.fun-screen{color:var(--ink)}
+.fun-heading h2{color:var(--ink)}
+.fun-heading p,.fun-eyebrow{color:var(--muted)}
+.fun-module-card{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow-card,0 4px 14px rgba(64,50,74,.05))}
+.fun-module-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:var(--shadow-lift,0 10px 28px rgba(64,50,74,.12))}
+.fun-module-card>small{color:var(--muted)}
+.fun-module-icon{background:var(--accent-soft);color:var(--accent)}
+.module-icon-1,.module-icon-4{background:#e6e0f2;color:#6f6396}
+.module-icon-2,.module-icon-5{background:#efe8f6;color:#7d6d9e}
+.module-icon-3,.module-icon-6{background:#e4e9f4;color:#66709b}
+.module-icon-7{background:var(--card);color:var(--muted)}
+.fun-module-arrow{color:var(--accent)}
+.fun-back{border-color:var(--line);background:var(--surface);color:var(--ink)}
+.lounge-panel{background:var(--card);border:1px solid var(--line)}
+.lounge-messages article{background:var(--surface);border-color:var(--line)}
+.lounge-messages article>small{color:var(--muted)}
+.lounge-compose textarea{border-color:var(--line);background:var(--field);color:var(--ink)}
+.lounge-compose>button,.task-create>button{background:var(--accent);color:#fbf9fd}
+.module-placeholder{border-color:var(--line);color:var(--muted);background:var(--field)}
+.fun-tabs button.selected{background:var(--accent-soft);border-color:var(--accent)}
+
+/* ── 工作流/工具面板细节 ── */
+.task-create input,.task-create textarea,.task-create select{background:var(--field);border-color:var(--line);color:var(--ink)}
+.task-list-heading{border-color:var(--line)}
+.task-status{background:var(--accent-soft);color:var(--ink)}
+.task-status.ready{background:var(--running-soft);color:var(--running)}
+.scheduled-task{border-color:var(--line)}
+.scheduled-task-actions button{border-color:var(--line);color:var(--ink)}
+.memory-item{border-color:var(--line)}
+.memory-actions button{border-color:var(--line);color:var(--ink)}
+.world-entry{border-color:var(--line);background:var(--card)}
+.world-editor{border-color:var(--line);background:var(--field)}
+.world-entry-meta span{background:var(--accent-soft);color:var(--muted)}
+.mcp-boundary{border-color:var(--line);background:var(--accent-soft)}
+.mcp-connection-card{border-color:var(--line);background:var(--card)}
+.mcp-connection{background:var(--surface);border-color:var(--line)}
+.mcp-add-form{border-color:var(--line)}
+.mcp-add-form input,.mcp-add-form select{background:var(--field);border-color:var(--line);color:var(--ink)}
+.mcp-add-form>button,.mcp-action{background:var(--accent);color:#fbf9fd;border-color:var(--accent)}
+.mcp-action{background:var(--accent-soft);color:var(--ink);border-color:var(--line)}
+.mcp-tools-toggle{background:var(--field);border-color:var(--line);color:var(--ink)}
+.mcp-tool textarea{background:var(--field);border-color:var(--line);color:var(--ink)}
+.mcp-tool pre{background:var(--field);color:var(--ink)}
+.mcp-error{background:var(--danger-soft);color:var(--danger)}
+.mcp-notice{background:var(--ok-soft);color:var(--ok)}
+
+/* ── 前台横幅 ── */
+.inbox-toast{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow-lift,0 10px 28px rgba(64,50,74,.14))}
+.inbox-toast-main small{color:var(--muted)}
+.inbox-toast-dismiss{color:var(--muted)}
+
+/* ── 云状态 ── */
+.cloud-status{background:var(--surface);border-color:var(--line);color:var(--muted)}
+.cloud-status button{background:var(--accent-soft);color:var(--ink)}
+
+/* ── 登录页：圆角随主题统一 ── */
+.login-card{border-radius:calc(var(--radius,16px) + 8px)}
