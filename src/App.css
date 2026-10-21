@@ -207,3 +207,11 @@
 /* Compact entertainment module launcher; keep detail views full-sized */
 .fun-module-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.fun-module-card{min-height:118px;padding:12px;border-radius:15px;box-shadow:0 3px 12px #263c2b08}.fun-module-icon{width:34px;height:34px;font-size:18px;border-radius:11px;margin-bottom:9px}.fun-module-card>b{font-size:12px}.fun-module-card>small{font-size:10px;line-height:1.4;margin-top:4px}.fun-module-arrow{font-size:10px;padding-top:8px}.fun-module-arrow span{font-size:12px}@media(max-width:650px){.fun-module-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.fun-module-card{min-height:116px;padding:10px;border-radius:13px}.fun-module-icon{width:32px;height:32px;font-size:17px;margin-bottom:7px}.fun-module-card>b{font-size:12px}.fun-module-card>small{font-size:10px}.fun-module-arrow{padding-top:7px}}@media(max-width:360px){.fun-module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .workflow-steps{display:grid;gap:8px;margin:12px 0;padding:0;list-style:none;counter-reset:workflow}.workflow-steps li{counter-increment:workflow;display:flex;align-items:flex-start;gap:9px;line-height:1.5;font-size:12px;overflow-wrap:anywhere}.workflow-steps li:before{content:counter(workflow);flex:none;display:grid;place-items:center;width:21px;height:21px;border-radius:8px;background:var(--field);color:var(--accent);font-size:11px;font-weight:600}
+
+
+/* In-app banner, distinct from future Android OS notifications. */
+.inbox-toast{position:fixed;z-index:1100;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(92vw,420px);display:flex;align-items:start;gap:8px;background:#fffafef5;color:#443849;border:1px solid #dbcbdc;border-radius:17px;box-shadow:0 10px 32px #33203935;padding:12px 14px;backdrop-filter:blur(16px)}
+.inbox-toast-main{display:flex;flex:1;min-width:0;flex-direction:column;align-items:start;text-align:left;gap:4px;background:transparent;border:0;color:inherit;cursor:pointer}
+.inbox-toast-main span{font-size:13px;line-height:1.5;max-height:4.5em;overflow:hidden}
+.inbox-toast-main small{font-size:11px;color:#8d728c}
+.inbox-toast-dismiss{background:transparent;border:0;color:#796779;font-size:22px;cursor:pointer}

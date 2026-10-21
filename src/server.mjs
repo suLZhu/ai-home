@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
+import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
@@ -62,6 +63,7 @@ if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_task
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
 initMemoryIndex(db)
 initProactive(db)
+initInbox(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -418,6 +420,27 @@ createServer(async (req, res) => {
     if (!['晏未晞','言朔'].includes(body.person)) return send(res, 400, { error: '必须指定有效的人物身份' })
     const result = db.prepare('DELETE FROM scheduled_tasks WHERE id=? AND person=?').run(taskMatch[1],body.person)
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '找不到该人物的任务' })
+  }
+
+  if (url.pathname === '/api/inbox' && req.method === 'GET') {
+    const since=url.searchParams.get('since')||''
+    if(since.length>50)return send(res,400,{error:'参数无效'})
+    return send(res,200,{messages:listInbox(db,since)})
+  }
+  if (url.pathname === '/api/inbox/test' && req.method === 'POST') {
+    try {
+      const body=await readBody(req)
+      if(!['晏未晞','言朔'].includes(body.person))return send(res,400,{error:'无效人物'})
+      // Explicitly labelled diagnostic content, never impersonate a model.
+      return send(res,200,{message:addInboxMessage(db,{person:body.person,content:'【通知测试】这是一条系统测试消息，不是 AI 自主生成的内容。',kind:'test'})})
+    } catch(error){return send(res,400,{error:error.message})}
+  }
+  if (url.pathname === '/api/inbox/read' && req.method === 'POST') {
+    try {
+      const body=await readBody(req)
+      if(typeof body.id!=='string'||body.id.length>100)return send(res,400,{error:'参数无效'})
+      return send(res,200,{ok:markInboxRead(db,body.id)})
+    } catch(error){return send(res,400,{error:error.message})}
   }
 
   if (url.pathname === '/api/proactive' && req.method === 'GET') {

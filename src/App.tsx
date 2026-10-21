@@ -8,6 +8,7 @@ import { LEGACY_ASSISTANTS, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
+type InboxMessage={id:string;person:Person;content:string;kind:string;created_at:string;read_at?:string|null}
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
 type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库'
@@ -65,8 +66,41 @@ export default function App() {
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   const [sidebarOpen,setSidebarOpen]=useState(false)
   const [funShortcut,setFunShortcut]=useState('')
-  const [time, setTime] = useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
+  const [time, setTime] = useState('')
+  const [inbox,setInbox] = useState<InboxMessage[]>([])
+  const [toast,setToast] = useState<InboxMessage|null>(null)
+  const seenInbox = useRef<Set<string>>(new Set())
+  const inboxInitialized = useRef(false)
+  useEffect(()=>{
+    if(authStatus!=='signedIn')return
+    let alive=true
+    const poll=async()=>{
+      try {
+        const response=await fetch('/api/inbox',{credentials:'same-origin'})
+        if(!response.ok)return
+        const data=await response.json()
+        if(!alive)return
+        const items:InboxMessage[]=Array.isArray(data.messages)?data.messages:[]
+        if(inboxInitialized.current){
+          const fresh=items.filter(m=>!seenInbox.current.has(m.id))
+          if(fresh.length)setToast(fresh[0])
+        }
+        items.forEach(m=>seenInbox.current.add(m.id))
+        inboxInitialized.current=true
+        setInbox(items)
+      }catch{/* offline polling retries */}
+    }
+    void poll()
+    const timer=window.setInterval(poll,12000)
+    return()=>{alive=false;window.clearInterval(timer)}
+  },[authStatus])
+  useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(null),6500);return()=>window.clearTimeout(timer)},[toast])
+  async function openInboxMessage(message:InboxMessage) {
+    setPerson(message.person);setPage('room');setChatOpen(true);setActiveTool('');setToast(null)
+    try{await fetch('/api/inbox/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:message.id})})}catch{}
+    setInbox(old=>old.map(m=>m.id===message.id?{...m,read_at:new Date().toISOString()}:m))
+  }
   const [loginPassword, setLoginPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [cloudReady, setCloudReady] = useState(false)
@@ -390,7 +424,8 @@ export default function App() {
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
     <button className="mobile-menu-toggle" aria-label="打开百宝箱" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
     {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭百宝箱" onClick={()=>setSidebarOpen(false)}/>}
-    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱</span></div></aside>
+    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
+    {toast&&<div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {toast.kind==='test'?'通知测试':'新消息'}</b><span>{toast.content}</span><small>点击打开聊天</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} chatOpen={chatOpen} setChatOpen={setChatOpen}
@@ -556,7 +591,7 @@ function ProactivePanel({person}:{person:Person}) {
  const refresh=useCallback(async()=>{const r=await fetch('/api/proactive?person='+encodeURIComponent(person));const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');setConfig(d.settings);setEvents(d.events||[])},[person])
  useEffect(()=>{refresh().catch(e=>setNotice(e.message))},[refresh])
  async function act(body:any){setBusy(true);setNotice('');try{const r=await fetch('/api/proactive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...body})});const d=await r.json();if(!r.ok)throw Error(d.error||'操作失败');setNotice(body.action==='wake'?(d.queued?'已生成一条待处理唤醒事件。接入后台模型后才能生成并投递消息。':'没有排队：'+d.reason):'已保存');await refresh()}catch(e){setNotice(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
- return <div className="tool-panel"><h3>{person} · 自主生活</h3><p className="muted">独立心跳、主动程度、免打扰与唤醒记录。当前只生成待处理事件，不会冒充 AI 发消息；接入安全的后台模型执行器后才能真正主动发信。</p>{config&&<section className="memory-create"><label>自主唤醒 <input type="checkbox" checked={!!config.enabled} onChange={e=>setConfig({...config,enabled:e.target.checked?1:0})}/></label><label>主动程度<select value={config.mode} onChange={e=>setConfig({...config,mode:e.target.value})}><option value="quiet">安静陪伴</option><option value="natural">自然主动</option><option value="lively">活泼黏人</option></select></label><label>心跳间隔（小时）<input type="number" min={2} max={72} value={config.interval_hours} onChange={e=>setConfig({...config,interval_hours:Number(e.target.value)})}/></label><label>免打扰开始（0–23时）<input type="number" min={0} max={23} value={config.quiet_start} onChange={e=>setConfig({...config,quiet_start:Number(e.target.value)})}/></label><label>免打扰结束（0–23时）<input type="number" min={0} max={23} value={config.quiet_end} onChange={e=>setConfig({...config,quiet_end:Number(e.target.value)})}/></label><div className="memory-form-actions"><button disabled={busy} onClick={()=>act({action:'configure',...config,enabled:!!config.enabled})}>保存设置</button><button disabled={busy} onClick={()=>act({action:'wake'})}>测试唤醒</button><button disabled={busy} onClick={()=>refresh().catch(e=>setNotice(e.message))}>刷新记录</button></div></section>}{notice&&<p className="muted" role="status">{notice}</p>}<h4>最近唤醒事件</h4>{events.length===0?<p className="muted">还没有唤醒记录。</p>:events.map(e=><article className="memory-item" key={e.id}><b>{e.mood==='curious'?'✨ 好奇 / 想分享':'自主唤醒'}</b><p>{e.reason}</p><small>{new Date(e.created_at).toLocaleString()} · {e.status==='pending'?'待接入模型处理':'已忽略'}</small>{e.status==='pending'&&<button disabled={busy} onClick={()=>act({action:'dismiss',id:e.id})}>忽略</button>}</article>)}</div>
+ return <div className="tool-panel"><h3>{person} · 自主生活</h3><p className="muted">独立心跳、主动程度、免打扰与唤醒记录。当前只生成待处理事件，不会冒充 AI 发消息；接入安全的后台模型执行器后才能真正主动发信。</p>{config&&<section className="memory-create"><label>自主唤醒 <input type="checkbox" checked={!!config.enabled} onChange={e=>setConfig({...config,enabled:e.target.checked?1:0})}/></label><label>主动程度<select value={config.mode} onChange={e=>setConfig({...config,mode:e.target.value})}><option value="quiet">安静陪伴</option><option value="natural">自然主动</option><option value="lively">活泼黏人</option></select></label><label>心跳间隔（小时）<input type="number" min={2} max={72} value={config.interval_hours} onChange={e=>setConfig({...config,interval_hours:Number(e.target.value)})}/></label><label>免打扰开始（0–23时）<input type="number" min={0} max={23} value={config.quiet_start} onChange={e=>setConfig({...config,quiet_start:Number(e.target.value)})}/></label><label>免打扰结束（0–23时）<input type="number" min={0} max={23} value={config.quiet_end} onChange={e=>setConfig({...config,quiet_end:Number(e.target.value)})}/></label><div className="memory-form-actions"><button disabled={busy} onClick={()=>act({action:'configure',...config,enabled:!!config.enabled})}>保存设置</button><button disabled={busy} onClick={()=>act({action:'wake'})}>测试唤醒</button><button disabled={busy} onClick={()=>refresh().catch(e=>setNotice(e.message))}>刷新记录</button><button disabled={busy} onClick={async()=>{try{const r=await fetch('/api/inbox/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});if(!r.ok)throw Error('发送失败');setNotice('测试消息已进入小家收件箱，前台横幅会在下一次轮询时出现。')}catch(e){setNotice(String(e))}}}>测试消息弹窗</button></div></section>}{notice&&<p className="muted" role="status">{notice}</p>}<h4>最近唤醒事件</h4>{events.length===0?<p className="muted">还没有唤醒记录。</p>:events.map(e=><article className="memory-item" key={e.id}><b>{e.mood==='curious'?'✨ 好奇 / 想分享':'自主唤醒'}</b><p>{e.reason}</p><small>{new Date(e.created_at).toLocaleString()} · {e.status==='pending'?'待接入模型处理':'已忽略'}</small>{e.status==='pending'&&<button disabled={busy} onClick={()=>act({action:'dismiss',id:e.id})}>忽略</button>}</article>)}</div>
 }
 
 function MCPSettings({person}:{person:Person}) {
