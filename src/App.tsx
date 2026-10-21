@@ -10,7 +10,7 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
 type Person = '晏未晞' | '言朔'
-type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | 'MCP' | '模型设置' | 'SKILL 技能库'
+type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[]; usage?: TokenUsage }
@@ -26,7 +26,7 @@ function readMessages(): Record<Person,ChatMessage[]> {
   return {'晏未晞':migrate(old['晏未晞']||[]),'言朔':migrate(old['言朔']||[])}
 }
 
-const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', 'MCP', '模型设置']
+const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', '自主生活', 'MCP', '模型设置']
 
 function read<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || '') as T } catch { return fallback }
@@ -501,6 +501,7 @@ function ToolPanel(p: any) {
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <><MemoryWorkbench person={p.person} entries={p.memoryEntries[p.person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[p.person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>
   if (t === '工作流') return <TaskManager person={p.person}/>
+  if (t === '自主生活') return <ProactivePanel person={p.person}/>
   return <div className="tool-panel"><h3>{t}</h3><p className="muted">{t === 'MCP' ? '预留工具连接层，后续接入 MCP 客户端。' : '预留模型适配层，后续接入 OpenAI 兼容接口、聚合站或本地模型。'}</p></div>
 }
 
@@ -545,6 +546,17 @@ function TaskManager({person}:{person:Person}) {
   return <div className="tool-panel task-manager"><h3>{person} · 工作流</h3><p className="muted">工作流和定时触发合并管理。步骤按顺序记录在同一个任务中；目前后台负责到期调度，自动调用模型与工具需 API 接入后启用。</p>{error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
     <form className="task-create" onSubmit={create}><label>工作流名称<input required maxLength={160} value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：早上检查雾潮群岛进度"/></label><label>执行时间<input required type="datetime-local" value={runAt} onChange={e=>setRunAt(e.target.value)}/></label><label>重复规则<select value={recurrence} onChange={e=>setRecurrence(e.target.value as typeof recurrence)}><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></label><label>执行步骤（每行一步）<textarea required rows={5} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="第一步：检查状态\n第二步：判断条件\n第三步：执行操作\n第四步：保存结果"/></label><button type="submit" disabled={busy||!title.trim()||!prompt.trim()||!runAt}>{busy?'保存中…':'保存任务'}</button></form>
     <div className="task-list-heading"><b>任务列表</b><button type="button" onClick={()=>refresh().catch(e=>setError(e.message))}>刷新</button></div>{tasks.length===0?<p className="muted">这里还没有任务。</p>:tasks.map(task=><article className="scheduled-task" key={task.id}><div className="scheduled-task-top"><b>{task.title}</b><span className={'task-status '+task.status}>{statusLabel(task.status)}</span></div><ol className="workflow-steps">{task.prompt.split('\n').filter(line=>line.trim()).map((step,i)=><li key={i}>{step.replace(/^(?:第[一二三四五六七八九十]+步[：:]?|[0-9]+[.、：:]|[-•]\s*)/,'').trim()}</li>)}</ol><small>执行时间：{localDate(task.run_at)} · {task.recurrence==='once'?'仅一次':task.recurrence==='daily'?'每天':'每周'}{task.last_run_at?' · 上次触发：'+localDate(task.last_run_at):''}</small><div className="scheduled-task-actions">{task.status==='scheduled'&&<button type="button" onClick={()=>update(task,{status:'paused'})}>暂停</button>}{task.status==='paused'&&<button type="button" onClick={()=>update(task,{status:'scheduled'})}>恢复</button>}{task.status==='ready'&&<button type="button" onClick={()=>update(task,{status:'completed'})}>标记完成</button>}<button type="button" onClick={()=>remove(task)}>删除</button></div></article>)}</div>
+}
+
+function ProactivePanel({person}:{person:Person}) {
+ const [config,setConfig]=useState<any>(null)
+ const [events,setEvents]=useState<any[]>([])
+ const [notice,setNotice]=useState('')
+ const [busy,setBusy]=useState(false)
+ const refresh=useCallback(async()=>{const r=await fetch('/api/proactive?person='+encodeURIComponent(person));const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');setConfig(d.settings);setEvents(d.events||[])},[person])
+ useEffect(()=>{refresh().catch(e=>setNotice(e.message))},[refresh])
+ async function act(body:any){setBusy(true);setNotice('');try{const r=await fetch('/api/proactive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...body})});const d=await r.json();if(!r.ok)throw Error(d.error||'操作失败');setNotice(body.action==='wake'?(d.queued?'已生成一条待处理唤醒事件。接入后台模型后才能生成并投递消息。':'没有排队：'+d.reason):'已保存');await refresh()}catch(e){setNotice(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ return <div className="tool-panel"><h3>{person} · 自主生活</h3><p className="muted">独立心跳、主动程度、免打扰与唤醒记录。当前只生成待处理事件，不会冒充 AI 发消息；接入安全的后台模型执行器后才能真正主动发信。</p>{config&&<section className="memory-create"><label>自主唤醒 <input type="checkbox" checked={!!config.enabled} onChange={e=>setConfig({...config,enabled:e.target.checked?1:0})}/></label><label>主动程度<select value={config.mode} onChange={e=>setConfig({...config,mode:e.target.value})}><option value="quiet">安静陪伴</option><option value="natural">自然主动</option><option value="lively">活泼黏人</option></select></label><label>心跳间隔（小时）<input type="number" min={2} max={72} value={config.interval_hours} onChange={e=>setConfig({...config,interval_hours:Number(e.target.value)})}/></label><label>免打扰开始（0–23时）<input type="number" min={0} max={23} value={config.quiet_start} onChange={e=>setConfig({...config,quiet_start:Number(e.target.value)})}/></label><label>免打扰结束（0–23时）<input type="number" min={0} max={23} value={config.quiet_end} onChange={e=>setConfig({...config,quiet_end:Number(e.target.value)})}/></label><div className="memory-form-actions"><button disabled={busy} onClick={()=>act({action:'configure',...config,enabled:!!config.enabled})}>保存设置</button><button disabled={busy} onClick={()=>act({action:'wake'})}>测试唤醒</button><button disabled={busy} onClick={()=>refresh().catch(e=>setNotice(e.message))}>刷新记录</button></div></section>}{notice&&<p className="muted" role="status">{notice}</p>}<h4>最近唤醒事件</h4>{events.length===0?<p className="muted">还没有唤醒记录。</p>:events.map(e=><article className="memory-item" key={e.id}><b>{e.mood==='curious'?'✨ 好奇 / 想分享':'自主唤醒'}</b><p>{e.reason}</p><small>{new Date(e.created_at).toLocaleString()} · {e.status==='pending'?'待接入模型处理':'已忽略'}</small>{e.status==='pending'&&<button disabled={busy} onClick={()=>act({action:'dismiss',id:e.id})}>忽略</button>}</article>)}</div>
 }
 
 function MCPSettings({person}:{person:Person}) {

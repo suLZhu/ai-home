@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
+import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -60,6 +61,7 @@ const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().m
 if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
 initMemoryIndex(db)
+initProactive(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -418,6 +420,22 @@ createServer(async (req, res) => {
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '找不到该人物的任务' })
   }
 
+  if (url.pathname === '/api/proactive' && req.method === 'GET') {
+    const person=url.searchParams.get('person')
+    if(!['晏未晞','言朔'].includes(person))return send(res,400,{error:'无效人物'})
+    return send(res,200,{settings:proactiveSettings(db,person),events:proactiveEvents(db,person)})
+  }
+  if (url.pathname === '/api/proactive' && req.method === 'POST') {
+    try {
+      const body=await readBody(req)
+      if(!['晏未晞','言朔'].includes(body.person))return send(res,400,{error:'无效人物'})
+      if(body.action==='configure')return send(res,200,{settings:configureProactive(db,body.person,body)})
+      if(body.action==='wake')return send(res,200,wakeProactive(db,body.person,{manual:true}))
+      if(body.action==='dismiss')return send(res,200,{ok:dismissProactive(db,body.person,String(body.id||''))})
+      return send(res,400,{error:'未知操作'})
+    } catch(error){return send(res,400,{error:error.message||'操作失败'})}
+  }
+
   if (url.pathname === '/api/memory/search' && req.method === 'GET') {
     const person = url.searchParams.get('person')
     const query = (url.searchParams.get('q') || '').trim()
@@ -468,3 +486,11 @@ setInterval(() => {
     }
   }
 }, 15000).unref()
+
+// One-minute wake checks. A pending event is not a sent message.
+// Model generation and delivery are deliberately disabled until a secure provider adapter exists.
+setInterval(() => {
+  for (const person of ['晏未晞','言朔']) {
+    try { wakeProactive(db,person) } catch(error) { console.error('[proactive]',error.message) }
+  }
+}, 60_000)
