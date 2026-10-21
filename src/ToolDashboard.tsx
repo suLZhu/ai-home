@@ -38,8 +38,11 @@ export function ToolDashboard() {
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<string[]>([])
   const [auto, setAuto] = useState(true)
+  const [today, setToday] = useState(() => new Date().toLocaleDateString('en-CA'))
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (isAlive: () => boolean = () => true) => {
+    // 仅首屏显示骨架（loading 初值 true）；筛选与自动刷新时保留旧列表，
+    // 避免每 5 秒整表闪烁，也避免在 effect 中同步 setState。
     const params = new URLSearchParams({ limit: '200' })
     if (person !== '全部') params.set('person', person)
     if (source !== '全部') params.set('source', source)
@@ -48,22 +51,34 @@ export function ToolDashboard() {
       const response = await fetch('/api/tool-logs?' + params.toString(), { credentials: 'same-origin' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || '读取调用记录失败')
+      // 过期响应守卫：快速切换筛选时，慢的旧请求不得覆盖新结果。
+      if (!isAlive()) return
       setLogs(Array.isArray(data.logs) ? data.logs : [])
+      setToday(new Date().toLocaleDateString('en-CA'))
       setError('')
-    } catch (e) { setError(e instanceof Error ? e.message : '读取调用记录失败') }
-    finally { setLoading(false) }
+    } catch (e) {
+      if (!isAlive()) return
+      setError(e instanceof Error ? e.message : '读取调用记录失败')
+    } finally { if (isAlive()) setLoading(false) }
   }, [person, source, status])
 
-  useEffect(() => { setLoading(true); void refresh() }, [refresh])
+  useEffect(() => {
+    let alive = true
+    // 首次拉取推迟到微任务：effect 内不同步触发任何状态更新。
+    queueMicrotask(() => { if (alive) void refresh(() => alive) })
+    return () => { alive = false }
+  }, [refresh])
   useEffect(() => {
     if (!auto) return
-    const timer = window.setInterval(() => { void refresh() }, 5000)
+    const timer = window.setInterval(() => {
+      // Android 后台标签页暂停轮询，回到前台后下一次 tick 自动恢复。
+      if (!document.hidden) void refresh()
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [auto, refresh])
 
   const counts = { running: 0, success: 0, error: 0 }
   for (const log of logs) if (log.status in counts) counts[log.status]++
-  const today = new Date().toLocaleDateString('en-CA')
   const todayCount = logs.filter(l => String(l.startedAt).slice(0, 10) === today).length
 
   const chipRow = (label: string, value: string, setValue: (v: string) => void, options: { key: string; text: string }[]) =>
@@ -88,8 +103,8 @@ export function ToolDashboard() {
       {chipRow('工具类型筛选', source, setSource, [{ key: '全部', text: '全部类型' }, { key: 'mcp', text: 'MCP' }, { key: 'worldbook', text: '世界书' }, { key: 'ledger', text: '记账' }])}
       {chipRow('状态筛选', status, setStatus, [{ key: '全部', text: '全部状态' }, { key: 'running', text: '执行中' }, { key: 'success', text: '成功' }, { key: 'error', text: '失败' }])}
     </div>
-    {error && <p className="tool-dash-error" role="alert">{error}</p>}
-    {loading ? <p className="muted">正在读取调用记录……</p>
+    {error && <p className="tool-dash-error" role="alert" aria-live="polite">{error}</p>}
+    {loading ? <div className="tool-dash-skeletons" aria-label="正在读取调用记录"><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div></div>
       : logs.length === 0 ? <div className="tool-dash-empty"><span>⚡</span><b>还没有符合条件的调用记录</b><small>在聊天中让助手使用 MCP、世界书或记账工具后，这里会出现真实的执行记录。</small></div>
       : <ul className="tool-dash-list">{logs.map(log => {
         const open = expanded.includes(log.id)
