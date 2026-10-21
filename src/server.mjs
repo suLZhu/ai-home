@@ -6,6 +6,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -58,6 +59,7 @@ db.exec(`
 const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().map(row => row.name)
 if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
+initMemoryIndex(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -416,6 +418,15 @@ createServer(async (req, res) => {
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '找不到该人物的任务' })
   }
 
+  if (url.pathname === '/api/memory/search' && req.method === 'GET') {
+    const person = url.searchParams.get('person')
+    const query = (url.searchParams.get('q') || '').trim()
+    const exclude = url.searchParams.get('exclude') || ''
+    if (!['晏未晞', '言朔'].includes(person)) return send(res, 400, { error: '无效人物' })
+    if (query.length < 2 || query.length > 160) return send(res, 400, { error: '搜索内容长度应为 2 至 160 字' })
+    return send(res, 200, { results: searchMemoryIndex(db, { person, query, exclude, limit: 5 }) })
+  }
+
   if (url.pathname === '/api/state' && req.method === 'GET') {
     const row = db.prepare('SELECT payload, updated_at FROM app_state WHERE id=1').get()
     return send(res, 200, { state: row ? JSON.parse(row.payload) : null, updatedAt: row?.updated_at || null })
@@ -427,7 +438,12 @@ createServer(async (req, res) => {
       const payload = JSON.stringify(body.state)
       if (Buffer.byteLength(payload) > MAX_BODY) return send(res, 413, { error: '云端数据超过 2 MB 限制' })
       const updatedAt = new Date().toISOString()
-      db.prepare('INSERT INTO app_state (id,payload,updated_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at').run(payload, updatedAt)
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        db.prepare('INSERT INTO app_state (id,payload,updated_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at').run(payload, updatedAt)
+        rebuildMemoryIndex(db, body.state)
+        db.exec('COMMIT')
+      } catch (error) { db.exec('ROLLBACK'); throw error }
       return send(res, 200, { ok: true, updatedAt })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '保存失败' }) }
   }
