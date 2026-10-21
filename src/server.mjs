@@ -54,6 +54,10 @@ db.exec(`
 
 
 `)
+// Backwards-compatible workflow ownership metadata. Existing user-created tasks stay protected.
+const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().map(row => row.name)
+if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
+if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -331,6 +335,42 @@ createServer(async (req, res) => {
       })
       return send(res, 200, { result })
     } catch (error) { return send(res, error.status || 502, { error: error.message || 'MCP 调用失败' }) }
+  }
+
+  // Assistant workflow adapter entrypoint. The future model tool caller must pass its
+  // server-verified identity here; a person in the payload alone is NOT authentication.
+  // Until model identity verification exists, this endpoint is explicitly a logged-in
+  // user-controlled test harness, not an autonomous agent permission boundary.
+  if (url.pathname === '/api/workflows/manage' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const person = body.person
+      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+      const action = body.action
+      const now = new Date().toISOString()
+      if (action === 'create') {
+        const title = String(body.title || '').trim().slice(0, 160)
+        const prompt = String(body.prompt || '').trim().slice(0, 12000)
+        const runAt = String(body.runAt || '')
+        const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
+        if (!title || !prompt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '工作流内容或时间无效' })
+        const id = randomUUID()
+        db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,created_by,temporary) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,person,body.temporary === true ? 1 : 0)
+        return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
+      }
+      if (!['pause','resume','delete'].includes(action)) return send(res, 400, { error: '不支持的操作' })
+      const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND person=?').get(String(body.id || ''),person)
+      if (!row) return send(res, 404, { error: '工作流不存在或不属于当前助手' })
+      if (row.created_by !== person) return send(res, 403, { error: '不能自动管理用户创建的工作流' })
+      if (action === 'delete') {
+        if (!row.temporary) return send(res, 403, { error: '长期工作流禁止自动永久删除，请手动处理' })
+        db.prepare('DELETE FROM scheduled_tasks WHERE id=? AND person=?').run(row.id,person)
+        return send(res, 200, { ok: true })
+      }
+      const status = action === 'pause' ? 'paused' : 'scheduled'
+      db.prepare('UPDATE scheduled_tasks SET status=?,updated_at=? WHERE id=? AND person=?').run(status,now,row.id,person)
+      return send(res, 200, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(row.id) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '工作流管理失败' }) }
   }
 
   if (url.pathname === '/api/tasks' && req.method === 'GET') {
