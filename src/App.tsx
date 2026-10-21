@@ -7,6 +7,7 @@ import { DEFAULT_THEME,themeStyle,type ThemePrefs } from './theme'
 import { LEGACY_ASSISTANTS, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
+import { ToolDashboard } from './ToolDashboard'
 
 type InboxMessage={id:string;person:Person;content:string;kind:string;created_at:string;read_at?:string|null}
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'
@@ -37,6 +38,23 @@ function initialConversations():Record<Person,Conversation[]> {
   if(saved&&Array.isArray(saved['晏未晞'])&&Array.isArray(saved['言朔'])) return {'晏未晞':saved['晏未晞'],'言朔':saved['言朔']}
   const old=readMessages();const now=new Date().toISOString()
   return {'晏未晞':[{id:'legacy-yanweixi',title:'旧聊天',messages:old['晏未晞'],updatedAt:now}],'言朔':[{id:'legacy-yanshu',title:'旧聊天',messages:old['言朔'],updatedAt:now}]}
+}
+
+// Tool call dashboard reporting. These helpers only run at real tool execution
+// sites inside send(); they never fire for model-generated prose. Reporting
+// failures are swallowed so the chat flow is never affected.
+type ToolLogSource = 'mcp' | 'worldbook' | 'ledger'
+async function startToolLog(person: Person, source: ToolLogSource, toolName: string, args: unknown): Promise<string | null> {
+  try {
+    const response = await fetch('/api/tool-logs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, source, toolName, arguments: args }) })
+    if (!response.ok) return null
+    const data = await response.json()
+    return typeof data.id === 'string' ? data.id : null
+  } catch { return null }
+}
+async function finishToolLog(logId: string | null, status: 'success' | 'error', resultSummary: unknown, errorMessage?: string) {
+  if (!logId) return
+  try { await fetch('/api/tool-logs/' + logId, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, resultSummary, errorMessage }) }) } catch { /* dashboard must never break chat */ }
 }
 
 export default function App() {
@@ -320,7 +338,7 @@ export default function App() {
       for(const e of matched.filter(e=>e.target==='system'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'system',content:'【世界书：'+e.title+'】\n'+e.content})}
       for(const e of matched.filter(e=>e.target==='user'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'user',content:'【世界书：'+e.title+'】\n'+e.content})}
       // Load tools only from the active character's server-side MCP bindings.
-      const toolRoutes=new Map<string,{id:string;person:Person;name:string}>()
+      const toolRoutes=new Map<string,{id:string;person:Person;name:string;connectionName:string}>()
       const openAITools:any[]=[]
       // The active assistant may manage only worldbook entries bound to itself.
       openAITools.push({type:'function',function:{name:'worldbook_create_entry',description:'在当前助手自己的世界书中新增条目。仅当用户明确要求记录或更新世界设定时使用；不要写入用户未确认的重大设定。',parameters:{type:'object',properties:{title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['title','keywords','content'],additionalProperties:false}}})
@@ -341,7 +359,7 @@ export default function App() {
               for(const tool of (toolData.tools||[])){
                 const safeName=('mcp_'+connection.id.replace(/-/g,'').slice(0,8)+'_'+tool.name).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,64)
                 if(toolRoutes.has(safeName)) continue
-                toolRoutes.set(safeName,{id:connection.id,person:target,name:tool.name})
+                toolRoutes.set(safeName,{id:connection.id,person:target,name:tool.name,connectionName:connection.name})
                 openAITools.push({type:'function',function:{name:safeName,description:('MCP 服务：'+connection.name+'；工具：'+tool.name+'。'+(tool.description||'')).slice(0,1000),parameters:tool.inputSchema&&tool.inputSchema.type==='object'?tool.inputSchema:{type:'object',properties:{},additionalProperties:true}}})
               }
             } catch { /* An unavailable MCP must not prevent ordinary chat. */ }
@@ -364,11 +382,14 @@ export default function App() {
         for(const call of toolCalls){
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
+          let callLogId:string|null=null
           try{
             const localWorldbookTool=['worldbook_create_entry','worldbook_search_entries','worldbook_update_entry'].includes(call.function.name)
             if(call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
+            const logSource:ToolLogSource=call.function.name==='ledger_add_entry'?'ledger':localWorldbookTool?'worldbook':'mcp'
+            callLogId=await startToolLog(target,logSource,route?route.connectionName+' / '+route.name:call.function.name,args)
             updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+(route?.name||'共享记账单')+'…'}:m))
             if(localWorldbookTool){
               const owned=worldEntries.filter(e=>e.boundCharacters?.includes(target))
@@ -392,7 +413,8 @@ export default function App() {
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
             resultContent=JSON.stringify(call.function.name==='ledger_add_entry'?toolData:toolData.result)
             }
-          }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)})}
+            await finishToolLog(callLogId,'success',resultContent)
+          }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)});await finishToolLog(callLogId,'error','',error instanceof Error?error.message:String(error))}
           requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
         }
         if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
@@ -424,7 +446,7 @@ export default function App() {
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+themePrefs.bubble+" chatbg-"+themePrefs.chatBackground} style={themeStyle(themePrefs) as React.CSSProperties}>
     <button className="mobile-menu-toggle" aria-label="打开百宝箱" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
     {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭百宝箱" onClick={()=>setSidebarOpen(false)}/>}
-    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
+    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'工具看板',icon:'⚡',label:'工具调用看板'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
     {toast&&<div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {toast.kind==='test'?'通知测试':'新消息'}</b><span>{toast.content}</span><small>点击打开聊天</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} />}
@@ -788,10 +810,10 @@ function Fun({shortcut,onShortcutUsed}:{shortcut:string;onShortcutUsed:()=>void}
   const [draft,setDraft]=useState('')
   const [messages,setMessages]=useState<{id:string;author:string;content:string;at:string}[]>(()=>read('ai-home.loungeMessages',[]))
   useEffect(()=>{localStorage.setItem('ai-home.loungeMessages',JSON.stringify(messages))},[messages])
-  const rooms=[{name:'公共客厅',key:'客厅',icon:'☕',desc:'一起聊天、分享日常'},{name:'内嵌浏览器',key:'内嵌浏览器',icon:'⌘',desc:'在小家里浏览网页'},{name:'可视化网页',key:'可视化网页',icon:'▧',desc:'查看互动网页与小工具'},{name:'相册',key:'相册',icon:'▧',desc:'收藏图片与共同回忆'},{name:'播放器',key:'播放器',icon:'♫',desc:'音乐、音频与播放列表'},{name:'记账单',key:'记账单',icon:'¥',desc:'记录真实人民币收支'},{name:'日记本',key:'日记本',icon:'✎',desc:'写下公开或上锁的日记'},{name:'更多工具',key:'待定',icon:'＋',desc:'以后继续扩展新模块'}]
+  const rooms=[{name:'公共客厅',key:'客厅',icon:'☕',desc:'一起聊天、分享日常'},{name:'内嵌浏览器',key:'内嵌浏览器',icon:'⌘',desc:'在小家里浏览网页'},{name:'可视化网页',key:'可视化网页',icon:'▧',desc:'查看互动网页与小工具'},{name:'相册',key:'相册',icon:'▧',desc:'收藏图片与共同回忆'},{name:'播放器',key:'播放器',icon:'♫',desc:'音乐、音频与播放列表'},{name:'记账单',key:'记账单',icon:'¥',desc:'记录真实人民币收支'},{name:'工具调用看板',key:'工具看板',icon:'⚡',desc:'MCP、世界书与记账的真实执行记录'},{name:'日记本',key:'日记本',icon:'✎',desc:'写下公开或上锁的日记'},{name:'更多工具',key:'待定',icon:'＋',desc:'以后继续扩展新模块'}]
   function post(e:FormEvent){e.preventDefault();if(!draft.trim())return;setMessages(old=>[...old,{id:crypto.randomUUID(),author:'顾',content:draft.trim(),at:new Date().toISOString()}]);setDraft('')}
   const selected=rooms.find(x=>x.key===active)
-  return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
+  return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary/>:active==='工具看板'?<ToolDashboard/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
 }
 function UsagePanel({conversations,modelConfig}:{conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>}) {
  const [range,setRange]=useState<'today'|'7d'|'30d'|'all'>('7d')

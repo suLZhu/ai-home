@@ -8,6 +8,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
 import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
+import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
@@ -64,6 +65,7 @@ if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks
 initMemoryIndex(db)
 initProactive(db)
 initInbox(db)
+initToolLogs(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -246,6 +248,27 @@ createServer(async (req, res) => {
   if(diaryDelete&&req.method==='DELETE'){
     const result=db.prepare('DELETE FROM diary_entries WHERE id=?').run(diaryDelete[1])
     return send(res,result.changes?200:404,result.changes?{ok:true}:{error:'日记不存在'})
+  }
+
+  // Tool call execution log. Rows are written by the frontend only at real tool
+  // call sites; the server re-redacts every stored argument and result anyway.
+  if (url.pathname === '/api/tool-logs' && req.method === 'GET') {
+    try {
+      return send(res, 200, { logs: listToolLogs(db, Object.fromEntries(url.searchParams)) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '读取工具调用记录失败' }) }
+  }
+  if (url.pathname === '/api/tool-logs' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      return send(res, 201, createToolLog(db, body))
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '记录工具调用失败' }) }
+  }
+  const toolLogMatch = url.pathname.match(/^\/api\/tool-logs\/([0-9a-f-]{36})$/)
+  if (toolLogMatch && req.method === 'PUT') {
+    try {
+      const body = await readBody(req)
+      return send(res, 200, finishToolLog(db, toolLogMatch[1], body))
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '更新工具调用记录失败' }) }
   }
 
   if (url.pathname === '/api/ledger' && req.method === 'GET') {

@@ -1,0 +1,115 @@
+import { useCallback, useEffect, useState } from 'react'
+import './ToolDashboard.css'
+
+type ToolLogStatus = 'running' | 'success' | 'error'
+type ToolLog = {
+  id: string; person: string; source: string; toolName: string
+  arguments: unknown; resultSummary: unknown; status: ToolLogStatus
+  errorMessage?: string | null; durationMs?: number | null
+  startedAt: string; finishedAt?: string | null
+}
+
+const SOURCE_LABEL: Record<string, string> = { mcp: 'MCP', worldbook: '世界书', ledger: '记账' }
+const STATUS_LABEL: Record<ToolLogStatus, string> = { running: '执行中', success: '成功', error: '失败' }
+
+function formatTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '时间无效'
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+function formatDuration(ms?: number | null, status?: string): string {
+  if (status === 'running') return '进行中'
+  if (ms == null || !Number.isFinite(ms)) return '—'
+  return ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s'
+}
+function brief(value: unknown, max = 90): string {
+  let text = ''
+  try { text = typeof value === 'string' ? value : JSON.stringify(value ?? '') } catch { text = String(value) }
+  if (!text) text = '（空）'
+  return text.length > max ? text.slice(0, max) + '…' : text
+}
+
+export function ToolDashboard() {
+  const [logs, setLogs] = useState<ToolLog[]>([])
+  const [person, setPerson] = useState('全部')
+  const [source, setSource] = useState('全部')
+  const [status, setStatus] = useState('全部')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [expanded, setExpanded] = useState<string[]>([])
+  const [auto, setAuto] = useState(true)
+
+  const refresh = useCallback(async () => {
+    const params = new URLSearchParams({ limit: '200' })
+    if (person !== '全部') params.set('person', person)
+    if (source !== '全部') params.set('source', source)
+    if (status !== '全部') params.set('status', status)
+    try {
+      const response = await fetch('/api/tool-logs?' + params.toString(), { credentials: 'same-origin' })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '读取调用记录失败')
+      setLogs(Array.isArray(data.logs) ? data.logs : [])
+      setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : '读取调用记录失败') }
+    finally { setLoading(false) }
+  }, [person, source, status])
+
+  useEffect(() => { setLoading(true); void refresh() }, [refresh])
+  useEffect(() => {
+    if (!auto) return
+    const timer = window.setInterval(() => { void refresh() }, 5000)
+    return () => window.clearInterval(timer)
+  }, [auto, refresh])
+
+  const counts = { running: 0, success: 0, error: 0 }
+  for (const log of logs) if (log.status in counts) counts[log.status]++
+  const today = new Date().toLocaleDateString('en-CA')
+  const todayCount = logs.filter(l => String(l.startedAt).slice(0, 10) === today).length
+
+  const chipRow = (label: string, value: string, setValue: (v: string) => void, options: { key: string; text: string }[]) =>
+    <div className="tool-dash-chip-row" role="group" aria-label={label}>
+      {options.map(option => <button type="button" key={option.key} className={'tool-dash-chip' + (value === option.key ? ' active' : '')} aria-pressed={value === option.key} onClick={() => setValue(option.key)}>{option.text}</button>)}
+    </div>
+
+  return <section className="tool-dashboard">
+    <header className="tool-dash-heading">
+      <div><h3>工具调用看板</h3><p>只记录真实执行的 MCP、世界书与记账工具调用；模型口头描述不会出现在这里。</p></div>
+      <label className="tool-dash-auto"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)}/> 自动刷新</label>
+    </header>
+    <div className="tool-dash-stats">
+      <div><small>当前筛选</small><b>{logs.length}</b></div>
+      <div className="stat-running"><small>执行中</small><b>{counts.running}</b></div>
+      <div className="stat-success"><small>成功</small><b>{counts.success}</b></div>
+      <div className="stat-error"><small>失败</small><b>{counts.error}</b></div>
+      <div><small>今日调用</small><b>{todayCount}</b></div>
+    </div>
+    <div className="tool-dash-filters">
+      {chipRow('人物筛选', person, setPerson, [{ key: '全部', text: '全部人物' }, { key: '晏未晞', text: '晏未晞' }, { key: '言朔', text: '言朔' }])}
+      {chipRow('工具类型筛选', source, setSource, [{ key: '全部', text: '全部类型' }, { key: 'mcp', text: 'MCP' }, { key: 'worldbook', text: '世界书' }, { key: 'ledger', text: '记账' }])}
+      {chipRow('状态筛选', status, setStatus, [{ key: '全部', text: '全部状态' }, { key: 'running', text: '执行中' }, { key: 'success', text: '成功' }, { key: 'error', text: '失败' }])}
+    </div>
+    {error && <p className="tool-dash-error" role="alert">{error}</p>}
+    {loading ? <p className="muted">正在读取调用记录……</p>
+      : logs.length === 0 ? <div className="tool-dash-empty"><span>⚡</span><b>还没有符合条件的调用记录</b><small>在聊天中让助手使用 MCP、世界书或记账工具后，这里会出现真实的执行记录。</small></div>
+      : <ul className="tool-dash-list">{logs.map(log => {
+        const open = expanded.includes(log.id)
+        return <li className={'tool-dash-item status-' + log.status} key={log.id}>
+          <div className="tool-dash-item-top">
+            <span className={'tool-dash-badge ' + log.status}>{STATUS_LABEL[log.status] || log.status}</span>
+            <b className="tool-dash-person">{log.person}</b>
+            <span className="tool-dash-source">{SOURCE_LABEL[log.source] || log.source}</span>
+            <code className="tool-dash-name" title={log.toolName}>{log.toolName}</code>
+          </div>
+          <div className="tool-dash-item-meta">
+            <span>{formatTime(log.startedAt)}</span>
+            <span>{formatDuration(log.durationMs, log.status)}</span>
+          </div>
+          <p className="tool-dash-args">参数：{brief(log.arguments)}</p>
+          {log.status !== 'running' && <p className={'tool-dash-result' + (log.status === 'error' ? ' is-error' : '')}>结果：{log.errorMessage ? log.errorMessage : brief(log.resultSummary)}</p>}
+          <button type="button" className="tool-dash-expand" aria-expanded={open} onClick={() => setExpanded(old => open ? old.filter(x => x !== log.id) : [...old, log.id])}>{open ? '收起详情 ↑' : '展开详情 ↓'}</button>
+          {open && <pre className="tool-dash-detail">{JSON.stringify({ 参数: log.arguments, 结果: log.resultSummary, ...(log.errorMessage ? { 错误: log.errorMessage } : {}), 开始时间: log.startedAt, 结束时间: log.finishedAt || '—' }, null, 2)}</pre>}
+        </li>
+      })}</ul>}
+    <p className="tool-dash-note">记录保存在私人云服务器 SQLite 中；参数与结果已自动脱敏（API Key、Token、Cookie 等会被掩码）。超过 10 分钟未完成的记录会自动标记为失败。</p>
+  </section>
+}
