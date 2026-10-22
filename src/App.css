@@ -359,3 +359,11 @@
 
 /* ── 登录页：圆角随主题统一 ── */
 .login-card{border-radius:calc(var(--radius,16px) + 8px)}
+
+/* 主页入口圆圈：透明悬浮，不要线条 */
+.shell .home-person-circle{border-color:transparent;background:transparent;box-shadow:none;color:var(--ink)}
+.shell .home-person.is-me .home-person-circle{background:transparent;border-color:transparent}
+.shell .home-person:hover .home-person-circle{background:var(--field)}
+/* 自定义聊天背景 / 自定义气泡图（数据来自本机上传） */
+.shell.chatbg-image .chat-body{background-image:var(--chat-bg-image);background-size:cover;background-position:center}
+.shell.bubble-image .bubble{background-image:var(--bubble-image);background-size:cover;background-position:center}

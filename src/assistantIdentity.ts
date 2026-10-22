@@ -4,6 +4,11 @@ export const LEGACY_ASSISTANTS = [
   { id: 'assistant-yanweixi', name: '晏未晞' },
   { id: 'assistant-yanshuo', name: '言朔' },
 ] as const
+// 默认显示名：只影响「从未被用户改过名」的助手展示，不参与 legacyId 迁移映射（映射仍按旧名字）。
+export const DEFAULT_DISPLAY_NAMES: Record<string, string> = {
+  'assistant-yanweixi': '默认助手',
+  'assistant-yanshuo': '默认助手1',
+}
 const identityFields = ['messages', 'conversations', 'activeConversationIds', 'memory', 'memoryEntries', 'prompt', 'characters', 'worldbook', 'mcpConnections', 'tasks'] as const
 type Snapshot = Record<string, any>
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)

@@ -1,5 +1,10 @@
 export type ThemeId='lavender'|'paper'|'forest'|'night'
-export type ThemePrefs={theme:ThemeId;font:'serif'|'sans';scale:number;radius:number;chatBackground:'theme'|'plain';bubble:'soft'|'outlined'}
+export type ThemePrefs={theme:ThemeId;font:'serif'|'sans'|'custom';scale:number;radius:number;chatBackground:'theme'|'plain'|'custom1'|'custom2';bubble:'soft'|'outlined'|'image'}
+/** 本机自定义素材（字体/背景/气泡图，dataURL）。不进云端快照，只存浏览器。 */
+export type CustomAssets={bg1:string;bg2:string;bubble:string;fontName:string;fontData:string}
+export const EMPTY_ASSETS:CustomAssets={bg1:'',bg2:'',bubble:'',fontName:'',fontData:''}
+/** 每位助手独立的聊天外观覆盖；'follow' 或缺省 = 跟随全局 */
+export type PersonAppearancePref={chatBackground:string;bubble:string}
 export const DEFAULT_THEME:ThemePrefs={theme:'lavender',font:'serif',scale:100,radius:16,chatBackground:'theme',bubble:'soft'}
 export const THEMES:{id:ThemeId;name:string;description:string;swatches:string[]}[]=[
  {id:'lavender',name:'奶灰浅紫',description:'温柔的默认小家',swatches:['#f2eef4','#e9e1f0','#8871a5']},
@@ -39,5 +44,5 @@ export function themeStyle(p:ThemePrefs):Record<string,string>{
   forest:{'--page-bg':'#dbe5dd','--surface':'#f0f5ef','--card':'#dce9df','--field':'#f9fcf9','--line':'#b9cdbd','--muted':'#667a6a','--ink':'#334a3a','--accent':'#4e7863','--user-bubble':'#d4e8d9','--assistant-bubble':'#e4efe6'},
   night:{'--page-bg':'#171b27','--surface':'#222735','--card':'#333a4e','--field':'#2c3344','--line':'#555c73','--muted':'#b6b6c9','--ink':'#f0eef7','--accent':'#a8a3d9','--user-bubble':'#444668','--assistant-bubble':'#363d53'}
  }
- return {...themes[p.theme], ...semantics, '--font-family':p.font==='serif'?'"Noto Serif SC","Songti SC",serif':'system-ui,"Noto Sans SC",sans-serif','--font-scale':String(p.scale/100),'--radius':p.radius+'px'}
+ return {...themes[p.theme], ...semantics, '--font-family':p.font==='custom'?'"CustomUpload","Noto Serif SC","Songti SC",serif':p.font==='serif'?'"Noto Serif SC","Songti SC",serif':'system-ui,"Noto Sans SC",sans-serif','--font-scale':String(p.scale/100),'--radius':p.radius+'px'}
 }

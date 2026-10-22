@@ -15,7 +15,7 @@ export function BeautifySettings({ value, onChange }: { value: string; onChange:
     }
   }
   return <section className="beautify-settings">
-    <h3>美化</h3>
+    <h3>美化包 · 像素风 / 简洁风</h3>
     <div className="beautify-list">
       {BEAUTIFY_PACKS.map(pack => {
         const active = value === pack.id
