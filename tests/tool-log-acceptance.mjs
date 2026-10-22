@@ -3,7 +3,6 @@
 // Classification: every case below is API-level MOCK (no real model key / public
 // MCP endpoint exists in this environment); code-path cases are marked STATIC.
 import { DatabaseSync } from 'node:sqlite'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 const BASE = process.env.BASE || 'http://127.0.0.1:4180'
 const PW = process.env.AI_HOME_PASSWORD

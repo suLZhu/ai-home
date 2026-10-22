@@ -8,6 +8,8 @@ import { LEGACY_ASSISTANTS, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 import { ToolDashboard } from './ToolDashboard'
+// 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
+import './pixel.css'
 
 type InboxMessage={id:string;person:Person;content:string;kind:string;created_at:string;read_at?:string|null}
 type Page = 'home' | 'room' | 'me' | 'fun' | 'settings'

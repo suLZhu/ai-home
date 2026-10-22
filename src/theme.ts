@@ -18,6 +18,9 @@ export function themeStyle(p:ThemePrefs):Record<string,string>{
   '--danger':'#ac5f68','--danger-soft':'#f4dee1',
   '--shadow-card':'0 5px 18px rgba(64,50,74,.07)',
   '--shadow-lift':'0 10px 28px rgba(64,50,74,.12)',
+  // 像素风选框/图标：纯黑白灰，不随主题着色。
+  '--pixel-ink':'#2f2c33','--pixel-paper':'#f7f5f2',
+  '--pixel-dither':'rgba(47,44,51,.10)','--pixel-shadow':'rgba(47,44,51,.30)',
  }
  const nightSemantics:Record<string,string>={
   '--accent-soft':'#343049',
@@ -26,6 +29,8 @@ export function themeStyle(p:ThemePrefs):Record<string,string>{
   '--danger':'#dd9ba1','--danger-soft':'#5c363c',
   '--shadow-card':'0 5px 18px rgba(0,0,0,.28)',
   '--shadow-lift':'0 10px 28px rgba(0,0,0,.4)',
+  '--pixel-ink':'#e8e6ee','--pixel-paper':'#262b3a',
+  '--pixel-dither':'rgba(232,230,238,.12)','--pixel-shadow':'rgba(0,0,0,.55)',
  }
  const semantics=p.theme==='night'?nightSemantics:lightSemantics
  const themes:Record<ThemeId,Record<string,string>>={
