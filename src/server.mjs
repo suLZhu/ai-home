@@ -202,6 +202,29 @@ createServer(async (req, res) => {
   if (!getSession(req)) return send(res, 401, { error: '请先登录' })
 
   // Shared ledger for both assistants. All routes require the existing authenticated session.
+  // 代理请求 OpenAI 兼容接口的 /models 列表，绕过浏览器 CORS 限制。
+  if (url.pathname === '/api/models' && req.method === 'POST') {
+    try {
+      const b = await readBody(req)
+      const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
+      if (!raw) return send(res, 400, { error: '请先填写 API 地址' })
+      const apiKey = String(b.apiKey || '').trim()
+      if (!apiKey) return send(res, 400, { error: '请先填写 API Key' })
+      if (!/^https?:\/\//i.test(raw)) return send(res, 400, { error: 'API 地址需以 http:// 或 https:// 开头' })
+      const target = /\/v1$/.test(raw) ? raw + '/models' : raw + '/v1/models'
+      const upstream = await fetch(target, { headers: { Authorization: `Bearer ${apiKey}` }, redirect: 'error', signal: AbortSignal.timeout(15000) })
+      const text = await upstream.text()
+      if (!upstream.ok) return send(res, 502, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 180) : ''}` })
+      let data; try { data = JSON.parse(text) } catch { return send(res, 502, { error: '上游返回的不是合法 JSON' }) }
+      const ids = (Array.isArray(data?.data) ? data.data : []).map(m => m?.id).filter(x => typeof x === 'string' && x)
+      if (!ids.length) return send(res, 502, { error: '接口响应正常，但未返回可用模型列表' })
+      return send(res, 200, { models: ids })
+    } catch (error) {
+      const msg = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? '请求上游超时' : (error?.cause?.code || error?.message || '请求失败')
+      return send(res, 502, { error: '无法连接该接口：' + msg })
+    }
+  }
+
   if (url.pathname === '/api/diary' && req.method === 'GET') {
     const rows=db.prepare('SELECT id,owner,title,visibility,body,created_at FROM diary_entries ORDER BY created_at DESC LIMIT 500').all()
     return send(res,200,{entries:rows.map(r=>({id:r.id,owner:r.owner,title:r.title,visibility:r.visibility,date:r.created_at.slice(0,10),...(r.visibility==='public'?{content:r.body}:{})}))})
