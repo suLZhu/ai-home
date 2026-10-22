@@ -574,14 +574,19 @@ function Room(props: {
   personAppearance: Record<string,PersonAppearancePref>, setPersonAppearance: React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>, customAssets: CustomAssets
 }) {
   if (props.chatOpen) return <Chat {...props} />
+  const roomHeader = <header className="room-header"><div className="room-name"><span>{props.person === '晏未晞' ? '晏' : '言'}</span><div><b>{props.displayName(props.person)} 的房间</b><small>独立工作区</small></div><div className="room-person-switch" aria-label="切换房间">{(['晏未晞','言朔'] as Person[]).map(name=><button key={name} type="button" className={props.person===name?'selected':''} aria-pressed={props.person===name} onClick={()=>props.setPerson(name)}>{props.displayName(name).slice(0,1)}<small>{props.displayName(name)}</small></button>)}</div></div></header>
+  if (props.activeTool) return <div className="room-screen room-tool-screen">
+    {roomHeader}
+    <button className="settings-back" onClick={() => props.setActiveTool('')}>← 工作区</button>
+    <ToolPanel {...props} />
+  </div>
   return <div className="room-screen">
-    <header className="room-header"><div className="room-name"><span>{props.person === '晏未晞' ? '晏' : '言'}</span><div><b>{props.displayName(props.person)} 的房间</b><small>独立工作区</small></div><div className="room-person-switch" aria-label="切换房间">{(['晏未晞','言朔'] as Person[]).map(name=><button key={name} type="button" className={props.person===name?'selected':''} aria-pressed={props.person===name} onClick={()=>{props.setPerson(name);props.setActiveTool('')}}>{props.displayName(name).slice(0,1)}<small>{props.displayName(name)}</small></button>)}</div></div></header>
+    {roomHeader}
     <div className="room-session-switch"><div className="room-session-heading"><b>独立会话</b><small>{(props.conversations[props.person]||[]).length} 条对话</small></div><div className="room-session-controls"><select aria-label="切换聊天会话" value={props.activeConversationIds[props.person]||''} onChange={e=>{const nextId=e.target.value;const currentId=props.activeConversationIds[props.person];props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[props.person]:(old[props.person]||[]).map(c=>c.id===currentId?{...c,messages:props.messages[props.person],updatedAt:new Date().toISOString()}:c)}));const next=(props.conversations[props.person]||[]).find((c:Conversation)=>c.id===nextId);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[props.person]:nextId}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[props.person]:next?.messages||[]}));props.setChatError('')}}>{(props.conversations[props.person]||[]).map((c:Conversation)=><option key={c.id} value={c.id}>{c.title||'未命名会话'}</option>)}</select><button type="button" onClick={()=>{const id=crypto.randomUUID();const list=props.conversations[props.person]||[];const currentId=props.activeConversationIds[props.person];const title='新对话 '+(list.length+1);props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[props.person]:[...(old[props.person]||[]).map(c=>c.id===currentId?{...c,messages:props.messages[props.person],updatedAt:new Date().toISOString()}:c),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[props.person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[props.person]:[]}));props.setChatError('')}}>＋ 新会话</button></div><small className="room-session-hint">可以在这里切换对话，不必先打开聊天窗口。</small></div>
     <button className="chat-entry" onClick={() => props.setChatOpen(true)}><b>聊天窗口</b><span>点击进入 {props.person} 的全屏聊天</span><em>→</em></button>
     <div className="workspace-title">工作区</div>
     <p className="workspace-note">每位助手的工作区相互独立，这里的设置只影响当前助手。</p>
-    <div className="tool-grid">{tools.map(t => <button key={t} className={props.activeTool===t ? 'tool-active' : ''} aria-expanded={props.activeTool===t} onClick={() => props.setActiveTool(props.activeTool===t ? '' : t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
-    {props.activeTool && <ToolPanel {...props} />}
+    <div className="tool-grid">{tools.map(t => <button key={t} onClick={() => props.setActiveTool(t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
   </div>
 }
 
