@@ -1,96 +1,81 @@
-/* 美化包选择页 */
-.beautify-settings h3 { margin: 0 0 6px; font-size: 19px; font-weight: 500; }
-.beautify-settings > .muted { margin: 0 0 14px; font-size: 13px; line-height: 1.7; }
+/* 美化设置：一行一个包，右侧一个开关 */
+.beautify-settings h3 { margin: 0 0 12px; font-size: 19px; font-weight: 500; }
 
-.beautify-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 12px;
-}
-
-.beautify-card {
+.beautify-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
-  border: 2px solid var(--line, #cbc0d3);
+}
+
+.beautify-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--line, #cbc0d3);
   border-radius: var(--radius, 16px);
   background: var(--surface, #f5f1f7);
-  box-shadow: var(--shadow-card, 0 5px 18px rgba(64, 50, 74, .07));
-  transition: border-color .15s ease, box-shadow .15s ease;
-}
-.beautify-card.active {
-  border-color: var(--ink, #41384b);
-  box-shadow: var(--shadow-lift, 0 10px 28px rgba(64, 50, 74, .12));
-}
-
-/* 迷你实况预览：内部套用该美化包自己的类，所见即所得 */
-.beautify-mini {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  padding: 12px;
-  border: 1px dashed var(--line, #cbc0d3);
-  border-radius: 12px;
-  background: var(--field, #fcf9fd);
-  font-size: 12px;
-  color: var(--ink, #41384b);
-}
-.beautify-mini-icon {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: var(--accent-soft, #ede6f4);
-  color: var(--accent, #8871a5);
-  font-size: 15px;
-}
-.beautify-mini-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  cursor: pointer;
   user-select: none;
+  transition: border-color .15s ease;
 }
-.beautify-mini select {
-  padding: 5px 8px;
-  font-size: 12px;
-  border: 1px solid var(--line, #cbc0d3);
-  border-radius: 8px;
-  background: var(--field, #fcf9fd);
-  color: var(--ink, #41384b);
-}
-.beautify-mini-chip {
-  padding: 4px 10px;
+.beautify-row.active { border-color: var(--accent, #8871a5); }
+
+.beautify-row-name { font-size: 15px; font-weight: 600; color: var(--ink, #41384b); }
+
+/* 普通开关 */
+.beautify-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  flex-shrink: 0;
   border-radius: 999px;
-  border: 1px solid var(--line, #cbc0d3);
-  background: var(--field, #fcf9fd);
-  color: var(--muted, #7b7183);
-  font-size: 11px;
+  background: var(--line, #cbc0d3);
+  cursor: pointer;
+  transition: background .15s ease;
 }
-.beautify-mini-chip.active {
-  background: var(--accent, #8871a5);
-  border-color: var(--accent, #8871a5);
-  color: #fbf9fd;
+.beautify-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(40, 30, 50, .3);
+  transition: transform .15s ease;
 }
+.beautify-switch:checked { background: var(--accent, #8871a5); }
+.beautify-switch:checked::after { transform: translateX(20px); }
+.beautify-switch:focus-visible { outline: 2px solid var(--accent, #8871a5); outline-offset: 2px; }
 
-.beautify-card-meta b { display: block; font-size: 15px; font-weight: 600; }
-.beautify-card-meta small { display: block; margin-top: 3px; font-size: 12px; color: var(--muted, #7b7183); line-height: 1.6; }
-
-.beautify-use {
-  min-height: 40px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--accent-soft, #ede6f4);
-  color: var(--ink, #41384b);
-  font-size: 13px;
-  font-weight: 600;
+/* 像素风下的开关：直角轨道 + 方块滑块 + 硬投影 */
+.beautify-pixel .beautify-switch {
+  border: 2px solid var(--pixel-ink, #2f2c33);
+  border-radius: 0;
+  background: var(--pixel-paper, #f7f5f2);
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22));
 }
-.beautify-card.active .beautify-use {
-  background: var(--ink, #41384b);
-  color: var(--surface, #f5f1f7);
+.beautify-pixel .beautify-switch::after {
+  border-radius: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--pixel-ink, #2f2c33);
+  box-shadow: none;
+  transition: transform .12s steps(3, end);
 }
-.beautify-use:active { transform: scale(.98); }
-
-.beautify-note { margin-top: 14px; font-size: 12px; }
+.beautify-pixel .beautify-switch:checked {
+  background: var(--pixel-ink, #2f2c33);
+}
+.beautify-pixel .beautify-switch:checked::after {
+  background: var(--pixel-paper, #f7f5f2);
+  transform: translateX(20px);
+}
+.beautify-pixel .beautify-switch:focus-visible {
+  outline: 2px dashed var(--pixel-ink, #2f2c33);
+}

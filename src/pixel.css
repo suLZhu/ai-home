@@ -1,51 +1,61 @@
 /* ═══════════ 像素风 · 黑白选框与图标 ═══════════
    纯视觉覆盖层：不改任何业务逻辑、不改消息/存储。
-   所有选框（复选/下拉）与图标统一为黑白像素风：
-   - 直角硬边（radius 0）、2px 实线描边、无模糊硬投影
-   - 未勾选内部铺 3px 棋盘抖动纹理（即"像素美化背景"）
-   - 勾选后反色实心 + 像素阶梯对勾
+   干净像素美学（黑白）：
+   - 直角硬边（radius 0）、2px 实线描边、2px 硬投影
+   - 不铺噪点纹理：底色留白，靠描边与硬阴影塑造像素感
+   - 按下时块体位移（硬阴影归零），开关滑块分段移动，复古手感
+   - 勾选后反色实心 + 干净的像素阶梯对勾
    - 彩色 emoji 图标统一灰度化，不再出现彩色
    颜色取自 --pixel-* 令牌（theme.ts），日/夜主题自动黑白反转。
 
    兼容说明：勾选对勾用 ::after 绘制，Android Chrome/Edge/Safari 正常；
-   桌面 Firefox 不渲染 input 伪元素，会退化为"反色实心方块"（仍可辨识）。 */
+   桌面 Firefox 不渲染 input 伪元素，会退化为"反色实心方块"（仍可辨识）。
+
+   注意：美化页的 .beautify-switch 开关有自己的皮肤（见 BeautifySettings.css），
+   不走这里的复选框样式。 */
 
 /* ── 复选框 ───────────────────────────── */
-.beautify-pixel input[type="checkbox"] {
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch) {
   appearance: none;
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  margin: 0 3px 0 0;
+  width: 18px;
+  height: 18px;
+  margin: 0 4px 0 0;
   flex-shrink: 0;
   vertical-align: middle;
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
-  background-image: repeating-conic-gradient(var(--pixel-dither, rgba(47, 44, 51, .1)) 0% 25%, transparent 0% 50%) !important;
-  background-size: 6px 6px !important;
-  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
-  cursor: pointer;
-}
-.beautify-pixel input[type="checkbox"]:checked {
   background-image: none !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  cursor: pointer;
+  transition: box-shadow .1s steps(2, end), transform .1s steps(2, end);
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):checked {
   background-color: var(--pixel-ink, #2f2c33) !important;
 }
-/* 像素阶梯对勾（4 个 3×3 色块，mask 使颜色跟随主题） */
-.beautify-pixel input[type="checkbox"]:checked::after {
+/* 像素对勾：crispEdges 让斜线自然呈阶梯锯齿，即像素画质感 */
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):checked::after {
   content: "";
   display: block;
   width: 100%;
   height: 100%;
   background-color: var(--pixel-paper, #f7f5f2);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M2 7h3v3h3v3h3v-3h3V7h3V4h-3v3h-3v3h-3V7H5v3H2z'/%3E%3C/svg%3E") center / 13px 13px no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M2 7h3v3h3v3h3v-3h3V7h3V4h-3v3h-3v3h-3V7H5v3H2z'/%3E%3C/svg%3E") center / 13px 13px no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.2 3.2L13 4.8' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='butt' shape-rendering='crispEdges'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.2 3.2L13 4.8' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='butt' shape-rendering='crispEdges'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
 }
-.beautify-pixel input[type="checkbox"]:focus-visible {
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):focus-visible {
   outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
   outline-offset: 2px;
 }
-.beautify-pixel input[type="checkbox"]:disabled {
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):disabled {
   opacity: .45;
   cursor: not-allowed;
 }
@@ -57,8 +67,12 @@
   background-color: var(--pixel-paper, #f7f5f2) !important;
   background-image: none !important;
   color: var(--pixel-ink, #2f2c33) !important;
-  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
   padding-right: 30px !important;
+  transition: box-shadow .1s steps(2, end);
+}
+.beautify-pixel select:hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
 }
 .beautify-pixel select:focus-visible {
   outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
@@ -73,11 +87,16 @@
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
-  background-image: repeating-conic-gradient(var(--pixel-dither, rgba(47, 44, 51, .1)) 0% 25%, transparent 0% 50%) !important;
-  background-size: 6px 6px !important;
+  background-image: none !important;
   color: var(--pixel-ink, #2f2c33) !important;
-  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
-  filter: grayscale(1) contrast(1.12);
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  filter: grayscale(1) contrast(1.08);
+  transition: box-shadow .1s steps(2, end), transform .1s steps(2, end);
+}
+.beautify-pixel .sidebar-link-icon:hover,
+.beautify-pixel .fun-module-icon:hover,
+.beautify-pixel .settings-module-icon:hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
 }
 /* 选中态：整块反色（黑白像素的经典按下效果） */
 .beautify-pixel .sidebar-link.active .sidebar-link-icon {
@@ -95,10 +114,9 @@
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
-  background-image: repeating-conic-gradient(var(--pixel-dither, rgba(47, 44, 51, .1)) 0% 25%, transparent 0% 50%) !important;
-  background-size: 6px 6px !important;
-  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
-  filter: grayscale(1) contrast(1.12);
+  background-image: none !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  filter: grayscale(1) contrast(1.08);
 }
 
 /* 状态点 → 像素小方块 */
@@ -113,55 +131,12 @@
 .beautify-pixel .fun-module-arrow { color: var(--pixel-ink, #2f2c33) !important; }
 
 /* 看板空状态 & 自动刷新胶囊入像素风 */
-.beautify-pixel .tool-dash-empty span { filter: grayscale(1) contrast(1.12); }
+.beautify-pixel .tool-dash-empty span { filter: grayscale(1) contrast(1.08); }
 .beautify-pixel .tool-dash-auto {
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
-  background-image: repeating-conic-gradient(var(--pixel-dither, rgba(47, 44, 51, .1)) 0% 25%, transparent 0% 50%) !important;
-  background-size: 6px 6px !important;
+  background-image: none !important;
   color: var(--pixel-ink, #2f2c33) !important;
-  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
-}
-
-/* 「普通简介」迷你预览：全局开着像素包时，也局部还原原生皮肤供对比 */
-.beautify-pixel .beautify-plain input[type="checkbox"] {
-  appearance: auto !important;
-  -webkit-appearance: auto !important;
-  width: auto !important;
-  height: auto !important;
-  margin: 0 !important;
-  border: initial !important;
-  border-radius: initial !important;
-  background: initial !important;
-  box-shadow: none !important;
-}
-.beautify-pixel .beautify-plain input[type="checkbox"]:checked::after { content: none; }
-.beautify-pixel .beautify-plain select {
-  border: 1px solid var(--line) !important;
-  border-radius: 8px !important;
-  background-color: var(--field) !important;
-  color: var(--ink) !important;
-  box-shadow: none !important;
-  padding-right: 8px !important;
-}
-.beautify-pixel .beautify-plain .beautify-mini-icon {
-  border: none !important;
-  border-radius: 10px !important;
-  background-image: none !important;
-  background-color: var(--accent-soft) !important;
-  color: var(--accent) !important;
-  box-shadow: none !important;
-  filter: none;
-}
-.beautify-pixel .beautify-plain .beautify-mini-chip {
-  border: 1px solid var(--line) !important;
-  border-radius: 999px !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}
-.beautify-pixel .beautify-plain .beautify-mini-chip.active {
-  background-color: var(--accent) !important;
-  border-color: var(--accent) !important;
-  color: #fbf9fd !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
 }
