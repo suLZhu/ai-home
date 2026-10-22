@@ -234,3 +234,10 @@
 .beautify-pixel .home-person:hover .home-person-circle{background:var(--pixel-ink, #2f2c33);color:var(--pixel-paper, #f7f5f2)}
 .beautify-pixel .home-person:active{transform:none}
 .beautify-pixel .home-person:active .home-person-circle{transform:translate(2px,2px)}
+
+/* ── 模型名称自定义下拉：硬边框 + 无阴影 ── */
+.beautify-pixel .model-combo>input{border:2px solid var(--pixel-ink,#2f2c33);background:var(--pixel-paper,#f7f5f2);color:var(--pixel-ink,#2f2c33)}
+.beautify-pixel .model-combo-caret{color:var(--pixel-ink,#2f2c33)}
+.beautify-pixel .model-combo-list{border:2px solid var(--pixel-ink,#2f2c33);background:var(--pixel-paper,#f7f5f2);box-shadow:3px 3px 0 0 var(--pixel-shadow,rgba(47,44,51,.22))}
+.beautify-pixel .model-combo-list li>button:hover{background:var(--pixel-ink,#2f2c33);color:var(--pixel-paper,#f7f5f2)}
+.beautify-pixel .model-combo-list li>button.current{color:var(--pixel-ink,#2f2c33);text-decoration:underline}

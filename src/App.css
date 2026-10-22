@@ -379,3 +379,15 @@
 /* 模型列表拉取 */
 .model-fetch-row{display:flex;align-items:center;gap:10px;margin:0 0 14px}
 .model-fetch-row small{color:var(--muted);font-size:11px;line-height:1.5}
+
+/* 模型名称自定义下拉 */
+.model-combo{position:relative;margin-top:6px}
+.model-combo>input{display:block;width:100%;padding:11px 36px 11px 11px;border:1px solid #c9c0b4;border-radius:8px;background:#faf6ef;outline:none}
+.model-combo-caret{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:0;background:transparent;color:#81786d;font-size:15px;line-height:1;transition:transform .15s}
+.model-combo-caret.open{transform:translateY(-50%) rotate(180deg)}
+.model-combo-list{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:230px;overflow:auto;margin:0;padding:4px;list-style:none;border:1px solid var(--line,#e5dfe5);border-radius:10px;background:var(--surface,#fff);box-shadow:0 10px 26px #44364c22}
+.model-combo-list li>button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 10px;border-radius:7px;font-size:13px;line-height:1.4;word-break:break-all}
+.model-combo-list li>button:hover{background:var(--accent-soft,#eee7f2)}
+.model-combo-list li>button.current{color:var(--accent);font-weight:600}
+.model-combo-empty{padding:10px;font-size:12px;color:var(--muted)}
+.shell .model-combo>input{background:var(--field);color:var(--ink);border-color:var(--line)}
