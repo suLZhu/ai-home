@@ -157,7 +157,7 @@
 .home-person:focus-visible{outline:2px solid #987d6c;outline-offset:2px}
 .home-person-circle{display:grid;place-items:center;width:clamp(66px,20vw,88px);height:clamp(66px,20vw,88px);border-radius:50%;overflow:hidden;border:1px solid #b7aa98;background:#ebe2d6;color:#574c43;font-size:27px;box-shadow:0 5px 18px #8c7e6a16}
 .home-person-circle img{width:100%;height:100%;object-fit:cover}
-.home-person.is-me .home-person-circle{background:#e2d9e5;border-color:#b9a8bc;transform:translateY(-5px)}
+.home-person.is-me .home-person-circle{background:#e2d9e5;border-color:#b9a8bc}
 .home-person-label{max-width:100%;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .home-person-caption{font-size:11px;color:#8c8176}
 @media(prefers-reduced-motion:reduce){.home-person{transition:none}}
@@ -363,7 +363,12 @@
 /* 主页入口圆圈：透明悬浮，不要线条 */
 .shell .home-person-circle{border-color:transparent;background:transparent;box-shadow:none;color:var(--ink)}
 .shell .home-person.is-me .home-person-circle{background:transparent;border-color:transparent}
-.shell .home-person:hover .home-person-circle{background:var(--field)}
-/* 自定义聊天背景 / 自定义气泡图（数据来自本机上传） */
-.shell.chatbg-image .chat-body{background-image:var(--chat-bg-image);background-size:cover;background-position:center}
+.shell .home-person:hover .home-person-circle{background:var(--card)}
+/* 自定义聊天背景图：伪元素铺图 + 透明度可调，内容始终压在图上方 */
+.shell.chatbg-image .chat-body{position:relative;background:var(--field)}
+.shell.chatbg-image .chat-body::before{content:"";position:absolute;inset:0;background-image:var(--chat-bg-image);background-size:cover;background-position:center;opacity:var(--chat-bg-opacity,1);pointer-events:none}
+.shell.chatbg-image .chat-body>*{position:relative}
 .shell.bubble-image .bubble{background-image:var(--bubble-image);background-size:cover;background-position:center}
+
+/* 工作区小条说明 */
+.workspace-note{margin:-4px 0 12px;font-size:12px;color:var(--muted);line-height:1.6}

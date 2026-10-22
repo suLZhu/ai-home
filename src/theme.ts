@@ -1,11 +1,11 @@
 export type ThemeId='lavender'|'paper'|'forest'|'night'
-export type ThemePrefs={theme:ThemeId;font:'serif'|'sans'|'custom';scale:number;radius:number;chatBackground:'theme'|'plain'|'custom1'|'custom2';bubble:'soft'|'outlined'|'image'}
+export type ThemePrefs={theme:ThemeId;font:'serif'|'sans'|'custom';scale:number;radius:number;chatBackground:'theme'|'plain'|'custom1'|'custom2';chatBgOpacity:number;bubble:'soft'|'outlined'|'image'}
 /** 本机自定义素材（字体/背景/气泡图，dataURL）。不进云端快照，只存浏览器。 */
 export type CustomAssets={bg1:string;bg2:string;bubble:string;fontName:string;fontData:string}
 export const EMPTY_ASSETS:CustomAssets={bg1:'',bg2:'',bubble:'',fontName:'',fontData:''}
 /** 每位助手独立的聊天外观覆盖；'follow' 或缺省 = 跟随全局 */
 export type PersonAppearancePref={chatBackground:string;bubble:string}
-export const DEFAULT_THEME:ThemePrefs={theme:'lavender',font:'serif',scale:100,radius:16,chatBackground:'theme',bubble:'soft'}
+export const DEFAULT_THEME:ThemePrefs={theme:'lavender',font:'serif',scale:100,radius:16,chatBackground:'theme',chatBgOpacity:100,bubble:'soft'}
 export const THEMES:{id:ThemeId;name:string;description:string;swatches:string[]}[]=[
  {id:'lavender',name:'奶灰浅紫',description:'温柔的默认小家',swatches:['#f2eef4','#e9e1f0','#8871a5']},
  {id:'paper',name:'暖米白书页',description:'午后的旧书房',swatches:['#f5f0e6','#eee8dc','#9b7b64']},

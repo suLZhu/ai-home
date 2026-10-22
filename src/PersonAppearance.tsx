@@ -23,8 +23,7 @@ export function PersonAppearance({ value, assets, onChange }: {
         <option value="follow">跟随全局</option>
         <option value="theme">主题背景</option>
         <option value="plain">纯色简洁</option>
-        <option value="custom1" disabled={!assets.bg1}>自定义背景一{assets.bg1 ? ' ✓' : '（未上传）'}</option>
-        <option value="custom2" disabled={!assets.bg2}>自定义背景二{assets.bg2 ? ' ✓' : '（未上传）'}</option>
+        <option value="custom1" disabled={!assets.bg1}>自定义背景{assets.bg1 ? ' ✓' : '（未上传）'}</option>
       </select>
     </label>
     <label>聊天气泡
