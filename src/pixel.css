@@ -11,7 +11,7 @@
    桌面 Firefox 不渲染 input 伪元素，会退化为"反色实心方块"（仍可辨识）。 */
 
 /* ── 复选框 ───────────────────────────── */
-.shell input[type="checkbox"] {
+.beautify-pixel input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 20px;
@@ -27,12 +27,12 @@
   box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
   cursor: pointer;
 }
-.shell input[type="checkbox"]:checked {
+.beautify-pixel input[type="checkbox"]:checked {
   background-image: none !important;
   background-color: var(--pixel-ink, #2f2c33) !important;
 }
 /* 像素阶梯对勾（4 个 3×3 色块，mask 使颜色跟随主题） */
-.shell input[type="checkbox"]:checked::after {
+.beautify-pixel input[type="checkbox"]:checked::after {
   content: "";
   display: block;
   width: 100%;
@@ -41,17 +41,17 @@
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M2 7h3v3h3v3h3v-3h3V7h3V4h-3v3h-3v3h-3V7H5v3H2z'/%3E%3C/svg%3E") center / 13px 13px no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23fff' d='M2 7h3v3h3v3h3v-3h3V7h3V4h-3v3h-3v3h-3V7H5v3H2z'/%3E%3C/svg%3E") center / 13px 13px no-repeat;
 }
-.shell input[type="checkbox"]:focus-visible {
+.beautify-pixel input[type="checkbox"]:focus-visible {
   outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
   outline-offset: 2px;
 }
-.shell input[type="checkbox"]:disabled {
+.beautify-pixel input[type="checkbox"]:disabled {
   opacity: .45;
   cursor: not-allowed;
 }
 
 /* ── 下拉选框（保留系统箭头，只换皮肤） ── */
-.shell select {
+.beautify-pixel select {
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
@@ -60,16 +60,16 @@
   box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
   padding-right: 30px !important;
 }
-.shell select:focus-visible {
+.beautify-pixel select:focus-visible {
   outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
   outline-offset: 2px;
 }
 
 /* ── 像素图标框（黑白，不再彩色） ─────── */
-.shell .sidebar-logo,
-.shell .sidebar-link-icon,
-.shell .fun-module-icon,
-.shell .settings-module-icon {
+.beautify-pixel .sidebar-logo,
+.beautify-pixel .sidebar-link-icon,
+.beautify-pixel .fun-module-icon,
+.beautify-pixel .settings-module-icon {
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
@@ -80,14 +80,14 @@
   filter: grayscale(1) contrast(1.12);
 }
 /* 选中态：整块反色（黑白像素的经典按下效果） */
-.shell .sidebar-link.active .sidebar-link-icon {
+.beautify-pixel .sidebar-link.active .sidebar-link-icon {
   background-color: var(--pixel-ink, #2f2c33) !important;
   background-image: none !important;
   color: var(--pixel-paper, #f7f5f2) !important;
 }
 
 /* 大号占位图标也入像素框 */
-.shell .module-placeholder span {
+.beautify-pixel .module-placeholder span {
   display: inline-grid;
   place-items: center;
   width: 52px;
@@ -102,7 +102,7 @@
 }
 
 /* 状态点 → 像素小方块 */
-.shell .sidebar-status-dot {
+.beautify-pixel .sidebar-status-dot {
   width: 8px !important;
   height: 8px !important;
   border-radius: 0 !important;
@@ -110,11 +110,11 @@
 }
 
 /* 图标旁的文字箭头去彩 */
-.shell .fun-module-arrow { color: var(--pixel-ink, #2f2c33) !important; }
+.beautify-pixel .fun-module-arrow { color: var(--pixel-ink, #2f2c33) !important; }
 
 /* 看板空状态 & 自动刷新胶囊入像素风 */
-.shell .tool-dash-empty span { filter: grayscale(1) contrast(1.12); }
-.shell .tool-dash-auto {
+.beautify-pixel .tool-dash-empty span { filter: grayscale(1) contrast(1.12); }
+.beautify-pixel .tool-dash-auto {
   border: 2px solid var(--pixel-ink, #2f2c33) !important;
   border-radius: 0 !important;
   background-color: var(--pixel-paper, #f7f5f2) !important;
@@ -122,4 +122,46 @@
   background-size: 6px 6px !important;
   color: var(--pixel-ink, #2f2c33) !important;
   box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .3)) !important;
+}
+
+/* 「普通简介」迷你预览：全局开着像素包时，也局部还原原生皮肤供对比 */
+.beautify-pixel .beautify-plain input[type="checkbox"] {
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  border: initial !important;
+  border-radius: initial !important;
+  background: initial !important;
+  box-shadow: none !important;
+}
+.beautify-pixel .beautify-plain input[type="checkbox"]:checked::after { content: none; }
+.beautify-pixel .beautify-plain select {
+  border: 1px solid var(--line) !important;
+  border-radius: 8px !important;
+  background-color: var(--field) !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+  padding-right: 8px !important;
+}
+.beautify-pixel .beautify-plain .beautify-mini-icon {
+  border: none !important;
+  border-radius: 10px !important;
+  background-image: none !important;
+  background-color: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  box-shadow: none !important;
+  filter: none;
+}
+.beautify-pixel .beautify-plain .beautify-mini-chip {
+  border: 1px solid var(--line) !important;
+  border-radius: 999px !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.beautify-pixel .beautify-plain .beautify-mini-chip.active {
+  background-color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fbf9fd !important;
 }
