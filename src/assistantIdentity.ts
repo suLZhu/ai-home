@@ -7,7 +7,7 @@ export const LEGACY_ASSISTANTS = [
 // 默认显示名：只影响「从未被用户改过名」的助手展示，不参与 legacyId 迁移映射（映射仍按旧名字）。
 export const DEFAULT_DISPLAY_NAMES: Record<string, string> = {
   'assistant-yanweixi': '默认助手',
-  'assistant-yanshuo': '默认助手1',
+  'assistant-yanshuo': '默认助手2号',
 }
 const identityFields = ['messages', 'conversations', 'activeConversationIds', 'memory', 'memoryEntries', 'prompt', 'characters', 'worldbook', 'mcpConnections', 'tasks'] as const
 type Snapshot = Record<string, any>

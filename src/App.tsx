@@ -36,6 +36,9 @@ function readMessages(): Record<Person,ChatMessage[]> {
 const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', '自主生活', 'MCP', '模型设置', '角色外观']
 // 旧显示名 → 新默认显示名（仅迁移「从未改过名」的助手，用户改过的名字保留）
 const LEGACY_DISPLAY_NAMES: Record<string, string> = { 'assistant-yanweixi': '晏未晞', 'assistant-yanshuo': '言朔' }
+function applyDefaultDisplayNames(list: AssistantRecord[]): AssistantRecord[] {
+  return list.map(a => DEFAULT_DISPLAY_NAMES[a.id] && a.name === LEGACY_DISPLAY_NAMES[a.id] ? { ...a, name: DEFAULT_DISPLAY_NAMES[a.id] } : a)
+}
 
 function read<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) || '') as T } catch { return fallback }
@@ -69,7 +72,7 @@ export default function App() {
   const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>({...DEFAULT_THEME,...read<Partial<ThemePrefs>>('ai-home.themePrefs',DEFAULT_THEME)}))
   const [beautifyPack,setBeautifyPack]=useState<string>(()=>read('ai-home.beautifyPack',DEFAULT_BEAUTIFY_PACK))
   useEffect(()=>{ try{localStorage.setItem('ai-home.beautifyPack',JSON.stringify(beautifyPack))}catch{ /* private mode */ } },[beautifyPack])
-  const [roomName,setRoomName]=useState<string>(()=>read('ai-home.roomName','我的房间'))
+  const [roomName,setRoomName]=useState<string>(()=>{const saved=read<string>('ai-home.roomName','我的房间');return saved==='我的房间'?'用户':saved})
   useEffect(()=>{ try{localStorage.setItem('ai-home.roomName',JSON.stringify(roomName))}catch{ /* private mode */ } },[roomName])
   const [customAssets,setCustomAssets]=useState<CustomAssets>(()=>read<CustomAssets>('ai-home.customAssets',EMPTY_ASSETS))
   useEffect(()=>{ try{localStorage.setItem('ai-home.customAssets',JSON.stringify(customAssets))}catch{ console.warn('自定义素材过大，未能存入本地存储') } },[customAssets])
@@ -83,10 +86,7 @@ export default function App() {
       el.textContent='@font-face{font-family:"CustomUpload";src:url("'+customAssets.fontData+'");font-display:swap;}'
     }else if(el){el.textContent=''}
   },[customAssets.fontData,themePrefs.font])
-  const [assistants, setAssistants] = useState<AssistantRecord[]>(() => {
-    const saved = read<AssistantRecord[]>('ai-home.assistants', LEGACY_ASSISTANTS.map(a => ({...a, createdAt:'1970-01-01T00:00:00.000Z'})))
-    return saved.map(a => DEFAULT_DISPLAY_NAMES[a.id] && a.name === LEGACY_DISPLAY_NAMES[a.id] ? { ...a, name: DEFAULT_DISPLAY_NAMES[a.id] } : a)
-  })
+  const [assistants, setAssistants] = useState<AssistantRecord[]>(() => applyDefaultDisplayNames(read<AssistantRecord[]>('ai-home.assistants', LEGACY_ASSISTANTS.map(a => ({...a, createdAt:'1970-01-01T00:00:00.000Z'})))))
   const displayName = (name: Person) => assistants.find(a => a.id === LEGACY_ASSISTANTS.find(x => x.name === name)?.id)?.name || name
   const [person, setPerson] = useState<Person>('晏未晞')
   const [chatOpen, setChatOpen] = useState(false)
@@ -160,7 +160,7 @@ export default function App() {
   useEffect(() => { latestSnapshot.current = getSnapshot() }, [getSnapshot])
   const applySnapshot = useCallback((data: any) => {
     if (data.themePrefs && typeof data.themePrefs==='object' && ['lavender','paper','forest','night'].includes(data.themePrefs.theme)) setThemePrefs({...DEFAULT_THEME,...data.themePrefs})
-    if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(data.assistants)
+    if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(applyDefaultDisplayNames(data.assistants))
     if (data.conversations && Array.isArray(data.conversations['晏未晞']) && Array.isArray(data.conversations['言朔'])) {
       const convs:Record<Person,Conversation[]>={'晏未晞':data.conversations['晏未晞'],'言朔':data.conversations['言朔']}
       setConversations(convs)
