@@ -726,6 +726,8 @@ function Editor({title,value,onChange,placeholder}:{title:string,value:string,on
 function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onChange:(v:ModelConfig)=>void,apiKey:string,setApiKey:(v:string)=>void}) {
  const [testing,setTesting]=useState(false)
  const [testResult,setTestResult]=useState<{ok:boolean;text:string}|null>(null)
+ const [listing,setListing]=useState(false)
+ const [modelList,setModelList]=useState<{ok:boolean;text:string;ids:string[]}|null>(null)
  async function testConnection(){
    if(!value.endpoint.trim()||!value.model.trim()||!apiKey.trim()){setTestResult({ok:false,text:'请先填写 API 地址、模型名称和 API Key。'});return}
    let endpoint=value.endpoint.trim().replace(/\/+$/,'')
@@ -736,12 +738,34 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
      if(!response.ok){const detail=(await response.text()).slice(0,180);throw new Error('HTTP '+response.status+(detail?' · '+detail:''))}
      const data=await response.json()
      const models=Array.isArray(data?.data)?data.data:[]
+     const ids=models.map((m:any)=>m?.id).filter((x:any)=>typeof x==='string'&&x)
      const found=models.some((m:any)=>m?.id===value.model)
-     setTestResult({ok:true,text:models.length?(found?'连接成功，且模型在可用列表中。':'连接成功；未在模型列表中找到所填模型，请确认模型 ID。'):'接口响应正常，但未返回标准模型列表。'})
+     if(ids.length)setModelList({ok:true,text:'',ids})
+     setTestResult({ok:true,text:models.length?(found?'连接成功，且模型在可用列表中。':'连接成功；未在模型列表中找到所填模型，请确认模型 ID。')+(ids.length?'模型名称框已可下拉选择。':''):'接口响应正常，但未返回标准模型列表。'})
    }catch(e){setTestResult({ok:false,text:e instanceof Error?(/Failed to fetch|NetworkError/i.test(e.message)?'浏览器无法读取接口。可能是 CORS、网络或地址问题；这不一定代表 API Key 错误。':e.message):'连接测试失败。'})}
    finally{setTesting(false)}
  }
- return <div className="tool-panel"><h3>模型连接</h3><p className="muted">支持 OpenAI 兼容接口，例如 One API / New API。API Key 只保存在当前页面内存，不写入浏览器存储；刷新后需要重新填写。</p><label className="model-field">API 地址<input value={value.endpoint} onChange={e=>{onChange({...value,endpoint:e.target.value});setTestResult(null)}} placeholder="https://你的中转站/v1"/></label><label className="model-field">模型名称<input value={value.model} onChange={e=>{onChange({...value,model:e.target.value});setTestResult(null)}} placeholder="例如 gpt-4o-mini"/></label><label className="model-field">API Key（本次打开有效）<input type="password" autoComplete="off" value={apiKey} onChange={e=>{setApiKey(e.target.value);setTestResult(null)}} placeholder="sk-…"/></label><div className="pricing-settings"><b>用量费用估算（最终显示人民币 ¥）</b><small>输入价格按服务商 USD / 百万 tokens 资费填写；汇率可自行调整。留空价格则不估算费用，缓存价格留空时按普通输入价估算。</small><div className="pricing-grid"><label>输入价格<input type="number" min="0" step="any" value={value.inputPrice??''} onChange={e=>onChange({...value,inputPrice:e.target.value})} placeholder="例如 2.5"/></label><label>输出价格<input type="number" min="0" step="any" value={value.outputPrice??''} onChange={e=>onChange({...value,outputPrice:e.target.value})} placeholder="例如 10"/></label><label>缓存输入价格<input type="number" min="0" step="any" value={value.cachedInputPrice??''} onChange={e=>onChange({...value,cachedInputPrice:e.target.value})} placeholder="可选"/></label><label>美元兑人民币汇率<input type="number" min="0.01" step="0.01" value={value.usdToCny??'7.2'} onChange={e=>onChange({...value,usdToCny:e.target.value})} placeholder="例如 7.2"/></label></div></div><button type="button" disabled={testing} onClick={testConnection}>{testing?'正在测试连接…':'测试 API 连接'}</button>{testResult&&<p role="status" className={testResult.ok?'model-test-ok':'model-test-error'}>{testResult.text}</p>}<small>地址、模型名和价格设置自动保存在此浏览器。API Key 不会持久化。若接口不支持 CORS，需要由云端代理转发，不能靠前端绕过。</small></div>
+ function normalizeEndpoint(){
+   let endpoint=value.endpoint.trim().replace(/\/+$/,'')
+   if(!/\/v1$/.test(endpoint))endpoint+='/v1'
+   return endpoint
+ }
+ async function fetchModels(){
+   if(!value.endpoint.trim()){setModelList({ok:false,text:'请先填写 API 地址。',ids:[]});return}
+   if(!apiKey.trim()){setModelList({ok:false,text:'请先填写 API Key，再获取模型列表。',ids:[]});return}
+   setListing(true);setModelList(null)
+   try{
+     const response=await fetch(normalizeEndpoint()+'/models',{headers:{Authorization:'Bearer '+apiKey}})
+     if(!response.ok){const detail=(await response.text()).slice(0,180);throw new Error('HTTP '+response.status+(detail?' · '+detail:''))}
+     const data=await response.json()
+     const ids=(Array.isArray(data?.data)?data.data:[]).map((m:any)=>m?.id).filter((x:any)=>typeof x==='string'&&x)
+     if(!ids.length){setModelList({ok:false,text:'接口响应正常，但未返回可用模型列表。',ids:[]});return}
+     setModelList({ok:true,text:'已获取 '+ids.length+' 个模型，点击模型名称框即可下拉选择。',ids})
+     if(!value.model.trim())onChange({...value,model:ids[0]})
+   }catch(e){setModelList({ok:false,text:e instanceof Error?(/Failed to fetch|NetworkError/i.test(e.message)?'浏览器无法读取接口。可能是 CORS、网络或地址问题。':e.message):'获取模型列表失败。',ids:[]})}
+   finally{setListing(false)}
+ }
+ return <div className="tool-panel"><h3>模型连接</h3><p className="muted">支持 OpenAI 兼容接口，例如 One API / New API。API Key 只保存在当前页面内存，不写入浏览器存储；刷新后需要重新填写。</p><label className="model-field">API 地址<input value={value.endpoint} onChange={e=>{onChange({...value,endpoint:e.target.value});setTestResult(null);setModelList(null)}} placeholder="https://你的中转站/v1"/></label><label className="model-field">模型名称<input list="ai-model-options" value={value.model} onChange={e=>{onChange({...value,model:e.target.value});setTestResult(null)}} placeholder={modelList&&modelList.ids.length?'点击或输入以选择模型':'例如 gpt-4o-mini'}/>{modelList&&modelList.ids.length>0&&<datalist id="ai-model-options">{modelList.ids.map(id=><option key={id} value={id}/>)}</datalist>}</label><label className="model-field">API Key（本次打开有效）<input type="password" autoComplete="off" value={apiKey} onChange={e=>{setApiKey(e.target.value);setTestResult(null)}} placeholder="sk-…"/></label><div className="model-fetch-row"><button type="button" disabled={listing} onClick={fetchModels}>{listing?'正在获取…':'获取站点模型列表'}</button><small>拉取该站点可用模型，填好 API 地址与 Key 后点击，即可在模型名称框下拉选择。</small></div>{modelList&&<p role="status" className={modelList.ok?'model-test-ok':'model-test-error'}>{modelList.text}</p>}<div className="pricing-settings"><b>用量费用估算（最终显示人民币 ¥）</b><small>输入价格按服务商 USD / 百万 tokens 资费填写；汇率可自行调整。留空价格则不估算费用，缓存价格留空时按普通输入价估算。</small><div className="pricing-grid"><label>输入价格<input type="number" min="0" step="any" value={value.inputPrice??''} onChange={e=>onChange({...value,inputPrice:e.target.value})} placeholder="例如 2.5"/></label><label>输出价格<input type="number" min="0" step="any" value={value.outputPrice??''} onChange={e=>onChange({...value,outputPrice:e.target.value})} placeholder="例如 10"/></label><label>缓存输入价格<input type="number" min="0" step="any" value={value.cachedInputPrice??''} onChange={e=>onChange({...value,cachedInputPrice:e.target.value})} placeholder="可选"/></label><label>美元兑人民币汇率<input type="number" min="0.01" step="0.01" value={value.usdToCny??'7.2'} onChange={e=>onChange({...value,usdToCny:e.target.value})} placeholder="例如 7.2"/></label></div></div><button type="button" disabled={testing} onClick={testConnection}>{testing?'正在测试连接…':'测试 API 连接'}</button>{testResult&&<p role="status" className={testResult.ok?'model-test-ok':'model-test-error'}>{testResult.text}</p>}<small>地址、模型名和价格设置自动保存在此浏览器。API Key 不会持久化。若接口不支持 CORS，需要由云端代理转发，不能靠前端绕过。</small></div>
 }
 
 function Chat(p: any) {

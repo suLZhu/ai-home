@@ -375,3 +375,7 @@
 .room-tool-screen .settings-back{justify-self:start}
 .room-tool-screen .tool-panel{margin-top:0}
 .room-tool-screen .room-header{padding-bottom:4px}
+
+/* 模型列表拉取 */
+.model-fetch-row{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+.model-fetch-row small{color:var(--muted);font-size:11px;line-height:1.5}
