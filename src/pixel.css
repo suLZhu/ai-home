@@ -140,3 +140,53 @@
   color: var(--pixel-ink, #2f2c33) !important;
   box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
 }
+
+
+/* ═══════════ 全域像素化：整个界面进入像素世界 ═══════════ */
+
+/* 像素世界没有圆角：所有圆角（含头像圆、药丸、进度条）一律直角 */
+.beautify-pixel *{border-radius:0 !important}
+
+/* 常见卡片/面板：墨线直角 + 硬投影 */
+.beautify-pixel .setting-card,
+.beautify-pixel .settings-module-card,
+.beautify-pixel .settings-inner-card,
+.beautify-pixel .tool-grid > button,
+.beautify-pixel .tool-panel,
+.beautify-pixel .chat-entry,
+.beautify-pixel .room-session-switch,
+.beautify-pixel .calendar-card,
+.beautify-pixel .theme-tile,
+.beautify-pixel .theme-tab-panel,
+.beautify-pixel .theme-setting-tabs,
+.beautify-pixel .beautify-row,
+.beautify-pixel .project-card,
+.beautify-pixel .login-card,
+.beautify-pixel .fun-module-card,
+.beautify-pixel .tool-dash-item,
+.beautify-pixel .tool-dash-chip,
+.beautify-pixel .mcp-connection-card,
+.beautify-pixel .skill-card,
+.beautify-pixel .world-entry,
+.beautify-pixel .usage-panel,
+.beautify-pixel .emoji-panel,
+.beautify-pixel .inbox-toast {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}
+
+/* 聊天气泡：方块 + 墨线 + 硬投影 */
+.beautify-pixel .bubble {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}
+
+/* 通用输入框 / 文本域：和选框同款皮肤 */
+.beautify-pixel input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.beautify-switch),
+.beautify-pixel textarea {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius:0 !important;
+  background-color:var(--pixel-paper, #f7f5f2) !important;
+  color:var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}

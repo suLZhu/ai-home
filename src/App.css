@@ -164,7 +164,7 @@
 
 /* Theme layer: overrides legacy fixed palette without rewriting existing layouts. */
 .shell{background:var(--surface);color:var(--ink);font-family:var(--font-family);font-size:calc(16px * var(--font-scale))}
-.shell .bottom-nav{background:transparent;border-top-color:transparent}
+.shell .bottom-nav{background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top-color:transparent}
 .shell .calendar-card,.shell .tool-grid button,.shell .fun-grid button,.shell .tool-panel,.shell .character-editor,.shell .lounge-panel,.shell .ledger-form,.shell .ledger-summary>div,.shell .diary-editor{background:var(--card)}
 .shell .bubble.user{background:var(--user-bubble);color:var(--ink)}
 .shell .bubble.assistant{background:var(--assistant-bubble);color:var(--ink)}
