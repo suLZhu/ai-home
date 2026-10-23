@@ -314,6 +314,29 @@
 .conversation-chip>button{max-width:175px}
 .conversation-avatar{width:20px;height:20px;flex-shrink:0;border-radius:50%;object-fit:cover;background:var(--accent-soft)}
 .conversation-avatar-fallback{display:grid;place-items:center;font-size:10px;font-style:normal;font-weight:600;color:var(--accent)}
+
+/* ── 头像体系：房间头部当前助手 / 聊天标题 / 消息气泡两侧 ── */
+.room-person-switch.room-person-current{gap:7px;padding:5px 14px 5px 6px}
+.room-person-avatar{width:28px;height:28px;flex-shrink:0;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:600}
+.room-person-avatar img{width:100%;height:100%;object-fit:cover}
+.room-person-current small{font-size:13px;color:var(--ink);white-space:nowrap}
+.chat-header-title{display:flex;align-items:center;gap:7px;flex:1;min-width:0;justify-content:center;padding:0 4px}
+.chat-header-title>b{flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;user-select:none;font-size:15px;letter-spacing:.01em}
+.chat-avatar{width:26px;height:26px;flex-shrink:0;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600}
+.chat-avatar img{width:100%;height:100%;object-fit:cover}
+.message-row{gap:8px}
+.message-row .bubble{max-width:72%}
+.message-avatar{width:34px;height:34px;flex-shrink:0;align-self:flex-start;border-radius:9px;overflow:hidden;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:600}
+.message-avatar img{width:100%;height:100%;object-fit:cover}
+.message-avatar-me{background:var(--card);border:1px solid var(--line);color:var(--muted)}
+
+/* ── 图片表情包：上传与网格 ── */
+.sticker-grid>button{padding:4px}
+.sticker-thumb{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--field)}
+.sticker-actions{display:flex;gap:8px;margin-top:10px}
+.sticker-actions button{flex:1;min-height:36px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font-size:12px}
+.sticker-actions button:hover{background:var(--accent-soft);color:var(--accent)}
+.sticker-actions+h4{margin-top:14px}
 .message-usage{color:var(--muted)}
 
 /* ── 房间页：聊天入口卡、工具格 ── */
