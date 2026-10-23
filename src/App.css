@@ -152,6 +152,17 @@
 .room-session-controls select{flex:1;min-width:0;width:0;border:1px solid #d4c8b8;border-radius:10px;padding:10px;background:#fbf8f1;color:#493d32;font:inherit;font-size:13px}
 .room-session-controls button{flex-shrink:0;border:1px solid #cfc2b0;border-radius:10px;padding:10px 12px;background:#e8dfd1;color:#665443;font-size:12px}
 .room-session-hint{line-height:1.4}
+.room-session-heading-side{display:flex;align-items:center;gap:8px}
+.room-session-heading-side button{border:1px solid #cfc2b0;border-radius:10px;padding:7px 11px;background:#e8dfd1;color:#665443;font-size:12px;white-space:nowrap}
+.room-session-heading-side button:disabled{opacity:.55;cursor:wait}
+.room-session-list{display:grid;gap:7px}
+.room-session-item{display:flex;align-items:center;gap:7px;min-width:0}
+.room-session-name{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #d4c8b8;border-radius:12px;background:#fbf8f1;color:#493d32;padding:10px 12px;font-size:13px;transition:border-color .15s,background .15s}
+.room-session-name:hover{border-color:#a99a84}
+.room-session-name.selected{border-color:#9b8261;background:#ece4d6;font-weight:600}
+.room-session-delete{flex-shrink:0;width:38px;height:38px;display:grid;place-items:center;border:1px solid #ddc8bd;border-radius:50%;background:#f6e8e1;color:#965743;font-size:15px;line-height:1}
+.room-session-delete:hover{background:#f0dcd3}
+.room-session-empty{margin:0;font-size:12px;color:#8a7d6d}
 
 /* Three independent home entrances: portraits, accessible labels and tap targets. */
 .home-people{gap:10px;padding:46px 4px 0;align-items:start}
@@ -312,6 +323,11 @@
 .conversation-chip input{background:var(--field);color:var(--ink);border-color:var(--accent)}
 .conversation-new{background:var(--accent);color:#fbf9fd;border-color:var(--accent)}
 .conversation-delete{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
+.room-session-heading-side button{background:var(--accent-soft);border-color:var(--line);color:var(--ink)}
+.room-session-name{background:var(--field);color:var(--ink);border-color:var(--line)}
+.room-session-name.selected{background:var(--accent-soft);border-color:var(--accent)}
+.room-session-delete{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
+.room-session-empty{color:var(--muted)}
 
 /* ── 侧边栏（百宝箱）→ 主题变量 ── */
 .app-sidebar{background:var(--surface);color:var(--ink);border-color:var(--line)}
