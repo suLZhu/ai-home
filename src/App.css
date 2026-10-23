@@ -8,7 +8,7 @@
 
 .model-field{display:block;margin:14px 0;font-size:14px}.model-field input{display:block;width:100%;margin-top:6px;padding:11px;border:1px solid #c9c0b4;border-radius:8px;background:#faf6ef}.bubble.assistant{align-self:flex-start;background:#eee6d9;color:#39342e}.bubble.user{align-self:flex-end}.chat-error{display:flex;gap:10px;align-items:start;padding:10px 14px;background:#f6e3db;color:#7d3527;font-size:13px;line-height:1.5}.chat-error span{flex:1;overflow-wrap:anywhere}.chat-error button{border:0;background:transparent;font-size:18px}.compose button:disabled{opacity:.6}
 
-.compose-wechat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;padding:12px;border:1px solid #d8d0c5;border-radius:16px;background:#f7f2e9}.compose-wechat>input{grid-column:1;grid-row:1;border:1px solid #c9c0b4;background:#f7f2e9;border-radius:12px;padding:12px 13px;min-width:0;width:100%}.compose-wechat .send-button{grid-column:2;grid-row:1;align-self:stretch;border:0;background:#d9d0c2;border-radius:12px;padding:0 17px}.compose-wechat .send-button:disabled{opacity:.45;cursor:default}.compose-tools{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:8px;padding-top:1px}.compose-tools>button{width:34px;height:34px;border:0;border-radius:10px;background:transparent;font-family:system-ui,sans-serif;font-size:23px;color:#615b53;display:grid;place-items:center}.compose-tools>button:hover,.compose-tools>button.tool-active{background:#e7dfd1}.compose-tools .tool-hint{margin-left:auto;color:#9a9084;font-size:11px}.hidden-file-input{display:none!important}.attachment-tray{display:flex;gap:8px;overflow-x:auto;padding:8px 2px}.attachment-chip{position:relative;display:flex;align-items:center;gap:7px;flex-shrink:0;max-width:180px;padding:6px 22px 6px 6px;border:1px solid #d8d0c5;border-radius:10px;background:#eee8dc;font-size:11px}.attachment-chip>img{width:42px;height:42px;object-fit:cover;border-radius:6px}.attachment-chip>span:not(.file-chip-icon){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:95px}.attachment-chip>button{position:absolute;right:4px;top:2px;border:0;background:transparent;font-size:17px;color:#81786d}.file-chip-icon{font-size:25px;padding:5px}.emoji-panel{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;padding:10px;margin-bottom:8px;border:1px solid #d8d0c5;border-radius:14px;background:#f7f2e9}.emoji-panel button{border:0;background:transparent;border-radius:8px;padding:7px 0;font-size:22px}.emoji-panel button:hover{background:#e7dfd1}.message-row{display:flex;flex-wrap:wrap;width:100%;margin:10px 0}.message-row.user{justify-content:flex-end}.message-row.assistant{justify-content:flex-start}.message-row .bubble{margin:0;overflow-wrap:anywhere}.sent-attachment{margin-top:8px}.sent-image-placeholder,.sent-file{display:flex;align-items:center;gap:8px;border-radius:9px;padding:9px;background:#f7f2e9;font-size:12px}.sent-file>span{font-size:24px}.sent-file b,.sent-file small{display:block}.sent-file small{color:#81786d;margin-top:3px}.attachment-note{display:block;margin:7px 3px 0;color:#9a9084;font-size:10px;line-height:1.5}.fullscreen-chat{padding-bottom:8px}.chat-body{min-height:140px}.chat-error{flex-shrink:0}@media(max-width:360px){.compose-tools{gap:3px}.compose-tools .tool-hint{font-size:10px}.compose-wechat .send-button{padding:0 11px}.emoji-panel{grid-template-columns:repeat(6,1fr)}}
+.compose-wechat{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:8px;padding:12px;border:1px solid #d8d0c5;border-radius:16px;background:#f7f2e9}.compose-wechat>input{grid-column:1;grid-row:1;border:1px solid #c9c0b4;background:#f7f2e9;border-radius:12px;padding:12px 13px;min-width:0;width:100%}.compose-wechat .send-button{grid-column:4;grid-row:1;align-self:stretch;border:0;background:#d9d0c2;border-radius:12px;padding:0 17px}.compose-wechat .send-button:disabled{opacity:.45;cursor:default}.compose-icon{grid-row:1;align-self:stretch;min-width:42px;border:0;border-radius:12px;background:transparent;font-family:system-ui,sans-serif;font-size:21px;color:#615b53;display:grid;place-items:center}.compose-icon:hover,.compose-icon.tool-active{background:#e7dfd1;color:#4f463d}.compose-more{grid-column:1/-1;grid-row:2;display:flex;flex-direction:column;gap:7px;border-top:1px dashed #d8d0c5;padding-top:9px}.compose-more-actions{display:flex;gap:8px}.compose-more-actions button{flex:1;min-height:40px;border:1px solid #d8d0c5;border-radius:11px;background:#eee8dc;color:#5a5248;font-size:13px}.compose-more-actions button:hover{background:#e7dfd1}.hidden-file-input{display:none!important}.attachment-tray{display:flex;gap:8px;overflow-x:auto;padding:8px 2px}.attachment-chip{position:relative;display:flex;align-items:center;gap:7px;flex-shrink:0;max-width:180px;padding:6px 22px 6px 6px;border:1px solid #d8d0c5;border-radius:10px;background:#eee8dc;font-size:11px}.attachment-chip>img{width:42px;height:42px;object-fit:cover;border-radius:6px}.attachment-chip>span:not(.file-chip-icon){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:95px}.attachment-chip>button{position:absolute;right:4px;top:2px;border:0;background:transparent;font-size:17px;color:#81786d}.file-chip-icon{font-size:25px;padding:5px}.emoji-panel{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;padding:10px;margin-bottom:8px;border:1px solid #d8d0c5;border-radius:14px;background:#f7f2e9}.emoji-panel button{border:0;background:transparent;border-radius:8px;padding:7px 0;font-size:22px}.emoji-panel button:hover{background:#e7dfd1}.message-row{display:flex;flex-wrap:wrap;width:100%;margin:10px 0}.message-row.user{justify-content:flex-end}.message-row.assistant{justify-content:flex-start}.message-row .bubble{margin:0;overflow-wrap:anywhere}.sent-attachment{margin-top:8px}.sent-image-placeholder,.sent-file{display:flex;align-items:center;gap:8px;border-radius:9px;padding:9px;background:#f7f2e9;font-size:12px}.sent-file>span{font-size:24px}.sent-file b,.sent-file small{display:block}.sent-file small{color:#81786d;margin-top:3px}.attachment-note{display:block;margin:7px 3px 0;color:#9a9084;font-size:10px;line-height:1.5}.fullscreen-chat{padding-bottom:8px}.chat-body{min-height:140px}.chat-error{flex-shrink:0}@media(max-width:360px){.compose-tools{gap:3px}.compose-tools .tool-hint{font-size:10px}.compose-wechat .send-button{padding:0 11px}.emoji-panel{grid-template-columns:repeat(6,1fr)}}
 
 .sent-image-placeholder img{display:block;max-width:190px;max-height:220px;object-fit:contain;border-radius:8px}.sent-image-placeholder{display:block;padding:4px}
 
@@ -128,7 +128,10 @@
 .conversation-bar{display:flex;align-items:center;gap:7px;padding:9px 0;border-bottom:1px solid #d5cbbb;min-width:0}
 .conversation-list{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;padding:2px 0}
 .conversation-list button,.conversation-new,.conversation-rename{flex-shrink:0;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #d1c7b8;background:#eee8dc;border-radius:15px;padding:7px 10px;font-size:12px}
-.conversation-list button.selected{background:#dcd1c0;border-color:#a99a84;font-weight:600}
+.conversation-chip{flex-shrink:0;display:inline-flex;max-width:170px}
+.conversation-chip>button{max-width:150px}
+.conversation-chip input{width:132px;box-sizing:border-box;border:1px solid #a99a84;border-radius:15px;background:#fbf8f1;padding:7px 10px;font-size:12px;outline-color:#9b8261}
+.conversation-list button.selected,.conversation-chip.selected>button{background:#dcd1c0;border-color:#a99a84;font-weight:600}
 .conversation-new{background:#d9d0c2}
 .conversation-rename{background:transparent}
 /* Keep cloud sync feedback out of the way while editing room/conversation names. */
@@ -137,7 +140,7 @@
 .cloud-status.saved{animation:cloud-status-dismiss 1.8s ease forwards}
 @keyframes cloud-status-dismiss{0%,65%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-5px);visibility:hidden}}
 .settings-logout{margin-top:18px;border:1px solid #d0c4b4;border-radius:10px;background:#eee5d8;color:#705d49;padding:10px 14px}
-.conversation-delete{flex-shrink:0;max-width:110px;border:1px solid #ddc8bd;background:#f6e8e1;color:#965743;border-radius:15px;padding:7px 10px;font-size:12px;white-space:nowrap}
+.conversation-delete{flex-shrink:0;width:36px;height:36px;display:grid;place-items:center;padding:0;border:1px solid #ddc8bd;background:#f6e8e1;color:#965743;border-radius:50%;font-size:15px;line-height:1}
 .conversation-new:disabled{opacity:.55;cursor:wait}
 .conversation-bar{flex-wrap:wrap}
 .conversation-list{flex-basis:100%;order:0}
@@ -247,6 +250,11 @@
 .compose-tools{padding-top:4px;gap:6px}
 .compose-tools>button{width:40px;height:40px;border-radius:12px;color:var(--muted)}
 .compose-tools>button:hover,.compose-tools>button.tool-active{background:var(--accent-soft);color:var(--accent)}
+.compose-icon{color:var(--muted)}
+.compose-icon:hover,.compose-icon.tool-active{background:var(--accent-soft);color:var(--accent)}
+.compose-more{border-top-color:var(--line)}
+.compose-more-actions button{border-color:var(--line);background:var(--field);color:var(--ink)}
+.compose-more-actions button:hover{background:var(--accent-soft)}
 .emoji-panel{border-color:var(--line);background:var(--surface);border-radius:16px}
 .emoji-panel button:hover{background:var(--accent-soft)}
 .history-search{background:var(--surface)}
@@ -254,6 +262,24 @@
 .history-search-results{background:var(--surface)}
 .local-context-controls{color:var(--muted)}
 .local-context-controls input{accent-color:var(--accent)}
+
+/* ── 微信式聊天：头部图标、双击重命名、自定义表情、＋号面板 ── */
+.chat-header{gap:6px}
+.chat-header>b{flex:1;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text;user-select:none}
+.header-rename-input{flex:1;min-width:0;box-sizing:border-box;text-align:center;border:1px solid var(--accent);border-radius:10px;background:var(--field);color:var(--ink);padding:8px 10px;font-size:15px;outline-color:var(--accent)}
+.chat-header-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.chat-header-actions button{width:40px;height:40px;padding:0;display:grid;place-items:center;font-size:16px;border-radius:50%}
+.chat-header-actions button:hover,.chat-header-actions button.tool-active{background:var(--accent-soft);color:var(--accent)}
+.chat-header-actions button:last-child{width:auto;min-width:64px;border-radius:999px;padding:0 14px;font-size:13px}
+.custom-emoji-panel{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px;margin-bottom:8px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.custom-emoji-panel>button{min-width:40px;min-height:40px;border:0;border-radius:10px;background:transparent;font-family:system-ui,sans-serif;font-size:21px}
+.custom-emoji-panel>button:hover{background:var(--accent-soft)}
+.custom-emoji-panel>p{margin:0;width:100%;font-size:12px;color:var(--muted)}
+.custom-emoji-add{display:flex;gap:6px;width:100%;align-items:center;padding-top:6px;border-top:1px dashed var(--line)}
+.custom-emoji-add input{flex:1;min-width:0;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--field);color:var(--ink);padding:8px 10px;font-size:13px;outline-color:var(--accent)}
+.custom-emoji-add button{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:8px 12px;font-size:12px}
+.custom-emoji-add button:disabled{opacity:.5}
+.custom-emoji-add .custom-emoji-clear{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 .message-usage{color:var(--muted)}
 
 /* ── 房间页：聊天入口卡、工具格 ── */
@@ -282,7 +308,8 @@
 
 /* ── 会话条 ── */
 .conversation-list button,.conversation-new,.conversation-rename{background:var(--card);border-color:var(--line);color:var(--ink)}
-.conversation-list button.selected{background:var(--accent-soft);border-color:var(--accent)}
+.conversation-list button.selected,.conversation-chip.selected>button{background:var(--accent-soft);border-color:var(--accent)}
+.conversation-chip input{background:var(--field);color:var(--ink);border-color:var(--accent)}
 .conversation-new{background:var(--accent);color:#fbf9fd;border-color:var(--accent)}
 .conversation-delete{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 
