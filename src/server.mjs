@@ -55,6 +55,10 @@ db.exec(`
     visibility TEXT NOT NULL CHECK(visibility IN ('public','locked')),
     body TEXT NOT NULL, salt TEXT, iv TEXT, tag TEXT, created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS api_keys (
+    person TEXT PRIMARY KEY CHECK(person IN ('晏未晞','言朔')),
+    key_enc TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
 
 
 `)
@@ -200,6 +204,27 @@ createServer(async (req, res) => {
   }
 
   if (!getSession(req)) return send(res, 401, { error: '请先登录' })
+
+  // API Key 加密存储：跨设备同步，登录后带回。
+  if (url.pathname === '/api/keys' && req.method === 'GET') {
+    const rows = db.prepare('SELECT person, key_enc FROM api_keys').all()
+    const keys = {}
+    for (const row of rows) { try { keys[row.person] = decryptSecret(row.key_enc) } catch { /* skip undecryptable */ } }
+    return send(res, 200, { keys })
+  }
+  if (url.pathname === '/api/keys' && req.method === 'PUT') {
+    try {
+      const b = await readBody(req)
+      const person = String(b.person || '')
+      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+      const apiKey = String(b.apiKey || '').trim()
+      const now = new Date().toISOString()
+      if (!apiKey) { db.prepare('DELETE FROM api_keys WHERE person=?').run(person); return send(res, 200, { ok: true, saved: false }) }
+      if (apiKey.length > 8192) return send(res, 400, { error: 'API Key 长度超出限制' })
+      db.prepare('INSERT INTO api_keys (person,key_enc,updated_at) VALUES (?,?,?) ON CONFLICT(person) DO UPDATE SET key_enc=excluded.key_enc, updated_at=excluded.updated_at').run(person, encryptSecret(apiKey), now)
+      return send(res, 200, { ok: true, saved: true })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '保存 API Key 失败' }) }
+  }
 
   // Shared ledger for both assistants. All routes require the existing authenticated session.
   // 代理请求 OpenAI 兼容接口的 /models 列表，绕过浏览器 CORS 限制。
