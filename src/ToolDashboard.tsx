@@ -43,9 +43,9 @@ function brief(value: unknown, max = 90): string {
   return text.length > max ? text.slice(0, max) + '…' : text
 }
 
-export function ToolDashboard() {
+export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: string } = {}) {
   const [logs, setLogs] = useState<ToolLog[]>([])
-  const [person, setPerson] = useState('全部')
+  const [person, setPerson] = useState(defaultPerson)
   const [source, setSource] = useState('全部')
   const [status, setStatus] = useState('全部')
   const [loading, setLoading] = useState(true)
