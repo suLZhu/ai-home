@@ -392,3 +392,31 @@
 .model-combo-list li>button.current{color:var(--accent);font-weight:600}
 .model-combo-empty{padding:10px;font-size:12px;color:var(--muted)}
 .shell .model-combo>input{background:var(--field);color:var(--ink);border-color:var(--line)}
+
+/* ── 真实工具调用状态：实时状态栏 + 消息下可折叠卡片 ── */
+.tool-live-bar{display:flex;flex-direction:column;gap:6px;margin:0 10px 6px;padding:8px 10px;border:1px solid var(--line,#e5dfe5);border-radius:12px;background:var(--surface,#fff);box-shadow:0 2px 10px rgba(64,50,74,.05)}
+.tool-live-item{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink)}
+.tool-live-item b{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool-live-item small{color:var(--muted);flex-shrink:0}
+.tool-live-dot{width:8px;height:8px;border-radius:50%;background:var(--accent,#8b7bb8);flex-shrink:0;animation:tool-live-pulse 1.2s ease-in-out infinite}
+@keyframes tool-live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+.msg-tool-calls{margin:4px 8px 2px;padding:8px 10px;border:1px solid var(--line,#e5dfe5);border-radius:12px;background:var(--surface,#fff)}
+.msg-tool-calls-head{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:0;font-size:12px;color:var(--ink);cursor:pointer;text-align:left}
+.msg-tool-calls-head b{font-weight:600;flex:1;min-width:0}
+.msg-tool-calls-head small{color:var(--muted);flex-shrink:0}
+.msg-tool-calls-icon{flex-shrink:0}
+.msg-tool-calls-chevron{color:var(--muted);flex-shrink:0;font-size:11px}
+.msg-tool-calls-list{list-style:none;margin:8px 0 0;padding:8px 0 0;border-top:1px dashed var(--line,#e5dfe5);display:flex;flex-direction:column;gap:8px}
+.msg-tool-call-top{display:flex;align-items:center;gap:8px;font-size:12px}
+.msg-tool-call-top b{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-tool-call-top small{color:var(--muted);flex-shrink:0}
+.msg-tool-badge{flex-shrink:0;padding:1px 7px;border-radius:999px;font-size:10px;line-height:1.6}
+.msg-tool-badge.running{background:var(--accent-soft,#eee7f2);color:var(--accent,#6f5f9e)}
+.msg-tool-badge.queued,.msg-tool-badge.awaiting_confirmation{background:#fdf1dc;color:#9a7b32}
+.msg-tool-badge.succeeded{background:#dcecdf;color:#4f7d62}
+.msg-tool-badge.failed{background:#f4dee1;color:#ac5f68}
+.msg-tool-badge.cancelled{background:#ececec;color:#777}
+.msg-tool-badge.timed_out{background:#f4dee1;color:#ac5f68}
+.msg-tool-call-detail{margin-top:4px}
+.msg-tool-call-detail summary{font-size:11px;color:var(--muted);cursor:pointer;user-select:none}
+.msg-tool-call-detail pre{margin:6px 0 0;padding:8px;border-radius:8px;background:var(--field,#f6f3f7);font-size:11px;line-height:1.5;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}

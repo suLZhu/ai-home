@@ -11,6 +11,7 @@ import { ToolDashboard } from './ToolDashboard'
 import { BeautifySettings } from './BeautifySettings'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { PersonAppearance } from './PersonAppearance'
+import { reportToolCallStart, reportToolCallEnd, classifyToolError, useToolCalls, useMessageToolCalls, TOOL_STATUS_LABEL, type ToolCallSource } from './toolCalls'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -20,7 +21,7 @@ type Person = '晏未晞' | '言朔'
 type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
-type ChatMessage = { role: 'user' | 'assistant'; content: string; attachments?: MessageAttachment[]; usage?: TokenUsage }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; id?: string; attachments?: MessageAttachment[]; usage?: TokenUsage }
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
@@ -50,22 +51,8 @@ function initialConversations():Record<Person,Conversation[]> {
   return {'晏未晞':[{id:'legacy-yanweixi',title:'旧聊天',messages:old['晏未晞'],updatedAt:now}],'言朔':[{id:'legacy-yanshu',title:'旧聊天',messages:old['言朔'],updatedAt:now}]}
 }
 
-// Tool call dashboard reporting. These helpers only run at real tool execution
-// sites inside send(); they never fire for model-generated prose. Reporting
-// failures are swallowed so the chat flow is never affected.
-type ToolLogSource = 'mcp' | 'worldbook' | 'ledger'
-async function startToolLog(person: Person, source: ToolLogSource, toolName: string, args: unknown): Promise<string | null> {
-  try {
-    const response = await fetch('/api/tool-logs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, source, toolName, arguments: args }) })
-    if (!response.ok) return null
-    const data = await response.json()
-    return typeof data.id === 'string' ? data.id : null
-  } catch { return null }
-}
-async function finishToolLog(logId: string | null, status: 'success' | 'error', resultSummary: unknown, errorMessage?: string) {
-  if (!logId) return
-  try { await fetch('/api/tool-logs/' + logId, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, resultSummary, errorMessage }) }) } catch { /* dashboard must never break chat */ }
-}
+// 真实工具调用事件统一由 src/toolCalls.ts 的事件层上报（见 send() 内调用点）；
+// 模型文字永远不会产生调用记录。
 
 export default function App() {
   const [page, setPage] = useState<Page>('home')
@@ -361,7 +348,11 @@ export default function App() {
     }
     const attachmentLabel = attachments.length ? '\n[附件：'+attachments.map(a=>a.name).join('、')+']' : ''
     const userMessage: ChatMessage = {role:'user',content:text,attachments:attachments.map(a=>({...a,preview:a.preview||a.dataUrl,dataUrl:undefined}))}
-    updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:''}])
+    // 工具调用事件绑定：一次 send() = 一个 runId；助手消息带 id，调用卡片按 messageId 挂到消息下方。
+    const assistantMessageId = crypto.randomUUID()
+    const toolRunId = crypto.randomUUID()
+    const toolConversationId = activeConversationIds[target] || ''
+    updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}])
     setDraft('');setChatError('');setSending(true)
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
@@ -418,22 +409,31 @@ export default function App() {
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+activeApiKey.trim()},body:JSON.stringify(requestBody)});if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
-        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:answer}:m))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:answer}:m))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
         for(const call of toolCalls){
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
-          let callLogId:string|null=null
+          let callKey:string|null=null
           try{
             const localWorldbookTool=['worldbook_create_entry','worldbook_search_entries','worldbook_update_entry'].includes(call.function.name)
+            const logSource:ToolCallSource=call.function.name==='ledger_add_entry'?'ledger':localWorldbookTool?'worldbook':'mcp'
+            // 真实调用点：模型发起的每一次工具调用都先登记（含随后被拒绝的），供聊天卡片与看板共用。
+            let args:any;let argsParsed=true
+            try{args=JSON.parse(call.function.arguments||'{}')}catch{argsParsed=false}
+            callKey=reportToolCallStart({
+              runId:toolRunId,conversationId:toolConversationId,messageId:assistantMessageId,
+              person:target,source:logSource,
+              toolName:route?route.name:call.function.name,
+              serverName:route?route.connectionName:'',
+              arguments:argsParsed?args:call.function.arguments||'{}',eventId:toolRunId+':'+call.id,
+            })
             if(call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
-            let args:any={};try{args=JSON.parse(call.function.arguments||'{}')}catch{throw new Error('模型生成的工具参数不是合法 JSON。')}
+            if(!argsParsed)throw new Error('模型生成的工具参数不是合法 JSON。')
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
-            const logSource:ToolLogSource=call.function.name==='ledger_add_entry'?'ledger':localWorldbookTool?'worldbook':'mcp'
-            callLogId=await startToolLog(target,logSource,route?route.connectionName+' / '+route.name:call.function.name,args)
-            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:(answer?answer+'\n\n':'')+'正在调用工具：'+(route?.name||'共享记账单')+'…'}:m))
+            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:(answer?answer+'\n\n':'')+'正在调用工具：'+(route?.name||'共享记账单')+'…'}:m))
             if(localWorldbookTool){
               const owned=worldEntries.filter(e=>e.boundCharacters?.includes(target))
               if(call.function.name==='worldbook_search_entries'){
@@ -456,8 +456,12 @@ export default function App() {
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
             resultContent=JSON.stringify(call.function.name==='ledger_add_entry'?toolData:toolData.result)
             }
-            await finishToolLog(callLogId,'success',resultContent)
-          }catch(error){resultContent=JSON.stringify({error:error instanceof Error?error.message:String(error)});await finishToolLog(callLogId,'error','',error instanceof Error?error.message:String(error))}
+            if(callKey)reportToolCallEnd(callKey,{status:'succeeded',resultSummary:resultContent})
+          }catch(error){
+            const message=error instanceof Error?error.message:String(error)
+            resultContent=JSON.stringify({error:message})
+            if(callKey)reportToolCallEnd(callKey,{status:'failed',errorMessage:message,errorCode:classifyToolError(message)})
+          }
           requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
         }
         if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
@@ -466,12 +470,12 @@ export default function App() {
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
       const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
-      if(!answer) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{role:'assistant',content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m))
+      if(!answer) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m))
       else if(finalUsage) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,usage:finalUsage}:m))
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
       setChatError(msg.includes('Failed to fetch')?'连接失败：可能是 API 地址不可达或浏览器跨域（CORS）限制。若中转站不允许网页跨域，需要在云服务器增加安全的后端代理。':msg)
-      updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1&&m.role==='assistant'?{role:'assistant',content:'请求失败，请查看上方错误提示并检查模型设置。'}:m))
+      updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1&&m.role==='assistant'?{...m,content:'请求失败，请查看上方错误提示并检查模型设置。'}:m))
     } finally {setSending(false)}
   }
 
@@ -790,6 +794,35 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
  return <div className="tool-panel"><h3>模型连接</h3><p className="muted">支持 OpenAI 兼容接口，例如 One API / New API。API Key 加密保存在后端数据库，登录后自动带回，换设备也无需重填；不进入云端快照明文备份。</p><label className="model-field">API 地址<input value={value.endpoint} onChange={e=>{onChange({...value,endpoint:e.target.value});setTestResult(null);setModelList(null)}} placeholder="https://你的中转站/v1"/></label><label className="model-field">模型名称<div className="model-combo" ref={comboRef}><input value={value.model} onFocus={openCombo} onChange={e=>{onChange({...value,model:e.target.value});setTestResult(null);setComboQuery(e.target.value);if(modelList&&modelList.ids.length)setModelOpen(true)}} placeholder={modelList&&modelList.ids.length?'点击输入框选择模型':'例如 gpt-4o-mini'}/>{modelList&&modelList.ids.length>0&&<button type="button" className={'model-combo-caret'+(modelOpen?' open':'')} aria-label="展开模型列表" onClick={()=>{if(modelOpen)setModelOpen(false);else openCombo()}}>▾</button>}{modelOpen&&<ul className="model-combo-list">{comboIds.length?comboIds.map(id=><li key={id}><button type="button" className={id===value.model?'current':''} onClick={()=>{onChange({...value,model:id});setTestResult(null);setModelOpen(false);setComboQuery('')}}>{id}</button></li>):<li className="model-combo-empty">没有匹配的模型</li>}</ul>}</div></label><label className="model-field">API Key<input type="password" autoComplete="off" value={apiKey} onChange={e=>{setApiKey(e.target.value);setTestResult(null)}} placeholder="sk-…"/></label><div className="model-fetch-row"><button type="button" disabled={listing} onClick={fetchModels}>{listing?'正在获取…':'获取站点模型列表'}</button><small>拉取该站点可用模型，填好 API 地址与 Key 后点击，即可在模型名称框下拉选择。</small></div>{modelList&&<p role="status" className={modelList.ok?'model-test-ok':'model-test-error'}>{modelList.text}</p>}<div className="pricing-settings"><b>用量费用估算（最终显示人民币 ¥）</b><small>输入价格按服务商 USD / 百万 tokens 资费填写；汇率可自行调整。留空价格则不估算费用，缓存价格留空时按普通输入价估算。</small><div className="pricing-grid"><label>输入价格<input type="number" min="0" step="any" value={value.inputPrice??''} onChange={e=>onChange({...value,inputPrice:e.target.value})} placeholder="例如 2.5"/></label><label>输出价格<input type="number" min="0" step="any" value={value.outputPrice??''} onChange={e=>onChange({...value,outputPrice:e.target.value})} placeholder="例如 10"/></label><label>缓存输入价格<input type="number" min="0" step="any" value={value.cachedInputPrice??''} onChange={e=>onChange({...value,cachedInputPrice:e.target.value})} placeholder="可选"/></label><label>美元兑人民币汇率<input type="number" min="0.01" step="0.01" value={value.usdToCny??'7.2'} onChange={e=>onChange({...value,usdToCny:e.target.value})} placeholder="例如 7.2"/></label></div></div><button type="button" disabled={testing} onClick={testConnection}>{testing?'正在测试连接…':'测试 API 连接'}</button>{testResult&&<p role="status" className={testResult.ok?'model-test-ok':'model-test-error'}>{testResult.text}</p>}<small>地址、模型名和价格设置自动保存在此浏览器。API Key 以加密形式存于后端，登录后自动带回（换设备同样可用）；本机浏览器仅作离线缓存，不写入云端快照明文。模型列表与连接测试经由本机后端代理转发，不受浏览器 CORS 限制。</small></div>
 }
 
+// 消息下方的永久调用卡片：只渲染事件层里绑定到该 messageId 的真实记录。
+function MessageToolCalls({messageId}:{messageId:string}) {
+  const calls=useMessageToolCalls(messageId)
+  const [open,setOpen]=useState(false)
+  if(!calls.length)return null
+  const succeeded=calls.filter(c=>c.status==='succeeded').length
+  const failed=calls.filter(c=>c.status==='failed'||c.status==='timed_out').length
+  return <div className="msg-tool-calls">
+    <button type="button" className="msg-tool-calls-head" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>
+      <span className="msg-tool-calls-icon" aria-hidden="true">⚡</span>
+      <b>真实工具调用 {calls.length} 次</b>
+      <small>{succeeded} 成功{failed?' · '+failed+' 失败':''}</small>
+      <span className="msg-tool-calls-chevron">{open?'收起 ↑':'详情 ↓'}</span>
+    </button>
+    {open&&<ul className="msg-tool-calls-list">{calls.map(c=><li key={c.key} className={'msg-tool-call status-'+c.status}>
+      <div className="msg-tool-call-top"><span className={'msg-tool-badge '+c.status}>{TOOL_STATUS_LABEL[c.status]}</span><b>{c.displayName}</b>{c.durationMs!=null&&<small>{c.durationMs<1000?c.durationMs+' ms':(c.durationMs/1000).toFixed(1)+' s'}</small>}</div>
+      <details className="msg-tool-call-detail"><summary>参数与结果（已脱敏）</summary><pre>{JSON.stringify({参数:c.arguments,结果:c.resultSummary,...(c.errorMessage?{错误:c.errorMessage}:{}),...(c.errorCode?{错误码:c.errorCode}:{}),服务:c.serverName||'—',开始时间:new Date(c.startedAt).toLocaleString('zh-CN'),...(c.finishedAt?{结束时间:new Date(c.finishedAt).toLocaleString('zh-CN')}:{})},null,2)}</pre></details>
+    </li>)}</ul>}
+  </div>
+}
+
+// 聊天顶部的实时状态栏：只显示当前会话仍在进行中的调用。
+function ToolCallLiveBar({conversationId}:{conversationId:string}) {
+  const calls=useToolCalls(conversationId)
+  const active=calls.filter(c=>c.status==='queued'||c.status==='awaiting_confirmation'||c.status==='running')
+  if(!active.length)return null
+  return <div className="tool-live-bar" role="status" aria-live="polite">{active.map(c=><div className="tool-live-item" key={c.key}><span className="tool-live-dot" aria-hidden="true"/><b>{c.displayName}</b><small>{TOOL_STATUS_LABEL[c.status]}</small></div>)}</div>
+}
+
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
   const [historyQuery,setHistoryQuery]=useState('')
@@ -874,7 +907,8 @@ function Chat(p: any) {
     {historyQuery.trim()&&<div className="history-search-results" role="list">{historyMatches.length?historyMatches.map((x:any,i:number)=><button type="button" role="listitem" key={x.conversation.id+'-'+x.index+'-'+i} onClick={()=>jumpToMatch(x.conversation)}><b>{x.conversation.title||'新对话'} · {x.message.role==='user'?'你':'助手'}</b><span>{x.message.content.slice(0,180)}</span></button>):<p>没有找到匹配的聊天内容。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><button key={c.id} type="button" className={p.activeConversationIds[chatPerson]===c.id?'selected':''} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{c.title||'新对话'}</button>)}</div><button type="button" className="conversation-new" disabled={creatingConversation.current} onClick={createConversation}>＋ 新对话</button><button type="button" className="conversation-rename" onClick={renameConversation}>重命名</button><button type="button" className="conversation-delete" onClick={deleteConversation}>删除当前</button></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
-    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div>{m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}</div>) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
+    <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
+    <div className="chat-body">{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i}><div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div>{m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}{m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}</div>) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel" aria-label="表情包选择">{stickers.map((emoji,i)=><button type="button" key={i} onClick={()=>{p.setDraft(p.draft+emoji);setEmojiOpen(false)}}>{emoji}</button>)}</div>}
     <form className="compose compose-wechat" onSubmit={submit}>
