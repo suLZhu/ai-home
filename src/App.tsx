@@ -96,6 +96,18 @@ export default function App() {
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => read('ai-home.tasks', { '晏未晞': [], '言朔': [] }))
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   const [sidebarOpen,setSidebarOpen]=useState(false)
+  // 百宝箱侧边栏＝可回收抽屉：点 ☰ 出现；点侧边栏以外的地方（包括下方导航与内容）立即收回并放行点击；侧边栏内 4 秒无操作自动收回。
+  useEffect(()=>{
+    if(!sidebarOpen)return
+    let timer=window.setTimeout(()=>setSidebarOpen(false),4000)
+    const bump=()=>{window.clearTimeout(timer);timer=window.setTimeout(()=>setSidebarOpen(false),4000)}
+    const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.mobile-menu-toggle')
+    const onDown=(e:PointerEvent)=>{if(inside(e.target))bump();else{window.clearTimeout(timer);setSidebarOpen(false)}}
+    const onMove=(e:PointerEvent)=>{if(inside(e.target))bump()}
+    document.addEventListener('pointerdown',onDown)
+    document.addEventListener('pointermove',onMove)
+    return ()=>{window.clearTimeout(timer);document.removeEventListener('pointerdown',onDown);document.removeEventListener('pointermove',onMove)}
+  },[sidebarOpen])
   const [funShortcut,setFunShortcut]=useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   const [time, setTime] = useState('')
@@ -502,8 +514,7 @@ export default function App() {
   const bgUrl=bgId==='custom1'?customAssets.bg1:bgId==='custom2'?customAssets.bg2:''
   const bubbleUrl=bubbleId==='image'?customAssets.bubble:''
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
-    <button className="mobile-menu-toggle" aria-label="打开百宝箱" onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
-    {sidebarOpen&&<button className="sidebar-scrim" aria-label="关闭百宝箱" onClick={()=>setSidebarOpen(false)}/>}
+    <button className={"mobile-menu-toggle"+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起百宝箱':'打开百宝箱'} onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
     {toast&&<div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {toast.kind==='test'?'通知测试':'新消息'}</b><span>{toast.content}</span><small>点击打开聊天</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>}
     <section className="screen">
@@ -630,7 +641,7 @@ function ToolPanel(p: any) {
   if (t === '世界书') return <WorldbookEditor entries={p.worldEntries.filter((e:WorldEntry)=>e.boundCharacters?.includes(p.person))} onChange={(v:WorldEntry[])=>p.setWorldEntries((old:WorldEntry[])=>{const visibleIds=new Set(old.filter(e=>e.boundCharacters?.includes(p.person)).map(e=>e.id));const incoming=new Map(v.map(e=>[e.id,e]));const kept=old.flatMap(e=>{if(!visibleIds.has(e.id))return [e];const replacement=incoming.get(e.id);if(replacement)return [replacement];const remaining=e.boundCharacters.filter(name=>name!==p.person);return remaining.length?[{...e,boundCharacters:remaining}]:[]});const oldIds=new Set(old.map(e=>e.id));return [...kept,...v.filter(e=>!oldIds.has(e.id))]})}/>
   if (t === 'SKILL 技能库') return <SkillWorkbench person={p.person}/>
   if (t === 'MCP') return <MCPSettings person={p.person}/>
-  if (t === '工具调用看板') return <ToolDashboard defaultPerson={p.person}/>
+  if (t === '工具调用看板') return <ToolDashboard person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '长期记忆') return <><MemoryWorkbench person={p.person} entries={p.memoryEntries[p.person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[p.person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[p.person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[p.person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>
   if (t === '工作流') return <TaskManager person={p.person}/>

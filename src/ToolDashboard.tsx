@@ -43,9 +43,9 @@ function brief(value: unknown, max = 90): string {
   return text.length > max ? text.slice(0, max) + '…' : text
 }
 
-export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: string } = {}) {
+// 工作区看板：按助手隔离——只看这位助手的调用记录，人物筛选不开放。
+export function ToolDashboard({ person, personLabel }: { person: string; personLabel?: string }) {
   const [logs, setLogs] = useState<ToolLog[]>([])
-  const [person, setPerson] = useState(defaultPerson)
   const [source, setSource] = useState('全部')
   const [status, setStatus] = useState('全部')
   const [loading, setLoading] = useState(true)
@@ -57,8 +57,7 @@ export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: st
   const refresh = useCallback(async (isAlive: () => boolean = () => true) => {
     // 仅首屏显示骨架（loading 初值 true）；筛选与自动刷新时保留旧列表，
     // 避免每 5 秒整表闪烁，也避免在 effect 中同步 setState。
-    const params = new URLSearchParams({ limit: '200' })
-    if (person !== '全部') params.set('person', person)
+    const params = new URLSearchParams({ limit: '200', person })
     if (source !== '全部') params.set('source', source)
     if (status !== '全部') params.set('status', status)
     try {
@@ -107,7 +106,7 @@ export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: st
 
   return <section className="tool-dashboard">
     <header className="tool-dash-heading">
-      <div><h3>工具调用看板</h3><p>只记录真实执行的 MCP、世界书与记账工具调用；模型口头描述不会出现在这里。</p></div>
+      <div><h3>工具调用看板{personLabel ? ' · ' + personLabel : ''}</h3><p>只记录这位助手真实执行的 MCP、世界书与记账工具调用；模型口头描述不会出现在这里。助手之间互相隔离。</p></div>
       <label className="tool-dash-auto"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)}/> 自动刷新</label>
     </header>
     <div className="tool-dash-stats">
@@ -119,7 +118,6 @@ export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: st
       <div><small>今日调用</small><b>{todayCount}</b></div>
     </div>
     <div className="tool-dash-filters">
-      {chipRow('人物筛选', person, setPerson, [{ key: '全部', text: '全部人物' }, { key: '晏未晞', text: '晏未晞' }, { key: '言朔', text: '言朔' }])}
       {chipRow('工具类型筛选', source, setSource, [{ key: '全部', text: '全部类型' }, { key: 'mcp', text: 'MCP' }, { key: 'worldbook', text: '世界书' }, { key: 'ledger', text: '记账' }])}
       {chipRow('状态筛选', status, setStatus, STATUS_FILTERS)}
     </div>
@@ -134,7 +132,7 @@ export function ToolDashboard({ defaultPerson = '全部' }: { defaultPerson?: st
         return <li className={'tool-dash-item status-' + cssStatus} key={log.id}>
           <div className="tool-dash-item-top">
             <span className={'tool-dash-badge ' + cssStatus}>{STATUS_LABEL[log.status] || log.status}</span>
-            <b className="tool-dash-person">{log.person}</b>
+            <b className="tool-dash-person">{personLabel || log.person}</b>
             <span className="tool-dash-source">{SOURCE_LABEL[log.source] || log.source}</span>
             <code className="tool-dash-name" title={log.serverName ? log.serverName + ' / ' + log.toolName : log.toolName}>{log.serverName ? log.serverName + ' / ' + log.toolName : log.toolName}</code>
           </div>

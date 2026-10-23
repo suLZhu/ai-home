@@ -363,6 +363,9 @@
 .sidebar-link small{color:var(--muted)}
 .sidebar-footer{border-color:var(--line);color:var(--muted)}
 .mobile-menu-toggle{background:var(--surface);border-color:var(--line);color:var(--ink)}
+/* 抽屉打开时：☰ 移到右上角并收成纯图标，再点一下即收回。 */
+.mobile-menu-toggle.moved{left:auto;right:10px;padding:7px 10px}
+.mobile-menu-toggle.moved b{display:none}
 .sidebar-scrim{background:rgba(30,23,39,.35)}
 
 /* ── 娱乐房：模块卡统一为浅紫家族 ── */
