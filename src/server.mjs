@@ -84,13 +84,13 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers })
   res.end(JSON.stringify(body))
 }
-function readBody(req) {
+function readBody(req, max = MAX_BODY) {
   return new Promise((resolveBody, reject) => {
     let data = ''
     req.on('data', chunk => {
       data += chunk
-      if (Buffer.byteLength(data) > MAX_BODY) {
-        reject(Object.assign(new Error('请求内容过大，单次最多 2 MB'), { status: 413 }))
+      if (Buffer.byteLength(data) > max) {
+        reject(Object.assign(new Error('请求内容过大，单次最多 ' + Math.round(max / 1024 / 1024) + ' MB'), { status: 413 }))
         req.destroy()
       }
     })
@@ -246,6 +246,54 @@ createServer(async (req, res) => {
       return send(res, 200, { models: ids })
     } catch (error) {
       const msg = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? '请求上游超时' : (error?.cause?.code || error?.message || '请求失败')
+      return send(res, 502, { error: '无法连接该接口：' + msg })
+    }
+  }
+
+  // 代理转发 OpenAI 兼容 chat/completions（含 SSE 流式透传），绕过浏览器 CORS 限制。
+  if (url.pathname === '/api/chat' && req.method === 'POST') {
+    const controller = new AbortController()
+    let finished = false
+    res.on('close', () => { if (!finished) controller.abort() })
+    try {
+      // 聊天请求可携带图片 base64，上限放宽到 32 MB。
+      const b = await readBody(req, 32 * 1024 * 1024)
+      const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
+      if (!raw) return send(res, 400, { error: '请先填写 API 地址' })
+      if (!/^https?:\/\//i.test(raw)) return send(res, 400, { error: 'API 地址需以 http:// 或 https:// 开头' })
+      const apiKey = String(b.apiKey || '').trim()
+      if (!apiKey) return send(res, 400, { error: '请先填写 API Key' })
+      const chatBody = b.body
+      if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return send(res, 400, { error: '缺少请求体' })
+      const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
+      const upstream = await fetch(target, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(chatBody),
+        redirect: 'error',
+        signal: controller.signal,
+      })
+      if (!upstream.ok) {
+        finished = true
+        const text = await upstream.text().catch(() => '')
+        return send(res, upstream.status, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 400) : ''}` })
+      }
+      // SSE / 流式响应原样透传给前端，不缓冲。
+      res.writeHead(upstream.status, {
+        'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache, no-store',
+        'X-Accel-Buffering': 'no',
+      })
+      if (upstream.body) {
+        for await (const chunk of upstream.body) { if (!res.write(chunk)) await new Promise(r => res.once('drain', r)) }
+      }
+      finished = true
+      res.end()
+      return
+    } catch (error) {
+      finished = true
+      if (res.headersSent) { try { res.end() } catch { /* 连接已断开 */ } return }
+      const msg = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? '请求被中断或超时' : (error?.cause?.code || error?.message || '请求失败')
       return send(res, 502, { error: '无法连接该接口：' + msg })
     }
   }
