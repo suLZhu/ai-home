@@ -12,7 +12,7 @@ export const DEFAULT_ASSISTANT_IDS = Object.values(LEGACY_NAME_TO_ID)
 // Format check keeps random payloads out without hard-coding the roster, so a
 // newly created assistant is valid the moment it exists in the snapshot.
 export function isValidAssistantId(value) {
-  return typeof value === 'string' && /^assistant-[a-zA-Z0-9-]{8,}$/.test(value) && value.length <= 64
+  return typeof value === 'string' && /^assistant-[a-zA-Z0-9-]{4,}$/.test(value) && value.length <= 64
 }
 
 // Legacy Chinese display names still appear in old rows/snapshots; map them once.

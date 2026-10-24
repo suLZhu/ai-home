@@ -45,7 +45,7 @@ export function migrateAssistantSnapshot(input: Snapshot): Snapshot {
   return output
 }
 export function addAssistant(snapshot: Snapshot, id: string, name: string): Snapshot {
-  if (!/^assistant-[a-zA-Z0-9-]{8,}$/.test(id)) throw new Error('Invalid assistant ID')
+  if (!/^assistant-[a-zA-Z0-9-]{4,}$/.test(id)) throw new Error('Invalid assistant ID')
   if (!name.trim()) throw new Error('Assistant name is required')
   if (snapshot.assistants?.some((a: AssistantRecord) => a.id === id)) throw new Error('Duplicate assistant ID')
   const result: Snapshot = { ...snapshot, assistants: [...(snapshot.assistants || []), { id, name: name.trim(), createdAt: new Date().toISOString() }] }

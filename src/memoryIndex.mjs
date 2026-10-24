@@ -40,7 +40,7 @@ export function rebuildMemoryIndex(db, state) {
 }
 
 export function searchMemoryIndex(db, { person, query, exclude = '', limit = 5 }) {
-  if (!/^assistant-[a-zA-Z0-9-]{8,}$/.test(String(person))) throw new Error('invalid person')
+  if (!/^assistant-[a-zA-Z0-9-]{4,}$/.test(String(person))) throw new Error('invalid person')
   const words = String(query).trim().slice(0, 160).split(/[\s，。！？、,.!?；;：:（）()]+/).filter(x => x.length >= 2).slice(0, 8)
   if (!words.length) return []
   // trigram FTS5 accelerates substring matching of 3+ chars, including Chinese.
