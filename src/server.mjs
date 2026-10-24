@@ -446,7 +446,8 @@ createServer(async (req, res) => {
       const actor=String(b.actor||'user')
       if (!(actor==='user'||isValidAssistantId(actor))) return send(res,400,{error:'操作者无效'})
       const requestId=String(b.requestId||'')
-      if (!/^[a-zA-Z0-9-]{12,100}$/.test(requestId)) return send(res,400,{error:'请求编号无效'})
+      // 幂等键直接复用模型的 tool_call id（形如 call_xxx，含下划线），因此允许下划线。
+      if (!/^[a-zA-Z0-9_-]{12,100}$/.test(requestId)) return send(res,400,{error:'请求编号无效'})
       const prior=db.prepare('SELECT entry_id FROM ledger_operations WHERE request_id=?').get(requestId)
       if(prior)return send(res,200,{ok:true,id:prior.entry_id,duplicate:true})
       const id=randomUUID(),now=new Date().toISOString()
