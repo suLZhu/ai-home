@@ -42,7 +42,8 @@ const REBUILD_DDL = {
     recurrence TEXT NOT NULL DEFAULT 'once' CHECK(recurrence IN ('once','daily','weekly')),
     status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','ready','completed','paused')),
     last_run_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-    created_by TEXT NOT NULL DEFAULT 'user', temporary INTEGER NOT NULL DEFAULT 0
+    created_by TEXT NOT NULL DEFAULT 'user', temporary INTEGER NOT NULL DEFAULT 0,
+    conversation_id TEXT
   )`,
 }
 

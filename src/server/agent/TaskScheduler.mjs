@@ -46,6 +46,9 @@ export function createTaskScheduler(ctx) {
       source: 'scheduled',
       prompt: task.prompt,
       taskId: task.id,
+      // Timer tasks write back into the conversation they were created from;
+      // an empty value keeps the old behavior (no conversation binding).
+      conversationId: task.conversation_id || null,
     })
     bus.publish({ type: 'run_created', runId: run.id, assistantId: task.person, source: 'scheduled', taskId: task.id })
     const handle = runner.start(run)

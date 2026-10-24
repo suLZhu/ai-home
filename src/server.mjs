@@ -75,6 +75,8 @@ db.exec(`
 const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().map(row => row.name)
 if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
+// Timer tasks must write back into the conversation they were created from.
+if (!workflowColumns.includes('conversation_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN conversation_id TEXT')
 migrateDatabase(db)
 initMemoryIndex(db)
 initProactive(db)
@@ -538,7 +540,8 @@ createServer(async (req, res) => {
         const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
         if (!title || !prompt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '工作流内容或时间无效' })
         const id = randomUUID()
-        db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,created_by,temporary) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,person,body.temporary === true ? 1 : 0)
+        const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
+        db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,created_by,temporary,conversation_id) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,person,body.temporary === true ? 1 : 0,conversationId)
         return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
       }
       if (!['pause','resume','delete'].includes(action)) return send(res, 400, { error: '不支持的操作' })
@@ -573,7 +576,8 @@ createServer(async (req, res) => {
       const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
       if (!title || !prompt || !runAt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '请填写任务名称、执行内容和有效执行时间' })
       const now = new Date().toISOString(), id = randomUUID()
-      db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'scheduled',?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now)
+      const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
+      db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,conversation_id) VALUES (?,?,?,?,?,?,'scheduled',?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,conversationId)
       return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '创建任务失败' }) }
   }
@@ -723,7 +727,10 @@ createServer(async (req, res) => {
       if (!prompt || prompt.length > 20000) return send(res, 400, { error: '任务内容需为 1 至 20000 字' })
       const source = ['manual', 'scheduled', 'proactive', 'chat'].includes(body.source) ? body.source : 'manual'
       const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
-      const run = createAgentRun(db, { assistantId: person, source, conversationId, prompt })
+      // Same idempotency key -> the ORIGINAL run is returned, never a second loop.
+      const idempotencyKey = typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim() ? body.idempotencyKey.trim().slice(0, 120) : null
+      const run = createAgentRun(db, { assistantId: person, source, conversationId, prompt, idempotencyKey })
+      if (run.reused) return send(res, 200, { run, reused: true })
       agentEvents.publish({ type: 'run_created', runId: run.id, assistantId: person, source })
       const handle = agentRunner.start(run)
       handle.promise.catch(() => { /* terminal state already persisted */ })

@@ -112,13 +112,16 @@ const PROMPT = (displayName) => `【系统 · 自主触发 · ${displayName}】�
 
 // Kick off the actual run. The run row is the durable truth; delivery to the
 // inbox happens in the finish handler below.
-export function dispatchProactiveRun({ db, runner, bus, deliver, person, eventId, reason }) {
+export function dispatchProactiveRun({ db, runner, bus, deliver, person, eventId, reason, conversationId = null }) {
   if (!eventId) return false
   const run = createAgentRun(db, {
     assistantId: person,
     source: 'proactive',
     prompt: PROMPT(person),
     taskId: null,
+    // Proactive runs normally have no conversation; callers that know the
+    // origin conversation pass it so the answer can land in the right thread.
+    conversationId,
   })
   // Link run <-> event so the dashboard and panel can cross-reference.
   db.prepare('UPDATE proactive_events SET run_id=?, updated_at=? WHERE id=?')

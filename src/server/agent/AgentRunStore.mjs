@@ -32,6 +32,10 @@ export function initAgentRuns(db) {
   // Backfill for databases created before scheduled-task linkage.
   const cols = db.prepare('PRAGMA table_info(agent_runs)').all().map(row => row.name)
   if (!cols.includes('task_id')) db.exec('ALTER TABLE agent_runs ADD COLUMN task_id TEXT')
+  // Idempotency key: a retried POST with the same key must never start a
+  // second write-executing loop (spec: 同一 idempotencyKey 不重复执行写操作).
+  if (!cols.includes('idempotency_key')) db.exec('ALTER TABLE agent_runs ADD COLUMN idempotency_key TEXT')
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS agent_runs_idem_idx ON agent_runs(assistant_id, idempotency_key) WHERE idempotency_key IS NOT NULL')
   // A restart kills every in-flight loop; orphaned `running` rows would stay
   // "executing" forever. Fail them once at boot — at-least-once task pickup
   // will re-run anything that was due (see TaskScheduler).
@@ -49,6 +53,7 @@ function mapRun(row) {
     assistantId: row.assistant_id,
     source: row.source,
     taskId: row.task_id || null,
+    idempotencyKey: row.idempotency_key || null,
     conversationId: row.conversation_id || '',
     prompt: row.prompt,
     answer: row.answer,
@@ -66,12 +71,21 @@ function mapRun(row) {
 }
 
 export function createAgentRun(db, input) {
+  const idempotencyKey = typeof input.idempotencyKey === 'string' && input.idempotencyKey.trim()
+    ? input.idempotencyKey.trim().slice(0, 120) : null
+  // Replay protection: the same key returns the ORIGINAL run instead of
+  // starting a second loop — a retried POST can never double-execute writes.
+  if (idempotencyKey) {
+    const existing = db.prepare('SELECT * FROM agent_runs WHERE assistant_id=? AND idempotency_key=?')
+      .get(String(input.assistantId), idempotencyKey)
+    if (existing) return { ...mapRun(existing), reused: true }
+  }
   const id = randomUUID()
   const now = new Date().toISOString()
-  db.prepare(`INSERT INTO agent_runs (id,assistant_id,source,conversation_id,task_id,prompt,status,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,'running',?,?)`)
-    .run(id, input.assistantId, input.source || 'manual', input.conversationId || null, input.taskId || null, String(input.prompt || ''), now, now)
-  return mapRun(db.prepare('SELECT * FROM agent_runs WHERE id=?').get(id))
+  db.prepare(`INSERT INTO agent_runs (id,assistant_id,source,conversation_id,task_id,idempotency_key,prompt,status,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,'running',?,?)`)
+    .run(id, input.assistantId, input.source || 'manual', input.conversationId || null, input.taskId || null, idempotencyKey, String(input.prompt || ''), now, now)
+  return { ...mapRun(db.prepare('SELECT * FROM agent_runs WHERE id=?').get(id)), reused: false }
 }
 
 // Terminal transitions are one-way; a repeated finish is an idempotent no-op.
