@@ -8,6 +8,7 @@
 //     same tool name can never shadow each other.
 import { randomUUID } from 'node:crypto'
 import { searchMemoryIndex } from '../../memoryIndex.mjs'
+import { SQLiteMemoryProvider } from './MemoryStore.mjs'
 
 const sanitize = (text, max = 40) => String(text || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, max)
 
@@ -22,13 +23,49 @@ const BUILTINS = [
     name: 'memory_search',
     source: 'worldbook',
     readOnly: true,
-    definition: def('memory_search', '搜索当前助手的长期记忆库（召回与当前话题相关的记忆条目）。', {
+    definition: def('memory_search', '搜索当前助手的长期记忆库（已确认生效的记忆条目）与历史会话原文。', {
       query: { type: 'string', description: '搜索关键词，2 至 160 字' },
     }, ['query']),
-    run(db, person, args) {
+    run(db, person, args, context) {
       const query = String(args.query || '').trim()
       if (query.length < 2 || query.length > 160) throw Object.assign(new Error('搜索内容长度应为 2 至 160 字'), { status: 400 })
-      return { results: searchMemoryIndex(db, { person, query, limit: 5 }) }
+      // Governed memories first (only lifecycle=active; the Recall Ledger
+      // suppresses anything injected into this conversation recently), then
+      // original conversation excerpts as fallback context.
+      const records = SQLiteMemoryProvider(db).search({
+        person, query, limit: 5,
+        conversationId: context?.conversationId || '',
+        runId: context?.runId || null,
+      })
+      const excerpts = searchMemoryIndex(db, { person, query, limit: 5 })
+      return { records, excerpts }
+    },
+  },
+  {
+    name: 'memory_add',
+    source: 'worldbook',
+    readOnly: false,
+    definition: def('memory_add', '提议一条新的长期记忆（写操作）。仅当对话中出现了值得长期记住的新事实、约定或偏好时调用；提议会进入候选区，用户确认后才生效。', {
+      title: { type: 'string', description: '记忆标题，2 至 120 字' },
+      content: { type: 'string', description: '记忆内容，1 至 4000 字；写清事实本身，不要写你的感想' },
+      keywords: { type: 'string', description: '召回关键词，逗号分隔，可选' },
+      category: { type: 'string', description: '分类：人物关系/经历事件/偏好习惯/项目进度/其他' },
+      scope: { type: 'string', enum: ['world', 'private', 'ops'], description: 'world=世界观事实 private=与用户的私密记忆 ops=运行与协作事务' },
+    }, ['title', 'content']),
+    run(db, person, args, context) {
+      const { record, duplicate } = SQLiteMemoryProvider(db).propose({
+        person,
+        title: String(args.title || ''),
+        content: String(args.content || ''),
+        keywords: String(args.keywords || ''),
+        category: String(args.category || '其他'),
+        scope: String(args.scope || 'private'),
+        // Provenance comes from the server-side run, never from the model.
+        sourceConversationId: context?.conversationId || '',
+        createdBy: 'model',
+      })
+      return { ok: true, id: record.id, lifecycle: record.lifecycle, duplicate,
+        message: duplicate ? '相同内容的记忆已存在，未重复创建。' : '已加入候选记忆，等待用户确认后生效。' }
     },
   },
   {
@@ -141,11 +178,13 @@ export async function createToolRegistry({ db, person, mcpList, mcpCall }) {
     // Metadata without executing; null means unknown tool.
     describe,
     // Returns { source, serverName, readOnly, data }; throws on failure.
-    async invoke(name, args) {
+    // `context` (runId / conversationId) lets read tools feed the Recall
+    // Ledger without trusting any model-supplied identity.
+    async invoke(name, args, context) {
       const meta = describe(name)
       if (!meta) throw Object.assign(new Error('未知工具：' + name), { status: 400 })
       const builtin = BUILTINS.find(b => b.name === name)
-      if (builtin) return { ...meta, data: builtin.run(db, person, args) }
+      if (builtin) return { ...meta, data: builtin.run(db, person, args, context) }
       const mapped = mcpMap.get(name)
       const data = await mcpCall(mapped.row, mapped.originalName, args)
       return { ...meta, data }

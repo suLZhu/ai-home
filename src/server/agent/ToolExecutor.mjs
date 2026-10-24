@@ -97,7 +97,7 @@ async function runInvoke({ db, bus, registry, run, name, args, meta, logId, sign
     attempt++
     try {
       if (signal?.aborted) throw Object.assign(new Error('运行已取消'), { code: 'ABORTED' })
-      resolved = await withTimeout(registry.invoke(name, args), TOOL_TIMEOUT_MS)
+      resolved = await withTimeout(registry.invoke(name, args, { runId: run.id, conversationId: run.conversationId || '' }), TOOL_TIMEOUT_MS)
       break
     } catch (error) {
       lastError = error

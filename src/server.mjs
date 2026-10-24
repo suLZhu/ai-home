@@ -18,6 +18,7 @@ import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPo
 import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
 import { createTaskScheduler } from './server/agent/TaskScheduler.mjs'
 import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun } from './server/agent/ProactiveHeat.mjs'
+import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './server/agent/MemoryStore.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -82,6 +83,8 @@ initInbox(db)
 initToolLogs(db)
 initAgentRuns(db)
 initToolPolicies(db)
+initMemoryStore(db)
+const memoryProvider = SQLiteMemoryProvider(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -647,6 +650,37 @@ createServer(async (req, res) => {
     if (!isValidAssistantId(person)) return send(res, 400, { error: '无效人物' })
     if (query.length < 2 || query.length > 160) return send(res, 400, { error: '搜索内容长度应为 2 至 160 字' })
     return send(res, 200, { results: searchMemoryIndex(db, { person, query, exclude, limit: 5 }) })
+  }
+
+  // ---- Memory governance: lifecycle records + Recall Ledger visibility ----
+  if (url.pathname === '/api/memory/records' && req.method === 'GET') {
+    const person = url.searchParams.get('person')
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '无效人物' })
+    const lifecycle = url.searchParams.get('lifecycle') || ''
+    if (lifecycle && !MEMORY_LIFECYCLES.includes(lifecycle)) return send(res, 400, { error: '记忆状态无效' })
+    return send(res, 200, { records: memoryProvider.list({ person, lifecycle, limit: 100 }) })
+  }
+  if (url.pathname === '/api/memory/records' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      if (!isValidAssistantId(body.person)) return send(res, 400, { error: '无效人物' })
+      // User-created records skip the candidate queue: the user is the confirmation.
+      const { record, duplicate } = memoryProvider.propose({ ...body, createdBy: 'user' })
+      return send(res, duplicate ? 200 : 201, { record, duplicate })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '保存失败' }) }
+  }
+  const memoryRecordMatch = url.pathname.match(/^\/api\/memory\/records\/([0-9a-f-]{36})$/)
+  if (memoryRecordMatch && req.method === 'GET') {
+    const record = memoryProvider.get(memoryRecordMatch[1])
+    if (!record) return send(res, 404, { error: '记忆不存在' })
+    return send(res, 200, { record })
+  }
+  const memoryTransitionMatch = url.pathname.match(/^\/api\/memory\/records\/([0-9a-f-]{36})\/transition$/)
+  if (memoryTransitionMatch && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      return send(res, 200, { record: memoryProvider.transition(memoryTransitionMatch[1], String(body.lifecycle || '')) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '状态变更失败' }) }
   }
 
   if (url.pathname === '/api/state' && req.method === 'GET') {

@@ -4,6 +4,10 @@ import {
   useAgentRuns, useAgentRunDetail, useApprovals, startRun, cancelRun, decideApproval, subscribeAgentEvents,
   RUN_STATUS_LABEL, RUN_SOURCE_LABEL, isRunActive, type AgentRun,
 } from './agentRuns'
+import {
+  useMemoryRecords, transitionMemoryRecord, createMemoryRecord,
+  LIFECYCLE_LABEL, SCOPE_LABEL, type MemoryLifecycle, type MemoryRecord,
+} from './memoryGovernance'
 
 type ToolLogStatus = 'queued' | 'awaiting_confirmation' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 type ToolLog = {
@@ -48,7 +52,11 @@ function brief(value: unknown, max = 90): string {
 }
 
 // 工作区看板：按助手隔离——只看这位助手的调用记录，人物筛选不开放。
-export function ToolDashboard({ person, personLabel }: { person: string; personLabel?: string }) {
+export function ToolDashboard({ person, personLabel, onJumpToSource }: {
+  person: string; personLabel?: string
+  // 跳回来源会话：由外层关闭看板、切到对应会话并滚动到原消息。
+  onJumpToSource?: (conversationId: string, messageId?: string) => void
+}) {
   const [logs, setLogs] = useState<ToolLog[]>([])
   const [source, setSource] = useState('全部')
   const [status, setStatus] = useState('全部')
@@ -70,6 +78,14 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
   // 工具权限策略：auto 立即执行 / ask 每次审批 / deny 永久拒绝。
   const [policies, setPolicies] = useState<Record<string, string>>({})
   const [policyError, setPolicyError] = useState('')
+  // 记忆治理：候选记忆等用户确认才生效；拒绝留墓碑防止重复提议。
+  const { records: memoryRecords, error: memoryError, refresh: refreshMemories } = useMemoryRecords(person)
+  const [memoryFilter, setMemoryFilter] = useState<'全部' | MemoryLifecycle>('全部')
+  const [memoryBusy, setMemoryBusy] = useState('')
+  const [memoryActionError, setMemoryActionError] = useState('')
+  const [memoryNotice, setMemoryNotice] = useState('')
+  const [memoryDraft, setMemoryDraft] = useState({ title: '', content: '', keywords: '', category: '其他' })
+  const [memoryCreating, setMemoryCreating] = useState(false)
 
   const refresh = useCallback(async (isAlive: () => boolean = () => true) => {
     // 仅首屏显示骨架（loading 初值 true）；筛选与自动刷新时保留旧列表，
@@ -181,8 +197,36 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
     } catch (e) { setPolicyError(e instanceof Error ? e.message : '保存策略失败') }
   }
 
+  // 记忆生命周期操作：确认生效 / 拒绝（留墓碑） / 归档。
+  async function handleMemoryTransition(record: MemoryRecord, lifecycle: MemoryLifecycle) {
+    if (memoryBusy) return
+    setMemoryBusy(record.id + ':' + lifecycle)
+    setMemoryActionError('')
+    setMemoryNotice('')
+    try {
+      await transitionMemoryRecord(record.id, lifecycle)
+      setMemoryNotice(`「${record.title}」${lifecycle === 'active' ? '已生效' : lifecycle === 'rejected' ? '已拒绝（保留墓碑，不会再次提议）' : '已归档'}。`)
+      await refreshMemories()
+    } catch (e) { setMemoryActionError(e instanceof Error ? e.message : '记忆状态变更失败') }
+    finally { setMemoryBusy('') }
+  }
+  async function handleMemoryCreate(e: React.FormEvent) {
+    e.preventDefault()
+    if (memoryCreating) return
+    setMemoryActionError('')
+    setMemoryNotice('')
+    setMemoryCreating(true)
+    try {
+      const result = await createMemoryRecord(person, memoryDraft)
+      setMemoryNotice(result.duplicate ? '相同内容的记忆已存在，未重复创建。' : '已保存并直接生效（你亲手记录的不需要审批）。')
+      setMemoryDraft({ title: '', content: '', keywords: '', category: '其他' })
+      await refreshMemories()
+    } catch (err) { setMemoryActionError(err instanceof Error ? err.message : '保存记忆失败') }
+    finally { setMemoryCreating(false) }
+  }
+
   // 已知工具的策略编辑器（MCP 工具名按运行记录动态补充）。
-  const knownTools = ['ledger_add', 'ledger_list', 'memory_search', 'worldbook_search']
+  const knownTools = ['ledger_add', 'ledger_list', 'memory_search', 'memory_add', 'worldbook_search']
   for (const log of logs) if (log.toolName && !knownTools.includes(log.toolName) && log.source !== 'mcp') knownTools.push(log.toolName)
   const policyTools = [...new Set([...knownTools, ...Object.keys(policies)])].slice(0, 12)
 
@@ -286,6 +330,65 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
           </div>
         </li>
       })}</ul>
+    </section>
+    {/* ── 记忆治理：候选记忆等用户确认，拒绝留墓碑 ── */}
+    <section className="tool-dash-memory" aria-label="记忆治理">
+      <header className="tool-dash-runs-head">
+        <div><b>记忆治理</b><small>助手提议的记忆先进候选区，你确认后才会进入提示词；拒绝会留墓碑，同样的内容不会再被提议。</small></div>
+        <button type="button" className="tool-dash-refresh" onClick={() => void refreshMemories()}>刷新</button>
+      </header>
+      {memoryError && <p className="tool-dash-error" role="alert">{memoryError}</p>}
+      {memoryActionError && <p className="tool-dash-error" role="alert">{memoryActionError}</p>}
+      {memoryNotice && <p className="tool-dash-note" role="status">{memoryNotice}</p>}
+      <div className="tool-dash-filters">
+        {chipRow('记忆状态筛选', memoryFilter, v => setMemoryFilter(v as '全部' | MemoryLifecycle),
+          [{ key: '全部', text: '全部' }, { key: 'candidate', text: '候选' }, { key: 'active', text: '已生效' }, { key: 'archived', text: '已归档' }, { key: 'rejected', text: '已拒绝' }])}
+      </div>
+      <form className="tool-dash-memory-create" onSubmit={e => void handleMemoryCreate(e)}>
+        <h4>手动新增记忆（直接生效）</h4>
+        <input required maxLength={120} value={memoryDraft.title} onChange={e => setMemoryDraft(old => ({ ...old, title: e.target.value }))} placeholder="记忆标题，例如：我们决定周六去看展" aria-label="记忆标题" />
+        <textarea required rows={2} maxLength={4000} value={memoryDraft.content} onChange={e => setMemoryDraft(old => ({ ...old, content: e.target.value }))} placeholder="值得长期记住的事实、约定或偏好" aria-label="记忆内容" />
+        <div className="tool-dash-memory-create-row">
+          <input value={memoryDraft.keywords} onChange={e => setMemoryDraft(old => ({ ...old, keywords: e.target.value }))} placeholder="召回关键词，逗号分隔" aria-label="召回关键词" />
+          <select value={memoryDraft.category} onChange={e => setMemoryDraft(old => ({ ...old, category: e.target.value }))} aria-label="分类">
+            {['人物关系', '经历事件', '偏好习惯', '项目进度', '其他'].map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button type="submit" disabled={memoryCreating || !memoryDraft.title.trim() || !memoryDraft.content.trim()}>{memoryCreating ? '保存中…' : '保存记忆'}</button>
+        </div>
+      </form>
+      {memoryRecords.length === 0
+        ? <p className="tool-dash-note">还没有记忆记录。助手在对话中调用 memory_add 提议、或你手动新增后，会出现在这里。</p>
+        : <ul className="tool-dash-memory-list">{memoryRecords
+            .filter(r => memoryFilter === '全部' || r.lifecycle === memoryFilter)
+            .map(record => <li className={'tool-dash-memory-item lifecycle-' + record.lifecycle} key={record.id}>
+              <div className="tool-dash-item-top">
+                <span className={'tool-dash-badge ' + (record.lifecycle === 'active' ? 'success' : record.lifecycle === 'candidate' ? 'running' : 'error')}>
+                  {LIFECYCLE_LABEL[record.lifecycle]}
+                </span>
+                <b>{record.title}</b>
+                <span className="tool-dash-item-meta">{SCOPE_LABEL[record.scope]} · {record.category} · {record.createdBy === 'model' ? '助手提议' : '手动记录'}</span>
+              </div>
+              <p className="tool-dash-args">{record.content}</p>
+              {record.keywords && <small className="tool-dash-note">关键词：{record.keywords}</small>}
+              <div className="tool-dash-item-meta">
+                <span>被召回 {record.recallCount} 次</span>
+                <span>更新于 {formatTime(record.updatedAt)}</span>
+              </div>
+              <div className="tool-dash-memory-actions">
+                {record.sourceConversationId && onJumpToSource && <button type="button" className="tool-dash-jump"
+                  onClick={() => onJumpToSource(record.sourceConversationId, record.sourceMessageIds[0])}>跳回来源会话 ↗</button>}
+                {record.lifecycle === 'candidate' && <>
+                  <button type="button" className="tool-dash-approve" disabled={!!memoryBusy} onClick={() => void handleMemoryTransition(record, 'active')}>确认生效</button>
+                  <button type="button" className="tool-dash-reject" disabled={!!memoryBusy} onClick={() => void handleMemoryTransition(record, 'rejected')}>拒绝</button>
+                </>}
+                {record.lifecycle === 'active' && <>
+                  <button type="button" className="tool-dash-chip" disabled={!!memoryBusy} onClick={() => void handleMemoryTransition(record, 'archived')}>归档</button>
+                  <button type="button" className="tool-dash-reject" disabled={!!memoryBusy} onClick={() => void handleMemoryTransition(record, 'rejected')}>拒绝</button>
+                </>}
+                {(record.lifecycle === 'archived' || record.lifecycle === 'rejected') &&
+                  <button type="button" className="tool-dash-approve" disabled={!!memoryBusy} onClick={() => void handleMemoryTransition(record, 'active')}>恢复生效</button>}
+              </div>
+            </li>)}</ul>}
     </section>
     {error && <p className="tool-dash-error" role="alert" aria-live="polite">{error}</p>}
     {loading ? <div className="tool-dash-skeletons" aria-label="正在读取调用记录"><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div></div>
