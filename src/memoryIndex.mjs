@@ -19,8 +19,13 @@ export function initMemoryIndex(db) {
 export function rebuildMemoryIndex(db, state) {
   const insert = db.prepare('INSERT INTO conversation_recall (person,conversation_id,title,message_index,role,content) VALUES (?,?,?,?,?,?)')
   db.prepare('DELETE FROM conversation_recall').run()
-  for (const person of ['晏未晞', '言朔']) {
-    const conversations = Array.isArray(state?.conversations?.[person]) ? state.conversations[person] : []
+  // v3 snapshots key conversations by assistantId; legacy Chinese keys are
+  // mapped once so old exports still index under the stable id.
+  const toId = (k) => ({ '晏未晞': 'assistant-yanweixi', '言朔': 'assistant-yanshuo' }[k] || k)
+  const people = [...new Set(Object.keys(state?.conversations || {}).map(toId))]
+  for (const person of people) {
+    const sourceKey = Object.keys(state?.conversations || {}).find(k => toId(k) === person) || person
+    const conversations = Array.isArray(state?.conversations?.[sourceKey]) ? state.conversations[sourceKey] : []
     for (const conversation of conversations.slice(0, 300)) {
       if (typeof conversation?.id !== 'string' || !Array.isArray(conversation.messages)) continue
       const title = String(conversation.title || '未命名会话').slice(0, 120)
@@ -35,7 +40,7 @@ export function rebuildMemoryIndex(db, state) {
 }
 
 export function searchMemoryIndex(db, { person, query, exclude = '', limit = 5 }) {
-  if (!['晏未晞','言朔'].includes(person)) throw new Error('invalid person')
+  if (!/^assistant-[a-zA-Z0-9-]{8,}$/.test(String(person))) throw new Error('invalid person')
   const words = String(query).trim().slice(0, 160).split(/[\s，。！？、,.!?；;：:（）()]+/).filter(x => x.length >= 2).slice(0, 8)
   if (!words.length) return []
   // trigram FTS5 accelerates substring matching of 3+ chars, including Chinese.

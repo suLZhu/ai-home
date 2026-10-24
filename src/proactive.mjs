@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 // Server-side wake decisions are deterministic; the model never silently invents a message.
 // Delivery requires a future authenticated model runner with a provider key.
-const PEOPLE = ['晏未晞','言朔']
+const PEOPLE = ['assistant-yanweixi','assistant-yanshuo']
 export function initProactive(db) {
  db.exec(`CREATE TABLE IF NOT EXISTS proactive_settings (
  person TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,

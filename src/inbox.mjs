@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-const PEOPLE = ['晏未晞','言朔']
+const PEOPLE = ['assistant-yanweixi','assistant-yanshuo']
 export function initInbox(db) {
  db.exec(`CREATE TABLE IF NOT EXISTS assistant_inbox (
  id TEXT PRIMARY KEY, person TEXT NOT NULL, content TEXT NOT NULL,

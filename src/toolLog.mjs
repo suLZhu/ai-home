@@ -10,7 +10,9 @@
 // call cards after a refresh, and eventId deduplicates retried client posts.
 import { randomUUID } from 'node:crypto'
 
-const PEOPLE = ['晏未晞', '言朔']
+const PEOPLE = ['assistant-yanweixi', 'assistant-yanshuo']
+// New assistants (created client-side) pass the same stable-id format check.
+const isPerson = (value) => PEOPLE.includes(value) || /^assistant-[a-zA-Z0-9-]{8,}$/.test(String(value || ''))
 const SOURCES = ['mcp', 'worldbook', 'ledger']
 export const TOOL_CALL_STATUSES = ['queued', 'awaiting_confirmation', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
@@ -155,7 +157,7 @@ export function initToolLogs(db) {
 // Create a new call row. Status starts at queued/running/awaiting_confirmation.
 // When the client supplies eventId, retries return the already-created row.
 export function createToolLog(db, input) {
-  if (!PEOPLE.includes(input.person)) throw badRequest('人物身份无效')
+  if (!isPerson(input.person)) throw badRequest('人物身份无效')
   if (!SOURCES.includes(input.source)) throw badRequest('工具类型无效')
   const toolName = redactString(String(input.toolName || '').trim()).slice(0, 200)
   if (!toolName) throw badRequest('工具名称无效')
@@ -214,7 +216,7 @@ export function listToolLogs(db, query = {}) {
   const where = []
   const params = []
   if (query.person) {
-    if (!PEOPLE.includes(query.person)) throw badRequest('人物身份无效')
+    if (!isPerson(query.person)) throw badRequest('人物身份无效')
     where.push('person=?'); params.push(query.person)
   }
   if (query.source) {

@@ -10,6 +10,7 @@ import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memory
 import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
+import { migrateDatabase, migrateSnapshot, isValidAssistantId, knownAssistantIds } from './server/identity.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -28,12 +29,12 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS mcp_connections (
-    id TEXT PRIMARY KEY, person TEXT NOT NULL CHECK(person IN ('晏未晞','言朔')),
+    id TEXT PRIMARY KEY, person TEXT NOT NULL,
     name TEXT NOT NULL, url TEXT NOT NULL, transport TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
     token_enc TEXT NOT NULL, updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS scheduled_tasks (
-    id TEXT PRIMARY KEY, person TEXT NOT NULL CHECK(person IN ('晏未晞','言朔')),
+    id TEXT PRIMARY KEY, person TEXT NOT NULL,
     title TEXT NOT NULL, prompt TEXT NOT NULL, run_at TEXT NOT NULL,
     recurrence TEXT NOT NULL DEFAULT 'once' CHECK(recurrence IN ('once','daily','weekly')),
     status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','ready','completed','paused')),
@@ -56,7 +57,7 @@ db.exec(`
     body TEXT NOT NULL, salt TEXT, iv TEXT, tag TEXT, created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS api_keys (
-    person TEXT PRIMARY KEY CHECK(person IN ('晏未晞','言朔')),
+    person TEXT PRIMARY KEY,
     key_enc TEXT NOT NULL, updated_at TEXT NOT NULL
   );
 
@@ -66,6 +67,7 @@ db.exec(`
 const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().map(row => row.name)
 if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
+migrateDatabase(db)
 initMemoryIndex(db)
 initProactive(db)
 initInbox(db)
@@ -216,7 +218,7 @@ createServer(async (req, res) => {
     try {
       const b = await readBody(req)
       const person = String(b.person || '')
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
       const apiKey = String(b.apiKey || '').trim()
       const now = new Date().toISOString()
       if (!apiKey) { db.prepare('DELETE FROM api_keys WHERE person=?').run(person); return send(res, 200, { ok: true, saved: false }) }
@@ -305,7 +307,7 @@ createServer(async (req, res) => {
   if (url.pathname === '/api/diary' && req.method === 'POST') {
     try {
       const b=await readBody(req)
-      if(!['阿懒','晏未晞','言朔'].includes(b.owner))return send(res,400,{error:'作者无效'})
+      if(!(b.owner==='阿懒'||isValidAssistantId(b.owner)))return send(res,400,{error:'作者无效'})
       if(!['public','locked'].includes(b.visibility))return send(res,400,{error:'公开状态无效'})
       const title=String(b.title||'').trim(),content=String(b.content||'')
       if(!title||title.length>100||!content.trim()||content.length>20000)return send(res,400,{error:'标题或正文无效'})
@@ -384,7 +386,7 @@ createServer(async (req, res) => {
       const category=String(b.category||'其他').trim().slice(0,40)
       const note=String(b.note||'').trim().slice(0,300)
       const actor=String(b.actor||'user')
-      if (!['user','晏未晞','言朔'].includes(actor)) return send(res,400,{error:'操作者无效'})
+      if (!(actor==='user'||isValidAssistantId(actor))) return send(res,400,{error:'操作者无效'})
       const requestId=String(b.requestId||'')
       if (!/^[a-zA-Z0-9-]{12,100}$/.test(requestId)) return send(res,400,{error:'请求编号无效'})
       const prior=db.prepare('SELECT entry_id FROM ledger_operations WHERE request_id=?').get(requestId)
@@ -407,7 +409,7 @@ createServer(async (req, res) => {
 
   if (url.pathname === '/api/mcp' && req.method === 'GET') {
     const person = url.searchParams.get('person')
-    if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
     const rows = db.prepare('SELECT * FROM mcp_connections WHERE person=? ORDER BY updated_at DESC').all(person)
     return send(res, 200, { connections: rows.map(publicMcp) })
   }
@@ -415,7 +417,7 @@ createServer(async (req, res) => {
     try {
       const body = await readBody(req)
       const person = body.person
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定有效的人物绑定' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '必须指定有效的人物绑定' })
       const name = String(body.name || '').trim().slice(0, 120)
       const remote = validateRemoteUrl(String(body.url || '').trim())
       const transportType = body.transport || 'httpStream'
@@ -435,7 +437,7 @@ createServer(async (req, res) => {
   const mcpMatch = url.pathname.match(/^\/api\/mcp\/([a-f0-9-]+)(?:\/(tools|call))?$/)
   if (mcpMatch && req.method === 'DELETE' && !mcpMatch[2]) {
     const body = await readBody(req).catch(() => ({}))
-    if (!['晏未晞','言朔'].includes(body.person)) return send(res, 400, { error: '必须指定人物身份' })
+    if (!isValidAssistantId(body.person)) return send(res, 400, { error: '必须指定人物身份' })
     const result = db.prepare('DELETE FROM mcp_connections WHERE id=? AND person=?').run(mcpMatch[1], body.person)
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '未找到该人物绑定的 MCP 服务' })
   }
@@ -443,7 +445,7 @@ createServer(async (req, res) => {
     try {
       const body = await readBody(req)
       const person = body.person
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定人物身份' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '必须指定人物身份' })
       const row = db.prepare('SELECT * FROM mcp_connections WHERE id=? AND person=?').get(mcpMatch[1], person)
       if (!row) return send(res, 404, { error: '此 MCP 没有绑定到当前人物' })
       if (mcpMatch[2] === 'tools') {
@@ -470,7 +472,7 @@ createServer(async (req, res) => {
     try {
       const body = await readBody(req)
       const person = body.person
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
       const action = body.action
       const now = new Date().toISOString()
       if (action === 'create') {
@@ -500,7 +502,7 @@ createServer(async (req, res) => {
 
   if (url.pathname === '/api/tasks' && req.method === 'GET') {
     const person = url.searchParams.get('person')
-    if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '人物身份无效' })
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
     const rows = db.prepare('SELECT * FROM scheduled_tasks WHERE person=? ORDER BY run_at ASC').all(person)
     return send(res, 200, { tasks: rows })
   }
@@ -508,7 +510,7 @@ createServer(async (req, res) => {
     try {
       const body = await readBody(req)
       const person = body.person
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
       const title = String(body.title || '').trim().slice(0, 160)
       const prompt = String(body.prompt || '').trim().slice(0, 12000)
       const runAt = String(body.runAt || '')
@@ -523,7 +525,7 @@ createServer(async (req, res) => {
   if (taskMatch && req.method === 'PUT') {
     try {
       const body = await readBody(req), person = body.person
-      if (!['晏未晞','言朔'].includes(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '必须指定有效的人物身份' })
       const row = db.prepare('SELECT * FROM scheduled_tasks WHERE id=? AND person=?').get(taskMatch[1],person)
       if (!row) return send(res, 404, { error: '找不到该人物的任务' })
       const status = ['scheduled','paused','completed'].includes(body.status) ? body.status : row.status
@@ -536,7 +538,7 @@ createServer(async (req, res) => {
   }
   if (taskMatch && req.method === 'DELETE') {
     const body = await readBody(req).catch(() => ({}))
-    if (!['晏未晞','言朔'].includes(body.person)) return send(res, 400, { error: '必须指定有效的人物身份' })
+    if (!isValidAssistantId(body.person)) return send(res, 400, { error: '必须指定有效的人物身份' })
     const result = db.prepare('DELETE FROM scheduled_tasks WHERE id=? AND person=?').run(taskMatch[1],body.person)
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '找不到该人物的任务' })
   }
@@ -549,7 +551,7 @@ createServer(async (req, res) => {
   if (url.pathname === '/api/inbox/test' && req.method === 'POST') {
     try {
       const body=await readBody(req)
-      if(!['晏未晞','言朔'].includes(body.person))return send(res,400,{error:'无效人物'})
+      if(!isValidAssistantId(body.person))return send(res,400,{error:'无效人物'})
       // Explicitly labelled diagnostic content, never impersonate a model.
       return send(res,200,{message:addInboxMessage(db,{person:body.person,content:'【通知测试】这是一条系统测试消息，不是 AI 自主生成的内容。',kind:'test'})})
     } catch(error){return send(res,400,{error:error.message})}
@@ -564,13 +566,13 @@ createServer(async (req, res) => {
 
   if (url.pathname === '/api/proactive' && req.method === 'GET') {
     const person=url.searchParams.get('person')
-    if(!['晏未晞','言朔'].includes(person))return send(res,400,{error:'无效人物'})
+    if(!isValidAssistantId(person))return send(res,400,{error:'无效人物'})
     return send(res,200,{settings:proactiveSettings(db,person),events:proactiveEvents(db,person)})
   }
   if (url.pathname === '/api/proactive' && req.method === 'POST') {
     try {
       const body=await readBody(req)
-      if(!['晏未晞','言朔'].includes(body.person))return send(res,400,{error:'无效人物'})
+      if(!isValidAssistantId(body.person))return send(res,400,{error:'无效人物'})
       if(body.action==='configure')return send(res,200,{settings:configureProactive(db,body.person,body)})
       if(body.action==='wake')return send(res,200,wakeProactive(db,body.person,{manual:true}))
       if(body.action==='dismiss')return send(res,200,{ok:dismissProactive(db,body.person,String(body.id||''))})
@@ -582,20 +584,30 @@ createServer(async (req, res) => {
     const person = url.searchParams.get('person')
     const query = (url.searchParams.get('q') || '').trim()
     const exclude = url.searchParams.get('exclude') || ''
-    if (!['晏未晞', '言朔'].includes(person)) return send(res, 400, { error: '无效人物' })
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '无效人物' })
     if (query.length < 2 || query.length > 160) return send(res, 400, { error: '搜索内容长度应为 2 至 160 字' })
     return send(res, 200, { results: searchMemoryIndex(db, { person, query, exclude, limit: 5 }) })
   }
 
   if (url.pathname === '/api/state' && req.method === 'GET') {
     const row = db.prepare('SELECT payload, updated_at FROM app_state WHERE id=1').get()
-    return send(res, 200, { state: row ? JSON.parse(row.payload) : null, updatedAt: row?.updated_at || null })
+    if (!row) return send(res, 200, { state: null, updatedAt: null })
+    let state
+    try { state = JSON.parse(row.payload) } catch { return send(res, 200, { state: null, updatedAt: row.updated_at }) }
+    // v2 -> v3 (assistantId keys) is persisted once; repeat GETs are no-ops.
+    const migrated = migrateSnapshot(state)
+    if (migrated) {
+      const updatedAt = new Date().toISOString()
+      db.prepare('UPDATE app_state SET payload=?, updated_at=? WHERE id=1').run(JSON.stringify(migrated), updatedAt)
+      return send(res, 200, { state: migrated, updatedAt })
+    }
+    return send(res, 200, { state, updatedAt: row.updated_at })
   }
   if (url.pathname === '/api/state' && req.method === 'PUT') {
     try {
       const body = await readBody(req)
       if (!body.state || typeof body.state !== 'object' || Array.isArray(body.state)) return send(res, 400, { error: 'state 格式无效' })
-      const payload = JSON.stringify(body.state)
+      const payload = JSON.stringify(migrateSnapshot(body.state) || body.state)
       if (Buffer.byteLength(payload) > MAX_BODY) return send(res, 413, { error: '云端数据超过 2 MB 限制' })
       const updatedAt = new Date().toISOString()
       db.exec('BEGIN IMMEDIATE')
@@ -632,7 +644,7 @@ setInterval(() => {
 // One-minute wake checks. A pending event is not a sent message.
 // Model generation and delivery are deliberately disabled until a secure provider adapter exists.
 setInterval(() => {
-  for (const person of ['晏未晞','言朔']) {
+  for (const person of knownAssistantIds(db)) {
     try { wakeProactive(db,person) } catch(error) { console.error('[proactive]',error.message) }
   }
 }, 60_000)
