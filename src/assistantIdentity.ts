@@ -9,10 +9,14 @@ export const LEGACY_NAME_TO_ID: Record<string, string> = { '晏未晞': 'assista
 export const ASSISTANT_IDS: string[] = LEGACY_ASSISTANTS.map(a => a.id)
 export function toAssistantId(name: string): string { return LEGACY_NAME_TO_ID[name] || name }
 // 默认显示名：只影响「从未被用户改过名」的助手展示，不参与 legacyId 迁移映射（映射仍按旧名字）。
+// 用 assistant-001/002… 编号而非固定称呼，避免预设人格化名称。
 export const DEFAULT_DISPLAY_NAMES: Record<string, string> = {
-  'assistant-yanweixi': '默认助手',
-  'assistant-yanshuo': '默认助手2号',
+  'assistant-yanweixi': 'assistant-001',
+  'assistant-yanshuo': 'assistant-002',
 }
+// 历史上用过的系统默认名：命中即视为「用户从未自定义」，可安全替换为当前默认名。
+// 用户真正改过的名字（不在集合内）一律保留。
+export const LEGACY_DEFAULT_NAMES = new Set(['晏未晞', '言朔', '默认助手', '默认助手2号'])
 const identityFields = ['messages', 'conversations', 'activeConversationIds', 'memory', 'memoryEntries', 'prompt', 'characters', 'worldbook', 'mcpConnections', 'tasks', 'modelConfig', 'apiKey'] as const
 type Snapshot = Record<string, any>
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)

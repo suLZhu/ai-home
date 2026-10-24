@@ -4,7 +4,7 @@ import { Ledger } from './Ledger'
 import { Diary } from './Diary'
 import { ThemeSettings } from './ThemeSettings'
 import { DEFAULT_THEME,themeStyle,type ThemePrefs,type CustomAssets,type PersonAppearancePref,EMPTY_ASSETS } from './theme'
-import { LEGACY_ASSISTANTS, DEFAULT_DISPLAY_NAMES, migrateLocalStorage, toAssistantId, type AssistantRecord } from './assistantIdentity'
+import { LEGACY_ASSISTANTS, DEFAULT_DISPLAY_NAMES, LEGACY_DEFAULT_NAMES, migrateLocalStorage, toAssistantId, type AssistantRecord } from './assistantIdentity'
 import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSettings'
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 import { ToolDashboard } from './ToolDashboard'
@@ -41,10 +41,10 @@ function readMessages(): Record<Person,ChatMessage[]> {
 }
 
 const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', '自主生活', 'MCP', '模型设置', '角色外观', '工具调用看板']
-// 旧显示名 → 新默认显示名（仅迁移「从未改过名」的助手，用户改过的名字保留）
-const LEGACY_DISPLAY_NAMES: Record<string, string> = { 'assistant-yanweixi': '晏未晞', 'assistant-yanshuo': '言朔' }
+// 系统默认名 → 当前默认名（仅迁移「从未改过名」的助手，用户改过的名字保留）。
+// 历史默认名含旧中文名与「默认助手/默认助手2号」，统一视为未自定义并换成编号名。
 function applyDefaultDisplayNames(list: AssistantRecord[]): AssistantRecord[] {
-  return list.map(a => DEFAULT_DISPLAY_NAMES[a.id] && a.name === LEGACY_DISPLAY_NAMES[a.id] ? { ...a, name: DEFAULT_DISPLAY_NAMES[a.id] } : a)
+  return list.map(a => DEFAULT_DISPLAY_NAMES[a.id] && LEGACY_DEFAULT_NAMES.has(a.name) ? { ...a, name: DEFAULT_DISPLAY_NAMES[a.id] } : a)
 }
 
 function read<T>(key: string, fallback: T): T {
