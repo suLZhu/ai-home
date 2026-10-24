@@ -11,6 +11,10 @@ import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mj
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
 import { migrateDatabase, migrateSnapshot, isValidAssistantId, knownAssistantIds } from './server/identity.mjs'
+import { initAgentRuns, createAgentRun, getAgentRun, listAgentRuns } from './server/agent/AgentRunStore.mjs'
+import { AgentEventBus } from './server/agent/AgentEventBus.mjs'
+import { AgentRunner } from './server/agent/AgentRunner.mjs'
+import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPolicy.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -72,6 +76,8 @@ initMemoryIndex(db)
 initProactive(db)
 initInbox(db)
 initToolLogs(db)
+initAgentRuns(db)
+initToolPolicies(db)
 const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
@@ -167,6 +173,45 @@ async function withMcpClient(row, operation) {
 function getClientKey(req) {
   return String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim()
 }
+
+// Agent run context. Provider credentials are resolved server-side from the
+// saved snapshot (endpoint/model) and api_keys (encrypted key) — the request
+// body only names *who* is running, never *how* to authenticate.
+const agentEvents = new AgentEventBus()
+function providerFor(person) {
+  const row = db.prepare('SELECT payload FROM app_state WHERE id=1').get()
+  let endpoint = '', model = ''
+  try {
+    const state = migrateSnapshot(JSON.parse(row?.payload || 'null')) || JSON.parse(row?.payload || 'null')
+    const cfg = state?.modelConfig?.[person]
+    endpoint = String(cfg?.endpoint || '').trim()
+    model = String(cfg?.model || '').trim()
+  } catch { /* no snapshot yet */ }
+  let apiKey = ''
+  const keyRow = db.prepare('SELECT key_enc FROM api_keys WHERE person=?').get(person)
+  if (keyRow) { try { apiKey = decryptSecret(keyRow.key_enc) } catch { /* undecryptable */ } }
+  return { endpoint, apiKey, model }
+}
+function displayNameFor(person) {
+  try {
+    const row = db.prepare('SELECT payload FROM app_state WHERE id=1').get()
+    const state = JSON.parse(row?.payload || 'null')
+    const found = Array.isArray(state?.assistants) ? state.assistants.find(a => a?.id === person) : null
+    if (found?.name) return String(found.name)
+  } catch { /* fall through */ }
+  return person
+}
+const agentRunner = new AgentRunner({
+  db,
+  bus: agentEvents,
+  providerFor,
+  displayNameFor,
+  mcpList: row => withMcpClient(row, async client => {
+    const result = await client.listTools()
+    return result.tools.map(t => ({ name: t.name, description: t.description || '', inputSchema: t.inputSchema }))
+  }),
+  mcpCall: (row, name, args) => withMcpClient(row, client => client.callTool({ name, arguments: args })),
+})
 
 createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost')
@@ -619,6 +664,79 @@ createServer(async (req, res) => {
       return send(res, 200, { ok: true, updatedAt })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '保存失败' }) }
   }
+  // ---- Agent Runner: start / query / cancel runs, live SSE, tool policy ----
+  if (url.pathname === '/api/agent/runs' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const person = body.person
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
+      const prompt = String(body.prompt || '').trim()
+      if (!prompt || prompt.length > 20000) return send(res, 400, { error: '任务内容需为 1 至 20000 字' })
+      const source = ['manual', 'scheduled', 'proactive', 'chat'].includes(body.source) ? body.source : 'manual'
+      const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
+      const run = createAgentRun(db, { assistantId: person, source, conversationId, prompt })
+      agentEvents.publish({ type: 'run_created', runId: run.id, assistantId: person, source })
+      const handle = agentRunner.start(run)
+      handle.promise.catch(() => { /* terminal state already persisted */ })
+      return send(res, 201, { run })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '创建运行失败' }) }
+  }
+  if (url.pathname === '/api/agent/runs' && req.method === 'GET') {
+    try {
+      const query = Object.fromEntries(url.searchParams)
+      if (query.person && !isValidAssistantId(query.person)) return send(res, 400, { error: '人物身份无效' })
+      return send(res, 200, { runs: listAgentRuns(db, query) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '读取运行记录失败' }) }
+  }
+  const agentRunMatch = url.pathname.match(/^\/api\/agent\/runs\/([0-9a-f-]{36})$/)
+  if (agentRunMatch && req.method === 'GET') {
+    const run = getAgentRun(db, agentRunMatch[1])
+    if (!run) return send(res, 404, { error: '运行记录不存在' })
+    const logs = listToolLogs(db, { runId: run.id, limit: 100 })
+    return send(res, 200, { run, logs })
+  }
+  const agentCancelMatch = url.pathname.match(/^\/api\/agent\/runs\/([0-9a-f-]{36})\/cancel$/)
+  if (agentCancelMatch && req.method === 'POST') {
+    const cancelled = agentRunner.cancel(agentCancelMatch[1])
+    const run = getAgentRun(db, agentCancelMatch[1])
+    if (!run) return send(res, 404, { error: '运行记录不存在' })
+    return send(res, 200, { ok: true, accepted: cancelled || run.status !== 'running', status: run.status })
+  }
+
+  // Live run events for the dashboard. Reconnect-safe: clients recover state
+  // from /api/agent/runs after a gap, this stream only carries the deltas.
+  if (url.pathname === '/api/agent/events' && req.method === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    const write = (event) => { try { res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`) } catch { /* client gone */ } }
+    for (const event of agentEvents.recent()) write(event)
+    const unsubscribe = agentEvents.subscribe(write)
+    const heartbeat = setInterval(() => { try { res.write(': ping\n\n') } catch { /* client gone */ } }, 25000)
+    req.on('close', () => { clearInterval(heartbeat); unsubscribe() })
+    return
+  }
+
+  // Tool permission policy (auto / ask / deny), evaluated server-side only.
+  if (url.pathname === '/api/agent/policies' && req.method === 'GET') {
+    const person = url.searchParams.get('person')
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
+    return send(res, 200, { policies: listPolicies(db, person) })
+  }
+  if (url.pathname === '/api/agent/policies' && req.method === 'PUT') {
+    try {
+      const body = await readBody(req)
+      if (!isValidAssistantId(body.person)) return send(res, 400, { error: '人物身份无效' })
+      const tool = String(body.tool || '').trim()
+      if (!tool || tool.length > 200) return send(res, 400, { error: '工具名无效' })
+      const saved = setPolicy(db, body.person, tool, body.mode)
+      return send(res, 200, { policy: saved })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '保存策略失败' }) }
+  }
+
   return send(res, 404, { error: 'not found' })
 }).listen(4180, '127.0.0.1', () => console.log('AI Home private data API listening on 127.0.0.1:4180'))
 
