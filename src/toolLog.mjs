@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 const PEOPLE = ['assistant-yanweixi', 'assistant-yanshuo']
 // New assistants (created client-side) pass the same stable-id format check.
 const isPerson = (value) => PEOPLE.includes(value) || /^assistant-[a-zA-Z0-9-]{4,}$/.test(String(value || ''))
-const SOURCES = ['mcp', 'worldbook', 'ledger']
+const SOURCES = ['mcp', 'worldbook', 'ledger', 'workflow']
 export const TOOL_CALL_STATUSES = ['queued', 'awaiting_confirmation', 'running', 'succeeded', 'failed', 'cancelled', 'timed_out']
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 // Pre-migration row values still present in old databases.

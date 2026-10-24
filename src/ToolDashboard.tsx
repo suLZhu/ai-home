@@ -19,7 +19,7 @@ type ToolLog = {
   startedAt: string; finishedAt?: string | null
 }
 
-const SOURCE_LABEL: Record<string, string> = { mcp: 'MCP', worldbook: '世界书', ledger: '记账' }
+const SOURCE_LABEL: Record<string, string> = { mcp: 'MCP', worldbook: '世界书', ledger: '记账', workflow: '定时任务' }
 const STATUS_LABEL: Record<ToolLogStatus, string> = {
   queued: '排队中', awaiting_confirmation: '等待确认', running: '执行中',
   succeeded: '成功', failed: '失败', cancelled: '已取消', timed_out: '已超时',
@@ -258,7 +258,7 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
       <div><small>今日调用</small><b>{todayCount}</b></div>
     </div>
     <div className="tool-dash-filters">
-      {chipRow('工具类型筛选', source, setSource, [{ key: '全部', text: '全部类型' }, { key: 'mcp', text: 'MCP' }, { key: 'worldbook', text: '世界书' }, { key: 'ledger', text: '记账' }])}
+      {chipRow('工具类型筛选', source, setSource, [{ key: '全部', text: '全部类型' }, { key: 'mcp', text: 'MCP' }, { key: 'worldbook', text: '世界书' }, { key: 'ledger', text: '记账' }, { key: 'workflow', text: '定时任务' }])}
       {chipRow('状态筛选', status, setStatus, STATUS_FILTERS)}
     </div>
 

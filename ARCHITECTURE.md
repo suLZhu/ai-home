@@ -13,7 +13,7 @@
 ```
 AgentRunStore   运行记录（agent_runs，含 idempotency_key、conversation_id、task_id）
 AgentRunner     ≤5 轮工具循环；AbortController 取消；身份/凭证服务端解析
-ToolRegistry    内置工具（memory_search/memory_add/worldbook_search/ledger_list/ledger_add）
+ToolRegistry    内置工具（memory_search/memory_add/worldbook_search/ledger_list/ledger_add）；聊天工具循环另有定时任务工具（scheduled_task_list/create/manage，走 /api/tasks 与 /api/workflows/manage）
                 + 按人物隔离、按连接命名空间化的 MCP 工具；单个 MCP 掉线不阻断运行
 ToolExecutor    策略门（auto/ask/deny）→ tool_call_logs 落账 → 调用 → 终态 → 事件
 ToolPolicy      每助手每工具的权限等级，服务端强制，模型无法绕过

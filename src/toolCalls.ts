@@ -11,7 +11,7 @@
 import { useEffect, useState } from 'react'
 
 export type ToolCallStatus = 'queued' | 'awaiting_confirmation' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
-export type ToolCallSource = 'mcp' | 'worldbook' | 'ledger'
+export type ToolCallSource = 'mcp' | 'worldbook' | 'ledger' | 'workflow'
 
 export type ToolCallRecord = {
   key: string            // client key: runId + ':' + tool_call id；同一调用的所有事件共用
@@ -50,6 +50,9 @@ const LOCAL_TOOL_NAMES: Record<string, string> = {
   worldbook_create_entry: '世界书 · 新增条目',
   worldbook_search_entries: '世界书 · 搜索条目',
   worldbook_update_entry: '世界书 · 更新条目',
+  scheduled_task_list: '定时任务 · 查看列表',
+  scheduled_task_create: '定时任务 · 创建',
+  scheduled_task_manage: '定时任务 · 管理',
 }
 export function toolDisplayName(source: ToolCallSource, serverName: string, toolName: string): string {
   void source // 本地/MCP 的区分已由 toolName 与 serverName 表达；保留参数便于后续按来源定制。
