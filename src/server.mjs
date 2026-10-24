@@ -16,6 +16,7 @@ import { AgentEventBus } from './server/agent/AgentEventBus.mjs'
 import { AgentRunner } from './server/agent/AgentRunner.mjs'
 import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPolicy.mjs'
 import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
+import { createTaskScheduler } from './server/agent/TaskScheduler.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -780,23 +781,15 @@ createServer(async (req, res) => {
   return send(res, 404, { error: 'not found' })
 }).listen(4180, '127.0.0.1', () => console.log('AI Home private data API listening on 127.0.0.1:4180'))
 
-// Durable scheduler scaffold: persist due events instead of silently losing them on restart.
-// Model execution is intentionally an adapter boundary until the user selects a provider.
+// Durable scheduler: due tasks are claimed atomically and executed through the
+// shared AgentRunner (bounded loop, tool logging, SSE) instead of the old
+// "mark ready and wait for someone to notice" scaffold.
+const taskScheduler = createTaskScheduler({ db, runner: agentRunner, bus: agentEvents })
 setInterval(() => {
-  const now = new Date()
-  const due = db.prepare("SELECT * FROM scheduled_tasks WHERE status='scheduled' AND run_at<=?").all(now.toISOString())
-  for (const task of due) {
-    const timestamp = now.toISOString()
-    if (task.recurrence === 'once') {
-      db.prepare("UPDATE scheduled_tasks SET status='ready',last_run_at=?,updated_at=? WHERE id=? AND status='scheduled'").run(timestamp,timestamp,task.id)
-      console.log(`[scheduler] task ready person=${task.person} id=${task.id}`)
-    } else {
-      const next = new Date(task.run_at)
-      do { next.setTime(next.getTime() + (task.recurrence === 'daily' ? 86400000 : 604800000)) } while (next <= now)
-      db.prepare("UPDATE scheduled_tasks SET status='scheduled',last_run_at=?,run_at=?,updated_at=? WHERE id=? AND status='scheduled'").run(timestamp,next.toISOString(),timestamp,task.id)
-      console.log(`[scheduler] recurring task ready person=${task.person} id=${task.id}; next=${next.toISOString()}`)
-    }
-  }
+  try {
+    const dispatched = taskScheduler.tick()
+    if (dispatched) console.log(`[scheduler] dispatched ${dispatched} task run(s)`)
+  } catch (error) { console.error('[scheduler]', error.message) }
 }, 15000).unref()
 
 // One-minute wake checks. A pending event is not a sent message.

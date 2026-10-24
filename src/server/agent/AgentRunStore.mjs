@@ -29,6 +29,15 @@ export function initAgentRuns(db) {
     CREATE INDEX IF NOT EXISTS agent_runs_assistant_idx ON agent_runs(assistant_id, created_at);
     CREATE INDEX IF NOT EXISTS agent_runs_status_idx ON agent_runs(status);
   `)
+  // Backfill for databases created before scheduled-task linkage.
+  const cols = db.prepare('PRAGMA table_info(agent_runs)').all().map(row => row.name)
+  if (!cols.includes('task_id')) db.exec('ALTER TABLE agent_runs ADD COLUMN task_id TEXT')
+  // A restart kills every in-flight loop; orphaned `running` rows would stay
+  // "executing" forever. Fail them once at boot — at-least-once task pickup
+  // will re-run anything that was due (see TaskScheduler).
+  db.prepare(`UPDATE agent_runs SET status='failed', error_code='SERVER_RESTART',
+    error_message='服务重启，运行中断', updated_at=?, finished_at=? WHERE status='running'`)
+    .run(new Date().toISOString(), new Date().toISOString())
 }
 
 function mapRun(row) {
@@ -39,6 +48,7 @@ function mapRun(row) {
     id: row.id,
     assistantId: row.assistant_id,
     source: row.source,
+    taskId: row.task_id || null,
     conversationId: row.conversation_id || '',
     prompt: row.prompt,
     answer: row.answer,
@@ -58,9 +68,9 @@ function mapRun(row) {
 export function createAgentRun(db, input) {
   const id = randomUUID()
   const now = new Date().toISOString()
-  db.prepare(`INSERT INTO agent_runs (id,assistant_id,source,conversation_id,prompt,status,created_at,updated_at)
-    VALUES (?,?,?,?,?,'running',?,?)`)
-    .run(id, input.assistantId, input.source || 'manual', input.conversationId || null, String(input.prompt || ''), now, now)
+  db.prepare(`INSERT INTO agent_runs (id,assistant_id,source,conversation_id,task_id,prompt,status,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,'running',?,?)`)
+    .run(id, input.assistantId, input.source || 'manual', input.conversationId || null, input.taskId || null, String(input.prompt || ''), now, now)
   return mapRun(db.prepare('SELECT * FROM agent_runs WHERE id=?').get(id))
 }
 
