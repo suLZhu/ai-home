@@ -10,13 +10,14 @@ import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memory
 import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
-import { migrateDatabase, migrateSnapshot, isValidAssistantId, knownAssistantIds } from './server/identity.mjs'
+import { migrateDatabase, migrateSnapshot, isValidAssistantId } from './server/identity.mjs'
 import { initAgentRuns, createAgentRun, getAgentRun, listAgentRuns } from './server/agent/AgentRunStore.mjs'
 import { AgentEventBus } from './server/agent/AgentEventBus.mjs'
 import { AgentRunner } from './server/agent/AgentRunner.mjs'
 import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPolicy.mjs'
 import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
 import { createTaskScheduler } from './server/agent/TaskScheduler.mjs'
+import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun } from './server/agent/ProactiveHeat.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -76,6 +77,7 @@ if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks
 migrateDatabase(db)
 initMemoryIndex(db)
 initProactive(db)
+initProactiveHeat(db) // needs proactive_events to exist first (adds run_id column on old DBs)
 initInbox(db)
 initToolLogs(db)
 initAgentRuns(db)
@@ -214,6 +216,10 @@ const agentRunner = new AgentRunner({
   }),
   mcpCall: (row, name, args) => withMcpClient(row, client => client.callTool({ name, arguments: args })),
 })
+// Proactive answers land in the same inbox the UI already polls.
+function deliverProactive(person, content) {
+  return addInboxMessage(db, { person, content, kind: 'proactive' })
+}
 
 createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost')
@@ -614,14 +620,21 @@ createServer(async (req, res) => {
   if (url.pathname === '/api/proactive' && req.method === 'GET') {
     const person=url.searchParams.get('person')
     if(!isValidAssistantId(person))return send(res,400,{error:'无效人物'})
-    return send(res,200,{settings:proactiveSettings(db,person),events:proactiveEvents(db,person)})
+    return send(res,200,{settings:proactiveSettings(db,person),events:proactiveEvents(db,person),heat:readHeat(db,person)})
   }
   if (url.pathname === '/api/proactive' && req.method === 'POST') {
     try {
       const body=await readBody(req)
       if(!isValidAssistantId(body.person))return send(res,400,{error:'无效人物'})
       if(body.action==='configure')return send(res,200,{settings:configureProactive(db,body.person,body)})
-      if(body.action==='wake')return send(res,200,wakeProactive(db,body.person,{manual:true}))
+      if(body.action==='wake'){
+        const woken=wakeProactive(db,body.person,{manual:true})
+        // Manual wake also runs for real through the shared Runner, so the
+        // dashboard's "test wake" exercises the same path as heat-triggered wakes.
+        if(woken.queued)dispatchProactiveRun({db,runner:agentRunner,bus:agentEvents,deliver:deliverProactive,person:body.person,eventId:woken.id,reason:woken.reason})
+        return send(res,200,woken)
+      }
+      if(body.action==='cool')return send(res,200,{heat:coolHeat(db,body.person)})
       if(body.action==='dismiss')return send(res,200,{ok:dismissProactive(db,body.person,String(body.id||''))})
       return send(res,400,{error:'未知操作'})
     } catch(error){return send(res,400,{error:error.message||'操作失败'})}
@@ -792,10 +805,13 @@ setInterval(() => {
   } catch (error) { console.error('[scheduler]', error.message) }
 }, 15000).unref()
 
-// One-minute wake checks. A pending event is not a sent message.
-// Model generation and delivery are deliberately disabled until a secure provider adapter exists.
+// Jiwen (积温): warmth accrues per minute (faster in lively mode, slower in
+// quiet), vents on real conversation, and at 100 attempts a wake — which still
+// respects quiet hours / pending / cooldown — then runs the assistant through
+// the shared AgentRunner. Silence is recorded as silence, not a fake message.
 setInterval(() => {
-  for (const person of knownAssistantIds(db)) {
-    try { wakeProactive(db,person) } catch(error) { console.error('[proactive]',error.message) }
-  }
-}, 60_000)
+  try {
+    const result = tickHeat({ db, runner: agentRunner, bus: agentEvents, deliver: deliverProactive })
+    if (result.fired) console.log(`[proactive] heat fired for ${result.person} (${result.eventId})`)
+  } catch (error) { console.error('[proactive]', error.message) }
+}, 60_000).unref()
