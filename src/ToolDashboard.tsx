@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import './ToolDashboard.css'
 import {
-  useAgentRuns, useAgentRunDetail, startRun, cancelRun, subscribeAgentEvents,
+  useAgentRuns, useAgentRunDetail, useApprovals, startRun, cancelRun, decideApproval, subscribeAgentEvents,
   RUN_STATUS_LABEL, RUN_SOURCE_LABEL, isRunActive, type AgentRun,
 } from './agentRuns'
 
@@ -63,6 +63,13 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState('')
   const [openRun, setOpenRun] = useState<string | null>(null)
+  // 审批（policy=ask）：待确认的工具调用在这里由用户放行或拒绝。
+  const { approvals, refresh: refreshApprovals } = useApprovals(person)
+  const [deciding, setDeciding] = useState('')
+  const [approvalError, setApprovalError] = useState('')
+  // 工具权限策略：auto 立即执行 / ask 每次审批 / deny 永久拒绝。
+  const [policies, setPolicies] = useState<Record<string, string>>({})
+  const [policyError, setPolicyError] = useState('')
 
   const refresh = useCallback(async (isAlive: () => boolean = () => true) => {
     // 仅首屏显示骨架（loading 初值 true）；筛选与自动刷新时保留旧列表，
@@ -136,6 +143,49 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
     try { await cancelRun(runId); refreshRuns() } catch { /* 已结束则无效果 */ }
   }
 
+  // 策略表：只加载当前助手已显式设置的条目；未设置的工具默认 auto。
+  useEffect(() => {
+    let alive = true
+    queueMicrotask(() => {
+      if (!alive) return
+      fetch('/api/agent/policies?person=' + encodeURIComponent(person), { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then((d: { policies?: { tool: string; mode: string }[] }) => {
+          if (alive && Array.isArray(d.policies)) setPolicies(Object.fromEntries(d.policies.map(p => [p.tool, p.mode])))
+        })
+        .catch(() => { /* 策略加载失败不打断看板 */ })
+    })
+    return () => { alive = false }
+  }, [person])
+
+  async function handleDecision(logId: string, decision: 'approve' | 'reject') {
+    if (deciding) return
+    setDeciding(logId)
+    setApprovalError('')
+    try { await decideApproval(logId, decision); refreshApprovals(); refreshRuns() }
+    catch (e) { setApprovalError(e instanceof Error ? e.message : '审批操作失败') }
+    finally { setDeciding('') }
+  }
+
+  async function handlePolicyChange(tool: string, mode: string) {
+    setPolicyError('')
+    try {
+      const response = await fetch('/api/agent/policies', {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ person, tool, mode }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || '保存策略失败')
+      setPolicies(old => ({ ...old, [tool]: mode }))
+    } catch (e) { setPolicyError(e instanceof Error ? e.message : '保存策略失败') }
+  }
+
+  // 已知工具的策略编辑器（MCP 工具名按运行记录动态补充）。
+  const knownTools = ['ledger_add', 'ledger_list', 'memory_search', 'worldbook_search']
+  for (const log of logs) if (log.toolName && !knownTools.includes(log.toolName) && log.source !== 'mcp') knownTools.push(log.toolName)
+  const policyTools = [...new Set([...knownTools, ...Object.keys(policies)])].slice(0, 12)
+
   const counts = { active: 0, succeeded: 0, failed: 0, timedOut: 0 }
   for (const log of logs) {
     if (ACTIVE_STATUSES.includes(log.status)) counts.active++
@@ -193,6 +243,49 @@ export function ToolDashboard({ person, personLabel }: { person: string; personL
         : <ul className="tool-dash-run-list">{runs.map(run => <RunCard key={run.id} run={run} personLabel={personLabel} open={openRun === run.id}
             onToggle={() => setOpenRun(old => old === run.id ? null : run.id)}
             onCancel={() => void handleCancelRun(run.id)} />)}</ul>}
+    </section>
+
+    {/* ── 待审批：policy=ask 的工具调用在这里放行/拒绝 ── */}
+    {approvals.length > 0 && <section className="tool-dash-approvals" aria-label="待审批的工具调用">
+      <header className="tool-dash-runs-head">
+        <div><b>待审批</b><small>这些工具调用在等你确认；批准后运行会继续执行并把结果交给模型。</small></div>
+      </header>
+      {approvalError && <p className="tool-dash-error" role="alert">{approvalError}</p>}
+      <ul className="tool-dash-approval-list">{approvals.map(item =>
+        <li className="tool-dash-approval" key={item.logId}>
+          <div className="tool-dash-item-top">
+            <span className="tool-dash-badge running">等待确认</span>
+            <code>{item.serverName ? item.serverName + ' / ' + item.tool : item.tool}</code>
+            <span className="tool-dash-item-meta">{formatTime(item.startedAt)}</span>
+          </div>
+          <p className="tool-dash-args">参数：{brief(item.arguments, 200)}</p>
+          {!item.pending && <p className="tool-dash-result is-error">审批已失效（服务已重启），只能清理，不会补执行。</p>}
+          <div className="tool-dash-approval-actions">
+            <button type="button" className="tool-dash-approve" disabled={!!deciding || !item.pending}
+              onClick={() => void handleDecision(item.logId, 'approve')}>{deciding === item.logId ? '处理中…' : '批准执行'}</button>
+            <button type="button" className="tool-dash-reject" disabled={!!deciding || !item.pending}
+              onClick={() => void handleDecision(item.logId, 'reject')}>拒绝</button>
+          </div>
+        </li>)}</ul>
+    </section>}
+
+    {/* ── 工具权限策略 ── */}
+    <section className="tool-dash-policies" aria-label="工具权限策略">
+      <header className="tool-dash-runs-head">
+        <div><b>工具权限</b><small>auto 立即执行 · ask 每次执行前审批 · deny 永久拒绝（服务端强制，模型无法绕过）。</small></div>
+      </header>
+      {policyError && <p className="tool-dash-error" role="alert">{policyError}</p>}
+      <ul className="tool-dash-policy-list">{policyTools.map(tool => {
+        const mode = policies[tool] || 'auto'
+        return <li className="tool-dash-policy" key={tool}>
+          <code>{tool}</code>
+          <div className="tool-dash-chip-row" role="group" aria-label={tool + ' 权限模式'}>
+            {['auto', 'ask', 'deny'].map(m =>
+              <button type="button" key={m} className={'tool-dash-chip' + (mode === m ? ' active' : '')}
+                aria-pressed={mode === m} onClick={() => void handlePolicyChange(tool, m)}>{m}</button>)}
+          </div>
+        </li>
+      })}</ul>
     </section>
     {error && <p className="tool-dash-error" role="alert" aria-live="polite">{error}</p>}
     {loading ? <div className="tool-dash-skeletons" aria-label="正在读取调用记录"><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div><div className="tool-dash-skeleton"><i/><i/><i/></div></div>

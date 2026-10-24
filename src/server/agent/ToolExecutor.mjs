@@ -4,8 +4,14 @@
 //
 // Retry rule (per the run spec): read tools get exactly one retry, write tools
 // never retry automatically — a repeated write could double-charge a ledger.
+//
+// Policy modes: auto executes immediately; deny cancels before running; ask
+// parks the run in awaiting_confirmation until the user decides (see
+// ApprovalGate) — approval resumes execution and the real result goes back to
+// the model, rejection feeds a readable refusal back instead.
 import { createToolLog, finishToolLog, redactValue } from '../../toolLog.mjs'
 import { getPolicy } from './ToolPolicy.mjs'
+import { awaitApproval } from './ApprovalGate.mjs'
 
 const TOOL_TIMEOUT_MS = 30 * 1000
 const RETRY_DELAY_MS = 400
@@ -25,16 +31,14 @@ function parseArgs(raw) {
 }
 
 // Returns { ok, content } where content is the role=tool payload fed back to
-// the model. Approval-pending calls come back as ok:false with a marker the
-// model can read; they never silently disappear.
+// the model. Every path ends with the log row in a terminal state (except
+// ask-pending, which resumes into the shared execute path below).
 export async function executeToolCall({ db, bus, registry, run, round, callId, name, rawArgs, signal }) {
   const person = run.assistantId
   const args = parseArgs(rawArgs)
   const mode = getPolicy(db, person, name)
   const meta = registry.describe(name)
-  if (!meta) {
-    return { ok: false, content: `[错误] 未知工具：${name}` }
-  }
+  if (!meta) return { ok: false, content: `[错误] 未知工具：${name}` }
 
   const logInput = {
     person,
@@ -56,20 +60,35 @@ export async function executeToolCall({ db, bus, registry, run, round, callId, n
   }
 
   if (mode === 'ask') {
-    // Stage 4 wires the approval queue; for now the call parks in
-    // awaiting_confirmation and the model is told to wait for the user.
     const log = createToolLog(db, { ...logInput, status: 'awaiting_confirmation' })
-    bus.publish({ type: 'tool_awaiting', runId: run.id, logId: log.id, tool: name })
-    return { ok: false, content: `[待审批] 工具 ${name} 需要用户确认后才能执行，请先说明你要做什么，等待用户批准。` }
+    const logId = log.id
+    bus.publish({ type: 'tool_awaiting', runId: run.id, logId, tool: name, round, person })
+    const decision = await awaitApproval({ logId, runId: run.id, person, tool: name, signal })
+    if (decision !== 'approved') {
+      const code = decision === 'timeout' ? 'APPROVAL_TIMEOUT' : decision === 'aborted' ? 'ABORTED' : 'APPROVAL_REJECTED'
+      const message = decision === 'timeout' ? '审批超时，用户未在 5 分钟内响应'
+        : decision === 'aborted' ? '运行已取消，审批随之中止'
+          : '用户拒绝了这次工具调用'
+      finishToolLog(db, logId, { status: 'cancelled', errorCode: code, errorMessage: message })
+      bus.publish({ type: 'tool_finished', runId: run.id, logId, tool: name, status: 'cancelled' })
+      return { ok: false, content: `[${decision === 'approved' ? '已批准' : '未批准'}] 工具 ${name} ${message}。请如实告知用户，不要重试。` }
+    }
+    // Approved: move awaiting_confirmation -> running, then share the auto path.
+    finishToolLog(db, logId, { status: 'running' })
+    bus.publish({ type: 'tool_started', runId: run.id, logId, tool: name, round, approved: true })
+    return runInvoke({ db, bus, registry, run, name, args, meta, logId, signal })
   }
 
   const log = createToolLog(db, logInput)
-  const logId = log.id
-  bus.publish({ type: 'tool_started', runId: run.id, logId, tool: name, round })
-  const started = Date.now()
+  bus.publish({ type: 'tool_started', runId: run.id, logId: log.id, tool: name, round })
+  return runInvoke({ db, bus, registry, run, name, args, meta, logId: log.id, signal })
+}
 
-  // One retry for reads, zero for writes.
-  const maxAttempts = meta.readOnly ? 2 : 1
+// Shared invoke path for auto and approved calls: retry policy, terminal
+// transition, event.
+async function runInvoke({ db, bus, registry, run, name, args, meta, logId, signal }) {
+  const started = Date.now()
+  const maxAttempts = meta.readOnly ? 2 : 1 // one retry for reads, zero for writes
   let attempt = 0
   let lastError = null
   let resolved = null
@@ -78,7 +97,7 @@ export async function executeToolCall({ db, bus, registry, run, round, callId, n
     attempt++
     try {
       if (signal?.aborted) throw Object.assign(new Error('运行已取消'), { code: 'ABORTED' })
-      resolved = await withTimeout(registry.invoke(name, args), TOOL_TIMEOUT_MS, signal)
+      resolved = await withTimeout(registry.invoke(name, args), TOOL_TIMEOUT_MS)
       break
     } catch (error) {
       lastError = error

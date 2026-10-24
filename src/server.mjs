@@ -15,6 +15,7 @@ import { initAgentRuns, createAgentRun, getAgentRun, listAgentRuns } from './ser
 import { AgentEventBus } from './server/agent/AgentEventBus.mjs'
 import { AgentRunner } from './server/agent/AgentRunner.mjs'
 import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPolicy.mjs'
+import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -735,6 +736,45 @@ createServer(async (req, res) => {
       const saved = setPolicy(db, body.person, tool, body.mode)
       return send(res, 200, { policy: saved })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '保存策略失败' }) }
+  }
+
+  // Approval queue for policy=ask tool calls. The run stays `running` while
+  // parked; approving resumes it, rejecting feeds a refusal back to the model.
+  if (url.pathname === '/api/agent/approvals' && req.method === 'GET') {
+    const person = url.searchParams.get('person')
+    if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })
+    const rows = listToolLogs(db, { person, status: 'awaiting_confirmation', limit: 50 })
+    return send(res, 200, {
+      approvals: rows.map(row => ({
+        logId: row.id, runId: row.runId, tool: row.toolName, serverName: row.serverName,
+        arguments: row.arguments, startedAt: row.startedAt, conversationId: row.conversationId,
+        pending: isPending(row.id),
+      })),
+    })
+  }
+  const approvalMatch = url.pathname.match(/^\/api\/agent\/approvals\/([0-9a-f-]{36})$/)
+  if (approvalMatch && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const decision = body.decision === 'approve' ? 'approve' : body.decision === 'reject' ? 'reject' : null
+      if (!decision) return send(res, 400, { error: 'decision 需为 approve 或 reject' })
+      const outcome = decideApproval(approvalMatch[1], decision)
+      if (outcome !== 'stale') {
+        agentEvents.publish({ type: 'approval_decided', logId: approvalMatch[1], decision: outcome })
+        return send(res, 200, { ok: true, decision: outcome })
+      }
+      // No live waiter (server restarted or timeout already fired): the parked
+      // row can only be cleaned up, never executed — approvals don't replay.
+      const row = db.prepare('SELECT id, status FROM tool_call_logs WHERE id=?').get(approvalMatch[1])
+      if (!row) return send(res, 404, { error: '审批记录不存在' })
+      if (row.status !== 'awaiting_confirmation') return send(res, 200, { ok: true, decision: row.status, already: true })
+      finishToolLog(db, row.id, {
+        status: 'cancelled', errorCode: 'APPROVAL_STALE',
+        errorMessage: decision === 'approve' ? '审批已失效（服务重启后不允许补执行）' : '审批已失效，已按拒绝处理',
+      })
+      agentEvents.publish({ type: 'approval_decided', logId: row.id, decision: 'stale' })
+      return send(res, 200, { ok: true, decision: 'stale' })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '审批操作失败' }) }
   }
 
   return send(res, 404, { error: 'not found' })

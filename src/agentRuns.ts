@@ -34,6 +34,7 @@ export type AgentEvent = {
   at: string
   runId?: string
   assistantId?: string
+  person?: string
   status?: string
   round?: number
   tool?: string
@@ -72,7 +73,7 @@ export function subscribeAgentEvents(listener: (event: AgentEvent) => void): () 
   if (!source) {
     try {
       source = new EventSource('/api/agent/events')
-      const types = ['run_created', 'run_finished', 'round_started', 'tool_started', 'tool_awaiting', 'tool_finished']
+      const types = ['run_created', 'run_finished', 'round_started', 'tool_started', 'tool_awaiting', 'tool_finished', 'approval_decided']
       for (const type of types) source.addEventListener(type, e => dispatch((e as MessageEvent<string>).data))
       source.onmessage = e => dispatch((e as MessageEvent<string>).data)
       // 断线由 EventSource 自动重连；重连后服务端会补发最近事件缓冲。
@@ -116,6 +117,64 @@ export async function startRun(person: string, prompt: string, source = 'manual'
 
 export async function cancelRun(runId: string): Promise<void> {
   await getJson('/api/agent/runs/' + encodeURIComponent(runId) + '/cancel', { method: 'POST' })
+}
+
+// ------------------------------------------------------------------ 审批（policy=ask）
+
+export type Approval = {
+  logId: string
+  runId: string
+  tool: string
+  serverName: string
+  arguments: unknown
+  startedAt: string
+  conversationId: string
+  pending: boolean // false = 服务重启后失效，只能清理不能执行
+}
+
+export async function fetchApprovals(person: string): Promise<Approval[]> {
+  const data = await getJson('/api/agent/approvals?person=' + encodeURIComponent(person))
+  return Array.isArray(data.approvals) ? data.approvals : []
+}
+
+export async function decideApproval(logId: string, decision: 'approve' | 'reject'): Promise<string> {
+  const data = await getJson('/api/agent/approvals/' + encodeURIComponent(logId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision }),
+  })
+  return String(data.decision || '')
+}
+
+// 待审批列表：挂载即拉，SSE 的 tool_awaiting / approval_decided 事件触发刷新。
+export function useApprovals(person: string): { approvals: Approval[]; refresh: () => void } {
+  const [approvals, setApprovals] = useState<Approval[]>([])
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    queueMicrotask(() => {
+      if (!alive) return
+      fetchApprovals(person)
+        .then(list => { if (alive) setApprovals(list) })
+        .catch(() => { /* 审批列表失败不打断看板 */ })
+    })
+    return () => { alive = false }
+  }, [person, tick])
+
+  useEffect(() => {
+    let timer = 0
+    let disposed = false
+    const unsubscribe = subscribeAgentEvents(event => {
+      if (event.type !== 'tool_awaiting' && event.type !== 'approval_decided' && event.type !== 'tool_finished') return
+      if (event.person && event.person !== person) return
+      if (disposed || timer) return
+      timer = window.setTimeout(() => { timer = 0; if (!disposed) setTick(n => n + 1) }, 300)
+    })
+    return () => { disposed = true; if (timer) window.clearTimeout(timer); unsubscribe() }
+  }, [person])
+
+  return { approvals, refresh: () => setTick(n => n + 1) }
 }
 
 // ------------------------------------------------------------------ React hooks
