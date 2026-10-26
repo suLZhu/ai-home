@@ -15,13 +15,13 @@ import { chat } from './OpenAICompatibleProvider.mjs'
 import { createToolRegistry } from './ToolRegistry.mjs'
 import { executeToolCall } from './ToolExecutor.mjs'
 import { getAgentRun, finishAgentRun } from './AgentRunStore.mjs'
+import { buildTimeContext, timeContextText, normalizeTimeZone, DEFAULT_TIME_ZONE } from '../../timeContext.mjs'
 
 export const MAX_ROUNDS = 5
 
-function buildSystemPrompt(run, displayName, now) {
+function buildSystemPrompt(run, displayName) {
   return [
     `【当前扮演角色】你是 ${displayName}（服务端身份 ID：${run.assistantId}）。你正在通过工具助手执行用户交给你的任务，而不是普通闲聊。`,
-    `【执行日期】${now}`,
     '【工具使用规则】',
     '1. 只在确实需要时调用工具；每次工具调用会真实执行并被记录，不要编造工具结果。',
     '2. 工具返回 [错误] 时可以换一种方式重试一次，仍失败就如实告诉用户。',
@@ -29,6 +29,19 @@ function buildSystemPrompt(run, displayName, now) {
     '4. 记账工具只在用户明确要求记账时使用；成功返回前不要声称已记账。',
     '5. 完成任务后用简洁的中文总结你做了什么、结果如何。',
   ].join('\n')
+}
+
+// 用户配置的 IANA 时区存在 app_state 快照的 timeZone 字段；
+// 读取失败或非法时回退到默认 Asia/Shanghai。
+function readTimeZone(db) {
+  try {
+    const row = db.prepare('SELECT payload FROM app_state WHERE id=1').get()
+    const state = JSON.parse(row?.payload || '{}')
+    const tz = typeof state?.timeZone === 'string' ? state.timeZone : ''
+    return tz ? normalizeTimeZone(tz) : DEFAULT_TIME_ZONE
+  } catch {
+    return DEFAULT_TIME_ZONE
+  }
 }
 
 function usageTotal(target, src) {
@@ -90,12 +103,18 @@ export async function runAgent(ctx, run, { signal, timedOut } = {}) {
       mcpCall: (row, name, args) => ctx.mcpCall(row, name, args),
     })
     const messages = [
-      { role: 'system', content: buildSystemPrompt(run, displayName, new Date().toLocaleDateString('en-CA')) },
+      { role: 'system', content: buildSystemPrompt(run, displayName) },
       { role: 'user', content: run.prompt },
     ]
+    const timeZone = readTimeZone(db)
+    // 时间上下文是独立的 system 消息，不覆盖角色/工具规则；
+    // 每一轮模型请求前用当前时间重新生成，长时间运行的任务不会拿着旧时间。
+    const timeMessage = { role: 'system', content: timeContextText(buildTimeContext(new Date(), timeZone)) }
 
     for (rounds = 1; rounds <= MAX_ROUNDS; rounds++) {
       if (controller.signal.aborted) { settleAbort(); break }
+      timeMessage.content = timeContextText(buildTimeContext(new Date(), timeZone))
+      messages.splice(1, 0, timeMessage)
       bus.publish({ type: 'round_started', runId: run.id, round: rounds })
 
       const reply = await chat({
@@ -107,6 +126,8 @@ export async function runAgent(ctx, run, { signal, timedOut } = {}) {
         signal: controller.signal,
       })
       usageTotal(usage, reply.usage)
+      // 离开本轮请求体：下一轮按新时间重新插入，历史里不累积多份时间消息。
+      messages.splice(1, 1)
 
       if (!reply.toolCalls.length) {
         answer = reply.content || ''

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\"",
+    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\" \"tests/time-context.test.mjs\"",
     "preview": "vite preview"
   },
   "dependencies": {

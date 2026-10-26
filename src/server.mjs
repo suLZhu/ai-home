@@ -20,6 +20,7 @@ import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
 import { createTaskScheduler, recoverInterruptedTasks } from './server/agent/TaskScheduler.mjs'
 import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun } from './server/agent/ProactiveHeat.mjs'
 import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './server/agent/MemoryStore.mjs'
+import { injectTimeContext } from './timeContext.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -338,6 +339,11 @@ createServer(async (req, res) => {
       if (!apiKey) return send(res, 400, { error: '请先填写 API Key' })
       const chatBody = b.body
       if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return send(res, 400, { error: '缺少请求体' })
+      // 动态时间上下文：每次转发前在服务端用当前时间实时生成，
+      // 作为独立的 system 消息放在最前面；不覆盖人物设定/世界书/长期记忆。
+      // 流式聊天与工具调用后的续轮都是独立的 /api/chat 请求，因此每轮都拿到当前时间。
+      // 前端可在请求体外带 timeZone（IANA 时区名），非法或缺省回退 Asia/Shanghai。
+      chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
       const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
       const upstream = await fetch(target, {
         method: 'POST',
