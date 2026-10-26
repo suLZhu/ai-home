@@ -38,3 +38,20 @@ test('sending batches are not due and cannot be resent', () => {
   assert.equal(isDue(sending, 50000), false)
   assert.throws(() => markSending(sending))
 })
+
+test('restored in-flight batch requires review instead of automatic resend', async () => {
+  const { recoverBatch, remainingMs } = await import('../src/deferredSend.mjs')
+  const first = queueMessage(null, { ...base, message: { id: 'a' }, now: 1000 })
+  const restored = recoverBatch(JSON.parse(JSON.stringify(markSending(first))))
+  assert.equal(restored.status, 'needs_review')
+  assert.equal(isDue(restored, 999999), false)
+  assert.equal(remainingMs(first, 5000), 16000)
+})
+
+test('reject corrupt or duplicate persisted batch entries', async () => {
+  const { recoverBatch } = await import('../src/deferredSend.mjs')
+  const first = queueMessage(null, { ...base, message: { id: 'a' }, now: 0 })
+  assert.equal(recoverBatch({ ...first, messages: [{ id: 'a' }, { id: 'a' }] }), null)
+  assert.equal(recoverBatch({ ...first, dueAt: Infinity }), null)
+  assert.equal(recoverBatch({ ...first, version: 999 }), null)
+})
