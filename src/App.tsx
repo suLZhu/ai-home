@@ -743,8 +743,17 @@ function Room(props: {
   personAppearance: Record<string,PersonAppearancePref>, setPersonAppearance: React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>, customAssets: CustomAssets
 }) {
   if (props.chatOpen) return <Chat {...props} />
-  // 头部右侧是助手切换器：每个助手一个可点击胶囊（头像 + 显示名），点击切换当前房间。
-  const roomHeader = <header className="room-header"><div className="room-name"><span>{props.displayName(props.person).slice(0, 1)}</span><div><b>{props.displayName(props.person)} 的房间</b><small>独立工作区</small></div><div className="room-person-switch" aria-label="切换助手">{ASSISTANT_PEOPLE.map(id=><button key={id} type="button" title={'切换到 '+props.displayName(id)} className={props.person===id?'selected':''} aria-pressed={props.person===id} onClick={()=>{props.setPerson(id);props.setActiveTool('')}}><span className="room-person-avatar">{props.characters&&props.characters[id]&&props.characters[id].avatar?<img src={props.characters[id].avatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span><small>{props.displayName(id)}</small></button>)}</div></div></header>
+  // 头部右侧是助手切换器：两个以内只放一个「切换」按钮（不铺开默认名
+  // assistant-001/002 这类编号），超过两个才用下拉选框选择当前房间。
+  const assistantIds = ASSISTANT_PEOPLE
+  const nextPerson = assistantIds.find(id => id !== props.person) || props.person
+  const personAvatarOf = (id: Person) => <span className="room-person-avatar">{props.characters&&props.characters[id]&&props.characters[id].avatar?<img src={props.characters[id].avatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>
+  const personSwitcher = assistantIds.length > 2
+    ? <select className="room-person-select" aria-label="切换助手" value={assistantIds.includes(props.person)?props.person:assistantIds[0]} onChange={e=>{props.setPerson(e.target.value);props.setActiveTool('')}}>{assistantIds.map(id=><option key={id} value={id}>{props.displayName(id)}</option>)}</select>
+    : assistantIds.length > 1
+      ? <button type="button" className="room-person-toggle" title={'切换到 '+props.displayName(nextPerson)} aria-label={'切换到 '+props.displayName(nextPerson)} onClick={()=>{props.setPerson(nextPerson);props.setActiveTool('')}}>{personAvatarOf(nextPerson)}<small>切换</small></button>
+      : null
+  const roomHeader = <header className="room-header"><div className="room-name"><span>{props.displayName(props.person).slice(0, 1)}</span><div><b>{props.displayName(props.person)} 的房间</b><small>独立工作区</small></div>{personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}</div></header>
   if (props.activeTool) return <div className="room-screen room-tool-screen">
     {roomHeader}
     <button className="settings-back" onClick={() => props.setActiveTool('')}>← 工作区</button>
