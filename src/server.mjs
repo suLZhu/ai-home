@@ -4,8 +4,8 @@ import { isIP } from 'node:net'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { mkdirSync, readdirSync, unlinkSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
 import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
@@ -78,6 +78,27 @@ if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks
 // Timer tasks must write back into the conversation they were created from.
 if (!workflowColumns.includes('conversation_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN conversation_id TEXT')
 migrateDatabase(db)
+
+// 启动滚动备份：用 VACUUM INTO 先 checkpoint WAL 再写出一致性快照到 data/backups/，
+// 只增不删主库、绝不覆盖已有数据；超出保留份数的旧备份才清理。备份失败不影响启动。
+const BACKUP_KEEP = 5
+function createRollingBackup() {
+  try {
+    const dir = join(dirname(dbPath), 'backups')
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const target = join(dir, `ai-home-${stamp}.sqlite`)
+    db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
+    const kept = readdirSync(dir).filter(f => /^ai-home-.*\.sqlite$/.test(f)).sort()
+    for (const old of kept.slice(0, Math.max(0, kept.length - BACKUP_KEEP))) {
+      try { unlinkSync(join(dir, old)) } catch { /* 单个清理失败不致命 */ }
+    }
+    console.log('已创建数据库备份：' + target)
+  } catch (error) {
+    console.warn('数据库备份创建失败（不影响服务启动）：' + (error?.message || error))
+  }
+}
+createRollingBackup()
 initMemoryIndex(db)
 initProactive(db)
 initProactiveHeat(db) // needs proactive_events to exist first (adds run_id column on old DBs)
