@@ -25,6 +25,7 @@ dist-ssr
 
 .ai-home.env
 data/
+.tmp-agenttest/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
