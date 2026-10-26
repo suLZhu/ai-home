@@ -22,6 +22,7 @@ import { initProactive } from '../src/proactive.mjs'
 import { initProactiveHeat, dispatchProactiveRun } from '../src/server/agent/ProactiveHeat.mjs'
 import { initMemoryStore, SQLiteMemoryProvider } from '../src/server/agent/MemoryStore.mjs'
 import { migrateDatabase, migrateSnapshot } from '../src/server/identity.mjs'
+import { initInbox, addTaskResult, listInbox, markInboxRead } from '../src/inbox.mjs'
 
 const realFetch = globalThis.fetch
 
@@ -47,6 +48,7 @@ function makeDb() {
   initToolLogs(db)
   initToolPolicies(db)
   initMemoryStore(db)
+  initInbox(db)
   return db
 }
 
@@ -436,7 +438,7 @@ test('12 定时任务绑定原会话', async () => {
   let runId = null
   const bus = new AgentEventBus()
   bus.subscribe(e => { if (e.type === 'run_created' && e.taskId === 'task-1') runId = e.runId })
-  const scheduler = createTaskScheduler({ db, runner, bus })
+  const scheduler = createTaskScheduler({ db, runner, bus, deliverTask: entry => addTaskResult(db, entry) })
   assert.equal(scheduler.tick(), 1)
 
   const gotRun = await waitFor(() => runId && getAgentRun(db, runId)?.status !== 'running')
@@ -448,6 +450,22 @@ test('12 定时任务绑定原会话', async () => {
   assert.equal(finished.taskId, 'task-1')
   // once 任务完成后进入 completed
   assert.equal(db.prepare('SELECT status FROM scheduled_tasks WHERE id=?').get('task-1').status, 'completed')
+  // 结果必须投递到收件箱（kind=task_result，信封带 runId/conversationId）
+  const results = listInbox(db).filter(m => m.kind === 'task_result')
+  assert.equal(results.length, 1)
+  assert.equal(results[0].id, 'task-' + runId)
+  assert.equal(results[0].person, PERSON)
+  const envelope = JSON.parse(results[0].content)
+  assert.equal(envelope.runId, runId)
+  assert.equal(envelope.conversationId, 'conv-timer-1')
+  assert.equal(envelope.answer, '定时任务完成')
+  // 幂等：同一次运行重复结算不产生第二行
+  const replay = addTaskResult(db, { person: PERSON, runId, taskId: 'task-1', conversationId: 'conv-timer-1', title: '早报', answer: '定时任务完成' })
+  assert.equal(replay.inserted, false)
+  assert.equal(listInbox(db).filter(m => m.kind === 'task_result').length, 1)
+  // 确认已读幂等（read_at IS NULL 条件更新）
+  assert.equal(markInboxRead(db, results[0].id), true)
+  assert.equal(markInboxRead(db, results[0].id), false)
 })
 
 // ============================================================================
