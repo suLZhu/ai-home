@@ -12,6 +12,7 @@ import { BeautifySettings } from './BeautifySettings'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { PersonAppearance } from './PersonAppearance'
 import { reportToolCallStart, reportToolCallEnd, classifyToolError, useToolCalls, useMessageToolCalls, TOOL_STATUS_LABEL, type ToolCallSource } from './toolCalls'
+import { decideTaskConsumption, parseTaskEnvelope } from './taskResult.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -27,7 +28,7 @@ migrateLocalStorage()
 type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
-type ChatMessage = { role: 'user' | 'assistant'; content: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage }
+type ChatMessage = { role: 'user' | 'assistant'; content: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string }
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
@@ -92,6 +93,9 @@ export default function App() {
   // 用 ref 持有最新值，让流式回写能判断「视图是否还停在原会话」，避免把内容写进错误的会话。
   const activeConversationIdsRef = useRef(activeConversationIds)
   useEffect(() => { activeConversationIdsRef.current = activeConversationIds }, [activeConversationIds])
+  // 任务结果消费判定要读「最新的持久化会话状态」；轮询回调里的闭包会过期，用 ref 兜底。
+  const conversationsRef = useRef(conversations)
+  useEffect(() => { conversationsRef.current = conversations }, [conversations])
   const [modelConfig, setModelConfig] = useState<Record<Person,ModelConfig>>(() => { const saved:any=read('ai-home.modelConfig',null); const blank={inputPrice:'',outputPrice:'',cachedInputPrice:'',usdToCny:'7.2'}; if(saved&&typeof saved==='object'&&!saved.endpoint&&ASSISTANT_PEOPLE.every(id=>saved[id])) return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,{...blank,...saved[id]}])) as Record<Person,ModelConfig>; const legacy=saved&&typeof saved.endpoint==='string'?saved:{endpoint:'',model:''}; return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,{...blank,...legacy}])) as Record<Person,ModelConfig> })
   const [apiKey, setApiKey] = useState<Record<Person,string>>(() => { const saved=read<Record<string,string>|null>('ai-home.apiKey',null); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [sending, setSending] = useState(false)
@@ -126,6 +130,11 @@ export default function App() {
   const [toast,setToast] = useState<InboxMessage|null>(null)
   const seenInbox = useRef<Set<string>>(new Set())
   const inboxInitialized = useRef(false)
+  // 任务结果「先落盘、后确认」队列：写入 conversations 后只登记在此，
+  // 等含该消息的云端快照 PUT 成功才发 /api/inbox/read——杜绝「确认了却没保存」的竞态。
+  const pendingTaskAcks = useRef<Map<string, { runId: string; person: Person; conversationId: string }>>(new Map())
+  // 触发一次云保存周期（确认已读需要一次成功保存作凭证）。
+  const [ackTick, setAckTick] = useState(0)
   useEffect(()=>{
     if(authStatus!=='signedIn')return
     let alive=true
@@ -152,6 +161,25 @@ export default function App() {
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(null),6500);return()=>window.clearTimeout(timer)},[toast])
   async function openInboxMessage(message:InboxMessage) {
     setPerson(message.person);setPage('room');setChatOpen(true);setActiveTool('');setToast(null)
+    if (message.kind === 'task_result') {
+      // 任务结果：跳到绑定会话供查看；已读确认交给「持久化成功后 ack」的管线，
+      // 点击本身绝不提前确认——否则可能确认一条尚未落盘的消息。
+      const env = parseTaskEnvelope(message.content)
+      if (env?.conversationId) {
+        const list = conversations[message.person] || []
+        const target = list.find(c => c.id === env.conversationId)
+        if (target) {
+          const prevActive = activeConversationIds[message.person]
+          if (prevActive !== target.id) {
+            // 与 ChatPanel.openConversation 相同：先存当前视图，再装载目标会话。
+            setConversations(old => ({ ...old, [message.person]: (old[message.person] || []).map(c => c.id === prevActive ? { ...c, messages: messages[message.person] || [], updatedAt: new Date().toISOString() } : c) }))
+            setActiveConversationIds(old => ({ ...old, [message.person]: target.id }))
+            setMessages(old => ({ ...old, [message.person]: target.messages || [] }))
+          }
+        }
+      }
+      return
+    }
     try{await fetch('/api/inbox/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:message.id})})}catch{}
     setInbox(old=>old.map(m=>m.id===message.id?{...m,read_at:new Date().toISOString()}:m))
   }
@@ -269,6 +297,7 @@ export default function App() {
       }
       cloudSaveInFlight.current = true
       let nextSnapshot: any = snapshot
+      let lastSaved: any = null
       setCloudStatus('saving')
       try {
         while (nextSnapshot) {
@@ -276,9 +305,25 @@ export default function App() {
           const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:nextSnapshot})})
           if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
           if (!response.ok) throw new Error('HTTP '+response.status)
+          lastSaved = nextSnapshot
           nextSnapshot = queuedCloudSnapshot.current
         }
         setCloudStatus('saved')
+        // 任务结果确认已读的竞态防线：只有当「确实包含该消息的快照」已成功
+        // PUT 到云端，才把对应收件箱行标为已读。否则页面在保存前崩溃会
+        // 丢消息却显示已消费；确认后即使崩溃，重开也能从云端快照恢复。
+        if (pendingTaskAcks.current.size && lastSaved) {
+          for (const [inboxId, info] of [...pendingTaskAcks.current]) {
+            const convs = lastSaved.conversations?.[info.person]
+            const persisted = Array.isArray(convs) && convs.some((c: any) => c && c.id === info.conversationId && Array.isArray(c.messages) && c.messages.some((x: any) => x && x.taskRunId === info.runId))
+            if (!persisted) continue
+            pendingTaskAcks.current.delete(inboxId)
+            fetch('/api/inbox/read', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: inboxId }) })
+              .then(r => { if (!r.ok) pendingTaskAcks.current.set(inboxId, info) })
+              .catch(() => { pendingTaskAcks.current.set(inboxId, info) })
+            setInbox(old => old.map(m => m.id === inboxId ? { ...m, read_at: new Date().toISOString() } : m))
+          }
+        }
       } catch {
         setCloudStatus('error')
       } finally {
@@ -286,7 +331,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -327,6 +372,37 @@ export default function App() {
     if (activeConversationIdsRef.current[target] === convId) setMessages(prev=>({...prev,[target]:update(prev[target]||[])}))
     if (convId) setConversations(prev=>({...prev,[target]:(prev[target]||[]).map(c=>c.id===convId?{...c,messages:update(c.messages||[]),updatedAt:new Date().toISOString()}:c)}))
   }
+  function ackInbox(id: string) {
+    fetch('/api/inbox/read', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {})
+    setInbox(old => old.map(m => m.id === id ? { ...m, read_at: new Date().toISOString() } : m))
+  }
+  // 定时任务结果消费：kind='task_result' 的收件箱行凭信封里的 conversationId
+  // 精确写回原会话——不建新会话、不污染用户当前正看的聊天视图。幂等判定读的是
+  // conversations 持久化状态里是否已含该 runId（decideTaskConsumption），不是
+  // 内存去重：刷新、重启、重复轮询都不会写重。
+  // 竞态防线：写入后不立即确认已读，只登记进 pendingTaskAcks；等含该消息的
+  // 云端快照 PUT 成功（见云保存 effect）才发 /api/inbox/read。
+  useEffect(() => {
+    if (authStatus !== 'signedIn' || !cloudReady) return
+    for (const m of inbox) {
+      if (m.kind !== 'task_result' || m.read_at) continue
+      const decision = decideTaskConsumption(conversationsRef.current[m.person], m.content)
+      if (decision.action === 'write') {
+        const { runId, title, answer } = decision.envelope
+        const conversationId = decision.conversationId
+        updateActiveConversationMessages(m.person, prev => prev.some(x => x && x.taskRunId === runId) ? prev : [...prev, { role: 'assistant', content: answer, id: 'task-' + runId, taskRunId: runId, contextNote: title ? '定时任务：' + title : '定时任务结果' }], conversationId)
+        pendingTaskAcks.current.set(m.id, { runId, person: m.person, conversationId })
+        // 把防抖哨兵拨到已超期：任务结果必须尽快落盘，之后才能确认已读。
+        firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
+        setAckTick(t => t + 1)
+      } else if (decision.action === 'already') {
+        // 消息已在持久化会话里（例如上次确认前崩溃）——补确认是安全的。
+        if (!pendingTaskAcks.current.has(m.id)) ackInbox(m.id)
+      }
+      // skip_no_conversation / skip_missing_conversation / skip_invalid：
+      // 不写会话（绝不自动建会话）、不确认已读，消息保留在收件箱里可追溯。
+    }
+  }, [inbox, cloudReady, authStatus])
 
   async function send(textInput: string, attachments: MessageAttachment[] = [], contextText = '', contextNote = '') {
     const text = textInput.trim()
@@ -569,7 +645,7 @@ export default function App() {
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
     <button className={"mobile-menu-toggle"+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起百宝箱':'打开百宝箱'} onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
-    {toast&&<div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {toast.kind==='test'?'通知测试':'新消息'}</b><span>{toast.content}</span><small>点击打开聊天</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>}
+    {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} roomName={roomName} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen}
