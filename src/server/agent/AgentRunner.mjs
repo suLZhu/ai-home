@@ -41,8 +41,10 @@ function usageTotal(target, src) {
 
 // ctx: { db, bus, providerFor(assistantId) -> {endpoint, apiKey, model},
 //        displayNameFor(assistantId), mcpList(row), mcpCall(row, name, args) }
+// opts: { signal, timedOut?() -> bool } — timedOut distinguishes a deadline
+// abort (status timed_out) from a user cancel (status cancelled).
 // Returns the finished run row (status always terminal when this resolves).
-export async function runAgent(ctx, run, { signal } = {}) {
+export async function runAgent(ctx, run, { signal, timedOut } = {}) {
   const { db, bus } = ctx
   // Identity and credentials are resolved server-side from the run row; the
   // request payload cannot influence either.
@@ -70,6 +72,15 @@ export async function runAgent(ctx, run, { signal } = {}) {
   let status = 'succeeded'
   let errorCode = null
   let errorMessage = null
+  // Abort can mean two very different things: a user cancel or a run deadline.
+  // Record the honest status so a timeout is never displayed as a success.
+  const settleAbort = () => {
+    if (typeof timedOut === 'function' && timedOut()) {
+      status = 'timed_out'; errorCode = 'RUN_TIMEOUT'; errorMessage = '运行超时，已被系统中止'
+    } else {
+      status = 'cancelled'; errorCode = 'ABORTED'; errorMessage = '运行已被取消'
+    }
+  }
 
   try {
     const registry = await createToolRegistry({
@@ -84,7 +95,7 @@ export async function runAgent(ctx, run, { signal } = {}) {
     ]
 
     for (rounds = 1; rounds <= MAX_ROUNDS; rounds++) {
-      if (controller.signal.aborted) { status = 'cancelled'; errorCode = 'ABORTED'; errorMessage = '运行已被取消'; break }
+      if (controller.signal.aborted) { settleAbort(); break }
       bus.publish({ type: 'round_started', runId: run.id, round: rounds })
 
       const reply = await chat({
@@ -119,7 +130,7 @@ export async function runAgent(ctx, run, { signal } = {}) {
         messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
       }
 
-      if (controller.signal.aborted) { status = 'cancelled'; errorCode = 'ABORTED'; errorMessage = '运行已被取消'; break }
+      if (controller.signal.aborted) { settleAbort(); break }
       // Last round already spent: stop rather than exceed the hard cap.
       if (rounds === MAX_ROUNDS) {
         status = 'succeeded'
@@ -134,7 +145,7 @@ export async function runAgent(ctx, run, { signal } = {}) {
     }
   } catch (error) {
     if (error?.name === 'AbortError' || controller.signal.aborted) {
-      status = 'cancelled'; errorCode = 'ABORTED'; errorMessage = '运行已被取消'
+      settleAbort()
     } else {
       status = 'failed'
       errorCode = String(error?.code || (error?.status === 502 ? 'UPSTREAM_ERROR' : 'RUN_ERROR')).slice(0, 64)
@@ -151,22 +162,30 @@ export async function runAgent(ctx, run, { signal } = {}) {
 
 // Launch a run without blocking the HTTP response. The returned handle allows
 // cancel(runId); finished promises are kept so tests can await them.
+// opts.timeoutMs arms a run deadline: expiry aborts the loop and the run ends
+// as timed_out (never as a silent success). ctx.runTimeoutMs is the default.
 export class AgentRunner {
   constructor(ctx) {
     this.ctx = ctx
     this.active = new Map() // runId -> {controller, promise}
   }
 
-  start(run) {
+  start(run, options = {}) {
     const controller = new AbortController()
-    const promise = runAgent(this.ctx, run, { signal: controller.signal })
+    let timedOut = false
+    const timeoutMs = Number(options.timeoutMs ?? this.ctx.runTimeoutMs) || 0
+    const timer = timeoutMs > 0
+      ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs)
+      : null
+    if (timer && typeof timer.unref === 'function') timer.unref()
+    const promise = runAgent(this.ctx, run, { signal: controller.signal, timedOut: () => timedOut })
       .catch(error => {
         // runAgent already finishes the row; this is a last-resort guard so a
         // crashed loop never leaves a dangling promise.
         try { finishAgentRun(this.ctx.db, run.id, { status: 'failed', errorCode: 'RUNNER_CRASH', errorMessage: String(error?.message || error).slice(0, 800) }) } catch { /* row already terminal */ }
         return getAgentRun(this.ctx.db, run.id)
       })
-      .finally(() => this.active.delete(run.id))
+      .finally(() => { if (timer) clearTimeout(timer); this.active.delete(run.id) })
     this.active.set(run.id, { controller, promise })
     return { runId: run.id, promise }
   }

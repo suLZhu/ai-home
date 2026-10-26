@@ -4,10 +4,11 @@ import { isIP } from 'node:net'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync, readdirSync, unlinkSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
-import { initInbox, addInboxMessage, listInbox, markInboxRead } from './inbox.mjs'
+import { initInbox, addInboxMessage, addTaskResult, listInbox, markInboxRead } from './inbox.mjs'
+import { createRollingBackup } from './server/backup.mjs'
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
 import { initProactive, settings as proactiveSettings, events as proactiveEvents, configure as configureProactive, wake as wakeProactive, dismiss as dismissProactive } from './proactive.mjs'
 import { migrateDatabase, migrateSnapshot, isValidAssistantId } from './server/identity.mjs'
@@ -16,7 +17,7 @@ import { AgentEventBus } from './server/agent/AgentEventBus.mjs'
 import { AgentRunner } from './server/agent/AgentRunner.mjs'
 import { initToolPolicies, setPolicy, listPolicies } from './server/agent/ToolPolicy.mjs'
 import { decideApproval, isPending } from './server/agent/ApprovalGate.mjs'
-import { createTaskScheduler } from './server/agent/TaskScheduler.mjs'
+import { createTaskScheduler, recoverInterruptedTasks } from './server/agent/TaskScheduler.mjs'
 import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun } from './server/agent/ProactiveHeat.mjs'
 import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './server/agent/MemoryStore.mjs'
 
@@ -79,26 +80,9 @@ if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks
 if (!workflowColumns.includes('conversation_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN conversation_id TEXT')
 migrateDatabase(db)
 
-// 启动滚动备份：用 VACUUM INTO 先 checkpoint WAL 再写出一致性快照到 data/backups/，
-// 只增不删主库、绝不覆盖已有数据；超出保留份数的旧备份才清理。备份失败不影响启动。
-const BACKUP_KEEP = 5
-function createRollingBackup() {
-  try {
-    const dir = join(dirname(dbPath), 'backups')
-    mkdirSync(dir, { recursive: true, mode: 0o700 })
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const target = join(dir, `ai-home-${stamp}.sqlite`)
-    db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
-    const kept = readdirSync(dir).filter(f => /^ai-home-.*\.sqlite$/.test(f)).sort()
-    for (const old of kept.slice(0, Math.max(0, kept.length - BACKUP_KEEP))) {
-      try { unlinkSync(join(dir, old)) } catch { /* 单个清理失败不致命 */ }
-    }
-    console.log('已创建数据库备份：' + target)
-  } catch (error) {
-    console.warn('数据库备份创建失败（不影响服务启动）：' + (error?.message || error))
-  }
-}
-createRollingBackup()
+// 启动滚动备份：见 server/backup.mjs（VACUUM INTO 一致性快照，保留 5 份，
+// 备份失败仅告警、绝不阻断启动）。
+createRollingBackup(db, dbPath)
 initMemoryIndex(db)
 initProactive(db)
 initProactiveHeat(db) // needs proactive_events to exist first (adds run_id column on old DBs)
@@ -236,6 +220,9 @@ const agentRunner = new AgentRunner({
   bus: agentEvents,
   providerFor,
   displayNameFor,
+  // Run-level deadline: a hung upstream aborts as timed_out, never as a
+  // silent success. Tools (30s) and approvals (5min) keep their own limits.
+  runTimeoutMs: 5 * 60 * 1000,
   mcpList: row => withMcpClient(row, async client => {
     const result = await client.listTools()
     return result.tools.map(t => ({ name: t.name, description: t.description || '', inputSchema: t.inputSchema }))
@@ -245,6 +232,11 @@ const agentRunner = new AgentRunner({
 // Proactive answers land in the same inbox the UI already polls.
 function deliverProactive(person, content) {
   return addInboxMessage(db, { person, content, kind: 'proactive' })
+}
+// Timer-task results land in the same inbox too (kind='task_result'), keyed by
+// runId so replays can never duplicate a delivered answer.
+function deliverTaskResult(entry) {
+  return addTaskResult(db, entry)
 }
 
 createServer(async (req, res) => {
@@ -860,7 +852,11 @@ createServer(async (req, res) => {
 // Durable scheduler: due tasks are claimed atomically and executed through the
 // shared AgentRunner (bounded loop, tool logging, SSE) instead of the old
 // "mark ready and wait for someone to notice" scaffold.
-const taskScheduler = createTaskScheduler({ db, runner: agentRunner, bus: agentEvents })
+// Boot recovery first: 'ready' rows left behind by a crash belong to a dead
+// process — re-schedule them so the next tick retries (at-most-one lost run).
+const recoveredTasks = recoverInterruptedTasks(db)
+if (recoveredTasks) console.log(`[scheduler] recovered ${recoveredTasks} interrupted task(s)`)
+const taskScheduler = createTaskScheduler({ db, runner: agentRunner, bus: agentEvents, deliverTask: deliverTaskResult })
 setInterval(() => {
   try {
     const dispatched = taskScheduler.tick()
