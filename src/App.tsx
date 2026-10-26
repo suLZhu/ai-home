@@ -88,6 +88,10 @@ export default function App() {
   const [messages, setMessages] = useState<Record<Person, ChatMessage[]>>(readMessages)
   const [conversations,setConversations] = useState<Record<Person,Conversation[]>>(initialConversations)
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<string,string>>('ai-home.activeConversationIds',{});const all=initialConversations();return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,all[id].some(c=>c.id===saved[id])?saved[id]:all[id][0]?.id||''])) as Record<Person,string>})
+  // 流式生成是异步长任务：send() 闭包里的 activeConversationIds 会随用户切换会话而过期。
+  // 用 ref 持有最新值，让流式回写能判断「视图是否还停在原会话」，避免把内容写进错误的会话。
+  const activeConversationIdsRef = useRef(activeConversationIds)
+  useEffect(() => { activeConversationIdsRef.current = activeConversationIds }, [activeConversationIds])
   const [modelConfig, setModelConfig] = useState<Record<Person,ModelConfig>>(() => { const saved:any=read('ai-home.modelConfig',null); const blank={inputPrice:'',outputPrice:'',cachedInputPrice:'',usdToCny:'7.2'}; if(saved&&typeof saved==='object'&&!saved.endpoint&&ASSISTANT_PEOPLE.every(id=>saved[id])) return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,{...blank,...saved[id]}])) as Record<Person,ModelConfig>; const legacy=saved&&typeof saved.endpoint==='string'?saved:{endpoint:'',model:''}; return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,{...blank,...legacy}])) as Record<Person,ModelConfig> })
   const [apiKey, setApiKey] = useState<Record<Person,string>>(() => { const saved=read<Record<string,string>|null>('ai-home.apiKey',null); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [sending, setSending] = useState(false)
@@ -157,6 +161,11 @@ export default function App() {
   const [cloudStatus, setCloudStatus] = useState<'loading'|'saving'|'saved'|'error'>('loading')
   const cloudSaveInFlight = useRef(false)
   const queuedCloudSnapshot = useRef<any>(null)
+  // 防抖的最大延迟哨兵：流式生成期间每个 chunk 都会重置 700ms 计时器，
+  // 若不设上限，整条流可能一次都不落盘——发送后刷新即丢消息。
+  // 记录「最早未保存变更」的时间，超过 CLOUD_FLUSH_MAX_MS 就强制保存。
+  const CLOUD_FLUSH_MAX_MS = 5000
+  const firstDirtyAtRef = useRef(0)
 
   const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects])
   // Keep the latest snapshot available without making the one-time cloud-load callback
@@ -246,7 +255,13 @@ export default function App() {
 
   useEffect(() => {
     if (!cloudReady || authStatus !== 'signedIn') return
+    const now = Date.now()
+    if (!firstDirtyAtRef.current) firstDirtyAtRef.current = now
+    // 普通编辑仍走 700ms 防抖；一旦「未保存状态」滞留超过上限（典型是流式生成中
+    // 每个 chunk 都重置计时器），改用 0 延迟强制落盘，保证长回复不会零次保存。
+    const delay = now - firstDirtyAtRef.current >= CLOUD_FLUSH_MAX_MS ? 0 : 700
     const timer = window.setTimeout(async () => {
+      firstDirtyAtRef.current = 0
       const snapshot = getSnapshot()
       if (cloudSaveInFlight.current) {
         queuedCloudSnapshot.current = snapshot
@@ -269,7 +284,7 @@ export default function App() {
       } finally {
         cloudSaveInFlight.current = false
       }
-    }, 700)
+    }, delay)
     return ()=>window.clearTimeout(timer)
   }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants])
 
@@ -304,10 +319,13 @@ export default function App() {
   useEffect(() => { try{localStorage.setItem('ai-home.projects',JSON.stringify(projects))}catch{} },[projects])
 
   function openPerson(p: Person) { setPerson(p); setPage('room'); setChatOpen(true); setActiveTool('') }
-  function updateActiveConversationMessages(target:Person, update:(items:ChatMessage[])=>ChatMessage[]) {
-    const id=activeConversationIds[target]
-    setMessages(prev=>({...prev,[target]:update(prev[target])}))
-    if(id) setConversations(prev=>({...prev,[target]:(prev[target]||[]).map(c=>c.id===id?{...c,messages:update(c.messages),updatedAt:new Date().toISOString()}:c)}))
+  // 把一次 send() 的回写锁在「发送时所在的会话」上：conversationId 由 send() 捕获。
+  // 用户中途切走时只写 conversations（数据不丢、不污染别的会话），不再动当前视图；
+  // 切回该会话时会从 conversations 重新装载，内容完整可见。
+  function updateActiveConversationMessages(target:Person, update:(items:ChatMessage[])=>ChatMessage[], conversationId?:string) {
+    const convId = conversationId ?? activeConversationIdsRef.current[target]
+    if (activeConversationIdsRef.current[target] === convId) setMessages(prev=>({...prev,[target]:update(prev[target]||[])}))
+    if (convId) setConversations(prev=>({...prev,[target]:(prev[target]||[]).map(c=>c.id===convId?{...c,messages:update(c.messages||[]),updatedAt:new Date().toISOString()}:c)}))
   }
 
   async function send(textInput: string, attachments: MessageAttachment[] = [], contextText = '', contextNote = '') {
@@ -374,10 +392,17 @@ export default function App() {
     const assistantMessageId = crypto.randomUUID()
     const toolRunId = crypto.randomUUID()
     const toolConversationId = activeConversationIds[target] || ''
-    updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}])
+    // 整条流的回写目标固定为发送时所在的会话；用户随后切换会话不会改写别的会话。
+    const sendConversationId = toolConversationId
+    updateActiveConversationMessages(target,prev=>[...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
     setDraft('');setChatError('');setSending(true)
+    // 用户消息一入列就要求立刻落盘（把防抖哨兵标记为已超期），堵住「发送后 700ms 内刷新丢消息」。
+    firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
+    // 声明在 try 之外：catch 需要读取 answer，保留已流式到达的文本（块级作用域 let 进不了 catch）。
+    let answer=''
+    let finished=false
     try {
       const previous=history.slice(-24).map(m=>({role:m.role,content:m.content+(m.attachments?.length?'\n[此前附件：'+m.attachments.map(a=>a.name).join('、')+']':'')}))
       const injected = contextText ? '\n\n【本次启用的本地上下文】\n'+contextText+'\n（仅本次消息附带。）' : ''
@@ -425,8 +450,6 @@ export default function App() {
           }
         }
       } catch { /* MCP is optional; continue with normal model chat. */ }
-      let answer=''
-      let finished=false
       for(let round=0;round<5&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
@@ -435,7 +458,7 @@ export default function App() {
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
-        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:answer}:m))}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
@@ -461,7 +484,7 @@ export default function App() {
             if(!argsParsed)throw new Error('模型生成的工具参数不是合法 JSON。')
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
             const toolLabel=route?route.name:(call.function.name==='ledger_add_entry'?'共享记账单':scheduledTaskTool?'定时任务':'本地工具')
-            updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:(answer?answer+'\n\n':'')+'正在调用工具：'+toolLabel+'…'}:m))
+            updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:(answer?answer+'\n\n':'')+'正在调用工具：'+toolLabel+'…'}:m),sendConversationId)
             if(localWorldbookTool){
               const owned=worldEntries.filter(e=>e.boundCharacters?.includes(target))
               if(call.function.name==='worldbook_search_entries'){
@@ -513,12 +536,13 @@ export default function App() {
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
       const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
-      if(!answer) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m))
-      else if(finalUsage) updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1?{...m,usage:finalUsage}:m))
+      if(!answer) updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m),sendConversationId)
+      else if(finalUsage) updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,usage:finalUsage}:m),sendConversationId)
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
       setChatError(msg.includes('Failed to fetch')?'连接失败：本机后端代理未响应，请确认后端服务（127.0.0.1:4180）正在运行，或检查网络后重试。':msg)
-      updateActiveConversationMessages(target,prev=>prev.map((m,i)=>i===prev.length-1&&m.role==='assistant'?{...m,content:'请求失败，请查看上方错误提示并检查模型设置。'}:m))
+      // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
+      updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
     } finally {setSending(false)}
   }
 
