@@ -15,9 +15,12 @@ import { reportToolCallStart, reportToolCallEnd, classifyToolError, useToolCalls
 import { decideTaskConsumption, parseTaskEnvelope } from './taskResult.mjs'
 import { normalizeTimeZone, buildTimeContext } from './timeContext.mjs'
 // 20 秒缓发聊天：纯函数状态机 + 本机持久化 + 编排辅助（合并成一次请求、按 scope 挑选到期批次）。
-import { queueMessage, markSending, remainingMs, type DeferredBatch } from './deferredSend.mjs'
+// 缓发本轮暂停可见入口，但模块与未发队列保留（见下方恢复条）。
+import { queueMessage, markSending, removeQueuedMessage, type DeferredBatch } from './deferredSend.mjs'
 import { deferredScopeKey, loadDeferredBatches, saveDeferredBatches } from './deferredStorage.mjs'
 import { selectDueBatch, queuedIdSet, mergeQueuedForRequest, removeMessagesByIds } from './deferredChat.mjs'
+// 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
+import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -125,6 +128,10 @@ export default function App() {
   const [deferredOn, setDeferredOn] = useState(false)
   // 倒计时用的「现在」：有队列时每 500ms 拨一次，驱动秒数与到期检查。
   const [deferredNow, setDeferredNow] = useState(() => Date.now())
+  // 暂停缓发（本轮）：即时发送是唯一可见模式——开关、倒计时、待发标记全部隐藏。
+  // deferredOn 初始即 false，且没有任何 UI 入口再把它打开（开关已隐藏），恒为即时发送。
+  // 缓发模块与未发队列完整保留：pending 批次仍由计时器自动补发（不丢），
+  // 需要人工处理的批次由聊天输入区上方的恢复条提供「立即发送 / 撤回」。
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => { const saved=read<Record<string,string[]>>('ai-home.tasks',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,string[]> })
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   const [sidebarOpen,setSidebarOpen]=useState(false)
@@ -363,6 +370,38 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
   useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
   useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
+  // 消息 id 补齐（一次性迁移，幂等）：老版本的用户消息没有 id，而编辑/删除/重新生成都按 id 定位。
+  // 视图（messages）与持久化（conversations）按「同会话、同位置、同角色同内容」对齐，
+  // 保证两边拿到同一个 id——修改才能同时写进两边、刷新后仍生效。
+  // alignMessageIds 无缺失时返回原引用 → changed=false → 不再 setState，effect 自然收敛不循环。
+  useEffect(() => {
+    let convDirty = false
+    let viewDirty = false
+    const nextConversations: Record<Person, Conversation[]> = { ...conversations }
+    const nextMessages: Record<Person, ChatMessage[]> = { ...messages }
+    for (const id of ASSISTANT_PEOPLE) {
+      const convs = conversations[id] || []
+      let personConvDirty = false
+      let alignedView: ChatMessage[] | null = null
+      const mapped = convs.map(c => {
+        const isActive = activeConversationIds[id] === c.id
+        const view = isActive ? (messages[id] || []) : null
+        const r = alignMessageIds(view, c.messages || [])
+        if (r.conv !== (c.messages || [])) personConvDirty = true
+        if (isActive && r.view && r.view !== messages[id]) alignedView = r.view
+        return r.conv === (c.messages || []) ? c : { ...c, messages: r.conv }
+      })
+      if (personConvDirty) { nextConversations[id] = mapped; convDirty = true }
+      if (alignedView) { nextMessages[id] = alignedView; viewDirty = true }
+      // 活跃会话不在 conversations 里（极旧数据）：只给视图侧独立补齐。
+      if (!convs.some(c => c.id === activeConversationIds[id]) && (messages[id] || []).some(m => m && !m.id)) {
+        const r = alignMessageIds(messages[id] || [], null)
+        if (r.view) { nextMessages[id] = r.view; viewDirty = true }
+      }
+    }
+    if (convDirty) setConversations(nextConversations)
+    if (viewDirty) setMessages(nextMessages)
+  }, [messages, conversations, activeConversationIds])
   useEffect(() => localStorage.setItem('ai-home.modelConfig', JSON.stringify(modelConfig)), [modelConfig])
   useEffect(() => { try { localStorage.setItem('ai-home.apiKey', JSON.stringify(apiKey)) } catch { /* private mode */ } }, [apiKey])
   useEffect(() => {
@@ -427,8 +466,14 @@ export default function App() {
   // options.queuedIds：这些消息的气泡在排队时就已显示；构建请求时把它们从历史中排除，
   //   再合并成一条最终 user 消息——绝不重复插入、也绝不重复出现在请求里。
   // options.insertUser=false：flush 路径不再插入用户气泡（排队时已插入过）。
+  // options.historyEndIndex + options.regenerate：重新生成——历史截断到原用户消息之前，
+  //   把原用户消息作为本次输入重发（请求与原次一致），但原位替换旧回复、不新增气泡；
+  //   失败/空白时恢复原有有效回复。
   // 返回 'ok'（完整走完）| 'fail'（配置或请求失败，调用方不得自动重试）| 'noop'（有请求在跑，本次未发出）。
-  async function send(textInput: string, attachments: MessageAttachment[] = [], options: { conversationId?: string; queuedIds?: string[]; insertUser?: boolean } = {}): Promise<'ok'|'fail'|'noop'> {
+  // 正在进行的模型请求：删除「正在生成」的助手消息时中止它；回写全部按 id 匹配，
+  //   消息删除后天然无处可写，绝不会删除后又重新出现。
+  const sendAbortRef = useRef<{ id: string; controller: AbortController } | null>(null)
+  async function send(textInput: string, attachments: MessageAttachment[] = [], options: { conversationId?: string; queuedIds?: string[]; insertUser?: boolean; historyEndIndex?: number; regenerate?: { replaceId: string; originalContent: string; originalUsage?: TokenUsage } } = {}): Promise<'ok'|'fail'|'noop'> {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
@@ -439,7 +484,8 @@ export default function App() {
       return 'fail'
     }
     const sendConversationId = options.conversationId ?? activeConversationIds[target] ?? ''
-    const history = (conversations[target]||[]).find(c=>c.id===sendConversationId)?.messages || (sendConversationId===activeConversationIds[target]?messages[target]:[])
+    const convHistory = (conversations[target]||[]).find(c=>c.id===sendConversationId)?.messages || (sendConversationId===activeConversationIds[target]?messages[target]:[])
+    const history = options.historyEndIndex!=null ? convHistory.slice(0,Math.max(0,options.historyEndIndex)) : convHistory
     const card = characters[target]
     const messageCount=history.length+1
     const runtimeKey='ai-home.worldbookRuntime.'+target
@@ -490,12 +536,26 @@ export default function App() {
     // 实时生成并作为独立 system 消息注入，前端不再附带任何本地上下文。
     const userMessage: ChatMessage = {role:'user',content:text,attachments:attachments.map(a=>({...a,preview:a.preview||a.dataUrl,dataUrl:undefined}))}
     // 工具调用事件绑定：一次 send() = 一个 runId；助手消息带 id，调用卡片按 messageId 挂到消息下方。
-    const assistantMessageId = crypto.randomUUID()
+    // 重新生成复用原回复的 id：流式回写天然落在同一条消息上（= 覆盖旧回复，不新增第二版）。
+    const regen = options.regenerate || null
+    const assistantMessageId = regen ? regen.replaceId : crypto.randomUUID()
     const toolRunId = crypto.randomUUID()
     const toolConversationId = sendConversationId
+    const abortController = new AbortController()
+    sendAbortRef.current = { id: assistantMessageId, controller: abortController }
+    // 重新生成失败/空白时恢复原有有效回复；消息若已被用户删除，map 匹配不到、天然无副作用。
+    const restoreRegenerate = () => {
+      if (!regen) return
+      updateActiveConversationMessages(target, prev => prev.map(m => m.id === assistantMessageId ? { ...m, content: regen.originalContent, usage: regen.originalUsage } : m), sendConversationId)
+    }
     // 整条流的回写目标固定为 sendConversationId（即时=发送时所在会话；缓发 flush=队列所在会话）；
-    // 用户随后切换会话不会改写别的会话。flush 路径用户气泡已显示过，只补助手占位。
-    updateActiveConversationMessages(target,prev=>options.insertUser===false?[...prev,{role:'assistant',content:'',id:assistantMessageId}]:[...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
+    // 用户随后切换会话不会改写别的会话。flush 路径用户气泡已显示过，只补助手占位；
+    // 重新生成不插用户气泡，只把旧回复清空成「正在思考……」占位再原位重写。
+    updateActiveConversationMessages(target,prev=>regen
+      ? prev.map(m=>m.id===assistantMessageId?{...m,content:'',usage:undefined}:m)
+      : options.insertUser===false
+        ? [...prev,{role:'assistant',content:'',id:assistantMessageId}]
+        : [...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
     if(options.insertUser!==false)setDraft('')
     setChatError('');setSending(true)
     // 用户消息一入列就要求立刻落盘（把防抖哨兵标记为已超期），堵住「发送后 700ms 内刷新丢消息」。
@@ -558,7 +618,7 @@ export default function App() {
       for(let round=0;round<5&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
-        const chatProxy=()=>fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
+        const chatProxy=()=>fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
         let response=await chatProxy()
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
@@ -641,16 +701,32 @@ export default function App() {
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
       const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
-      if(!answer) updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m),sendConversationId)
+      if(!answer){
+        // 重新生成拿到空白回复：不覆盖旧回复，恢复原样并提示（防止有效回复被空白顶掉）。
+        if(regen){restoreRegenerate();setChatError('重新生成没有返回内容，已保留原来的回复。');return 'fail'}
+        updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m),sendConversationId)
+      }
       else if(finalUsage) updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,usage:finalUsage}:m),sendConversationId)
       return 'ok'
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
-      setChatError(msg.includes('Failed to fetch')?'连接失败：本机后端代理未响应，请确认后端服务（127.0.0.1:4180）正在运行，或检查网络后重试。':msg)
-      // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
-      updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
+      // 用户删除「正在生成」的回复会触发中止：消息已不在，不写错误文案、也不弹错误提示。
+      if(!abortController.signal.aborted){
+        if(regen){
+          // 重新生成失败 → 恢复原有有效回复，绝不把旧回复换成失败占位。
+          restoreRegenerate()
+          setChatError('重新生成失败：'+(msg.includes('Failed to fetch')?'连接失败，请确认后端服务（127.0.0.1:4180）正在运行。':msg))
+        }else{
+          setChatError(msg.includes('Failed to fetch')?'连接失败：本机后端代理未响应，请确认后端服务（127.0.0.1:4180）正在运行，或检查网络后重试。':msg)
+          // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
+          updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
+        }
+      }
       return 'fail'
-    } finally {setSending(false)}
+    } finally {
+      if(sendAbortRef.current&&sendAbortRef.current.id===assistantMessageId)sendAbortRef.current=null
+      setSending(false)
+    }
   }
 
   // ── 缓发队列编排 ──
@@ -744,6 +820,64 @@ export default function App() {
     updateActiveConversationMessages(batch.assistantId, prev => removeMessagesByIds(prev, ids), batch.conversationId)
     markConversationDirty()
   }
+
+  // ── 消息操作：修改 / 删除 / 重新生成（复制在 Chat 内完成）──
+  // 修改：只更新这条用户消息的文字，不调用模型、不动附件；
+  // 视图（messages）与持久化（conversations）经 updateActiveConversationMessages 同时写，刷新后仍生效。
+  function editMessage(messageId: string, newText: string): boolean {
+    const text = newText.trim()
+    if (!messageId || !text) return false
+    const target = person
+    const convId = activeConversationIds[target] || ''
+    updateActiveConversationMessages(target, prev => prev.map(m => m.id === messageId && m.role === 'user' ? { ...m, content: text } : m), convId)
+    markConversationDirty()
+    return true
+  }
+  // 删除：视图与持久化同时过滤。若删的是正在生成的回复——先中止请求；
+  // 流式回写按 id 匹配，消息删除后无处可写，绝不会删除后又重新出现。
+  function deleteMessage(messageId: string) {
+    if (!messageId) return
+    const target = person
+    const convId = activeConversationIds[target] || ''
+    const inFlight = sendAbortRef.current
+    if (inFlight && inFlight.id === messageId) { try { inFlight.controller.abort() } catch { /* 请求可能已结束 */ } }
+    // 这条消息还在缓发队列里（历史遗留）：先出队，否则到期 flush 会按队列内容把它重新发出去。
+    const batches = deferredBatches
+    for (const [key, batch] of Object.entries(batches)) {
+      if (!batch || batch.status !== 'pending' || !batch.messages.some(x => x.id === messageId)) continue
+      const removed = removeQueuedMessage(batch, messageId)
+      const next = { ...batches }
+      if (removed) next[key] = removed
+      else delete next[key]
+      commitBatches(next)
+      break
+    }
+    updateActiveConversationMessages(target, prev => prev.filter(m => m.id !== messageId), convId)
+    markConversationDirty()
+  }
+  // 重新生成：仅会话最新一条 AI 回复。复用 send() 重发同一条用户输入（历史截断到该用户消息之前），
+  // 原位替换旧回复；失败/空白恢复原回复；regenLock + sending 双保险防重复请求。
+  const regenLockRef = useRef(false)
+  async function regenerateMessage(messageId: string): Promise<'ok'|'fail'|'noop'> {
+    if (sending || regenLockRef.current) return 'noop'
+    const target = person
+    const convId = activeConversationIds[target] || ''
+    const list = (conversations[target]||[]).find(c=>c.id===convId)?.messages || (convId===activeConversationIds[target]?messages[target]:[])
+    const ctx = resolveRegenerateContext(list, messageId)
+    if (!ctx) return 'fail'
+    // 持久化副本里图片 dataUrl 已剥离：会话内的 data: 预览（贴纸等）重新接回，刷新过的死链自动跳过。
+    const attachments = ((ctx.userMessage.attachments||[]) as MessageAttachment[]).map(a=>({...a,dataUrl:a.dataUrl||(a.type&&a.type.startsWith('image/')&&typeof a.preview==='string'&&a.preview.startsWith('data:')?a.preview:undefined)}))
+    if (!ctx.userMessage.content.trim() && !attachments.length) { setChatError('这条回复对应的原消息没有可重发的内容。'); return 'fail' }
+    regenLockRef.current = true
+    try {
+      return await send(ctx.userMessage.content, attachments, {
+        conversationId: convId,
+        historyEndIndex: ctx.userIndex,
+        insertUser: false,
+        regenerate: { replaceId: messageId, originalContent: ctx.original.content, originalUsage: ctx.original.usage as TokenUsage|undefined },
+      })
+    } finally { regenLockRef.current = false }
+  }
   // 倒计时心跳：仅在「已登录且有队列」时运行。每 500ms 拨一次 deferredNow（秒数显示），
   // 并挑出最早到期的批次自动合并发送；登录完成前不 flush（配置与会话尚未就绪）。
   useEffect(() => {
@@ -795,7 +929,8 @@ export default function App() {
         sending={sending} chatError={chatError} setChatError={setChatError}
         personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} customAssets={customAssets}
         deferredOn={deferredOn} setDeferredOn={setDeferredOn} deferredBatches={deferredBatches} deferredNow={deferredNow}
-        enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>void flushDeferred(key,true)} cancelDeferred={cancelDeferred}
+        enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>flushDeferred(key,true)} cancelDeferred={cancelDeferred}
+        editMessage={editMessage} deleteMessage={deleteMessage} regenerateMessage={regenerateMessage}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
@@ -880,7 +1015,11 @@ function Room(props: {
   deferredOn: boolean, setDeferredOn: React.Dispatch<React.SetStateAction<boolean>>,
   deferredBatches: Record<string,DeferredBatch>, deferredNow: number,
   enqueueDeferred: (text:string, attachments:MessageAttachment[])=>boolean,
-  flushDeferredNow: (key:string)=>void, cancelDeferred: (key:string)=>void
+  flushDeferredNow: (key:string)=>Promise<void>, cancelDeferred: (key:string)=>void,
+  // 消息操作菜单：修改/删除/重新生成在 App 层完成持久化与请求控制，Chat 只负责交互。
+  editMessage: (messageId:string, newText:string)=>boolean,
+  deleteMessage: (messageId:string)=>void,
+  regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>
 }) {
   if (props.chatOpen) return <Chat {...props} />
   // 头部右侧是助手切换器：两个以内只放一个「切换」按钮（不铺开默认名
@@ -1158,6 +1297,12 @@ function ToolCallLiveBar({conversationId}:{conversationId:string}) {
 // 默认助手头像：未上传头像时统一使用（圆形浅紫底 + 人像剪影，内嵌 SVG 免网络请求）。
 const DEFAULT_AVATAR="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23ded7ee'/%3E%3Ccircle cx='32' cy='25' r='11' fill='%238b7fb8'/%3E%3Cpath d='M10 57c4-12.5 13-19 22-19s18 6.5 22 19z' fill='%238b7fb8'/%3E%3C/svg%3E"
 
+// 消息操作栏的线性图标（低对比度轻量风格，颜色跟随 currentColor / 主题变量）。
+const IconCopy=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15A2.5 2.5 0 0 1 3 12.5v-7A2.5 2.5 0 0 1 5.5 3h7A2.5 2.5 0 0 1 15 5.5"/></svg>
+const IconEdit=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 6.5l3 3"/></svg>
+const IconRegen=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20.5 4.5V10H15"/></svg>
+const IconMore=()=><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor"/></svg>
+
 // 微信式表情面板：内置表情集（分类顺序≈微信：面孔→手势→动物→食物→活动→符号）与搜索关键词表。
 const STICKERS=['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😋','😛','😜','🤪','😝','🤗','🤭','🫢','🤫','🤔','🫡','🤐','😶','😐','😑','😬','🙄','😯','😪','😮','😴','🤤','😌','😔','😏','🥲','😢','😭','😮‍💨','😲','😵','😵‍💫','🤠','😎','🤓','🧐','😕','🫤','😟','🙁','☹️','😰','😨','🥶','🥵','😱','😣','😫','😩','😖','😞','😤','😠','😡','🤬','🤯','😳','🥴','🤢','🤮','😷','🤒','🤕','👋','🤚','👌','🤌','✌️','🤞','🫰','🤟','🤙','👍','👎','🫱','🫲','🙏','💪','🙌','👏','🫶','🤝','🖖','☝️','👇','👈','👉','🧑','👨','👩','🧔','👦','👧','🕺','💃','🧎','🧘','🙇','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🦄','🐝','🦋','🐢','🐍','🐙','🐧','🐦','🦅','🦉','🐞','🐟','🐠','🐬','🐳','🦈','🐊','🐉','🐲','🌵','🌴','🌳','🍀','🍁','🍂','🌿','🌷','🌹','🌺','🌻','🌼','🌸','🍉','🍓','🍒','🍑','🍊','🍋','🍌','🍇','🥝','🍅','🥑','🍞','🍔','🍟','🍕','🌭','🌮','🌯','🥪','🍜','🍛','🍚','🍣','🍤','🍳','🥞','🧀','🍰','🎂','🍪','☕','🍵','🍺','🍻','🥂','🍷','🥤','⚽','🏀','🎾','🏈','⚾','🎮','🎯','🎤','🎧','🎵','🎶','📷','📺','🎬','🎭','🎨','🎪','🎠','🎡','🎢','🎉','🎊','🎁','🎈','🏆','🥇','🎿','🛷','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','⭐','🌟','✨','💫','🔥','💧','🌈','❄️','☀️','🌙','⚡','🌊','💯','❗','❓','✅','❌','⭕','🚫','💤','💌','📜','📌','📍','🔔']
 const EMOJI_KW:Record<string,string>={'😀':'笑 开心 微笑 高兴','😃':'笑 开心','😄':'笑 开心','😁':'笑 开心','😆':'笑 搞笑','😅':'尴尬 汗 微笑','🤣':'笑 哭 搞笑','😂':'笑 哭 搞笑 滑稽','🙂':'微笑','🙃':'无奈 反转','😉':'眨眼 调皮','😊':'笑 温暖 微笑','😇':'天使 乖','🥰':'爱 甜 可爱 喜欢','😍':'爱 喜欢 心动','🤩':'惊喜 棒 厉害','😘':'亲亲 爱 么么哒','😗':'亲','☺️':'微笑 笑','😚':'亲亲','😋':'好吃 馋 美食','😛':'吐舌 调皮','😜':'吐舌 调皮 眨眼','🤪':'搞怪 疯','😝':'吐舌 调皮','🤗':'抱抱 欢迎','🤭':'偷笑 捂嘴','🫢':'惊讶 捂嘴','🤫':'嘘 保密','🤔':'思考 疑问 想','🫡':'敬礼 致敬','🤐':'闭嘴 拉链','😶':'无语 沉默','😐':'平静','😑':'无语','😬':'尴尬','🙄':'白眼 无语','😯':'惊讶','😪':'困 累','😮':'惊讶 张嘴','😴':'困 睡 晚安','🤤':'馋 垂涎','😌':'平静 放松','😔':'难过 失落','😏':'得意 坏笑','🥲':'苦笑 难过','😢':'哭 难过 伤心','😭':'哭 大哭 难过','😮‍💨':'叹气 无奈','😲':'惊讶','😵':'晕 头晕','😵‍💫':'晕 眼花','🤠':'牛仔 得意','😎':'酷 墨镜 得意','🤓':'书呆子 眼镜','🧐':'审视 打量','😕':'疑惑 为难','🫤':'疑惑 无奈','😟':'担心','🙁':'不高兴 难过','☹️':'难过 不开心','😰':'紧张 冒汗','😨':'害怕','🥶':'冷 冻','🥵':'热 热死了','😱':'惊叫 恐怖 吓','😣':'难受 痛苦','😫':'累 烦','😩':'累 崩溃','😖':'难受','😞':'失望 难过','😤':'生气 傲 哼','😠':'生气','😡':'生气 发火 怒','🤬':'骂 生气','🤯':'震惊 绝了 爆炸','😳':'害羞 尴尬','🥴':'晕 醉','🤢':'恶心','🤮':'吐 恶心','😷':'口罩 病','🤒':'生病 发烧','🤕':'受伤 包扎','👋':'打招呼 你好 拜拜 再见','🤚':'停 手','👌':'好的 OK','🤌':'拿捏','✌️':'胜利 剪刀手','🤞':'祈祷 好运','🫰':'比心 钱','🤟':'爱你','🤙':'酷 拨打','👍':'赞 好 棒 点赞','👎':'踩 不好','🫱':'握手','🫲':'握手','🙏':'拜托 谢谢 感谢 祈祷 加油','💪':'加油 强壮 力量','🙌':'欢呼 棒','👏':'鼓掌 棒 厉害','🫶':'比心 爱','🤝':'握手 合作 成交','🖖':' Vulcan 祝愿','☝️':'上 一','👇':'下','👈':'左','👉':'右','🧑':'人','👨':'男 他','👩':'女 她','🧔':'胡子','👦':'男孩','👧':'女孩','🕺':'跳舞','💃':'跳舞','🧎':'跪','🧘':'瑜伽 冥想','🙇':'鞠躬 抱歉','🐶':'狗 汪 宠物','🐱':'猫 喵 宠物','🐭':'老鼠','🐹':'仓鼠','🐰':'兔子 可爱','🦊':'狐狸','🐻':'熊','🐼':'熊猫','🐨':'考拉','🐯':'老虎','🦁':'狮子','🐮':'牛','🐷':'猪','🐸':'青蛙','🐵':'猴子','🙈':'害羞 不看','🙉':'不听','🙊':'不说 保密','🦄':'独角兽','🐝':'蜜蜂','🦋':'蝴蝶','🐢':'乌龟','🐍':'蛇','🐙':'章鱼','🐧':'企鹅','🐦':'鸟','🦅':'老鹰','🦉':'猫头鹰','🐞':'瓢虫','🐟':'鱼','🐠':'热带鱼','🐬':'海豚','🐳':'鲸','🦈':'鲨鱼','🐊':'鳄鱼','🐉':'龙','🐲':'龙','🌵':'仙人掌','🌴':'椰树','🌳':'树','🍀':'幸运 四叶草','🍁':'枫叶','🍂':'落叶','🌿':'草 叶子','🌷':'花 郁金香','🌹':'玫瑰 花 爱','🌺':'花','🌻':'向日葵 花','🌼':'花','🌸':'花 樱花 春天','🍉':'西瓜 水果','🍓':'草莓 水果','🍒':'樱桃 水果','🍑':'桃 水果','🍊':'橘子 水果','🍋':'柠檬 水果','🍌':'香蕉 水果','🍇':'葡萄 水果','🥝':'猕猴桃 水果','🍅':'西红柿 水果','🥑':'牛油果','🍞':'面包 吃','🍔':'汉堡 吃 饿','🍟':'薯条 吃','🍕':'披萨 吃 饿','🌭':'热狗 吃','🌮':'卷饼 吃','🌯':'卷饼','🥪':'三明治 吃','🍜':'面 吃 饿','🍛':'咖喱 吃','🍚':'米饭 吃','🍣':'寿司 吃','🍤':'虾 吃','🍳':'煎蛋 吃','🥞':'松饼 早餐','🧀':'奶酪','🍰':'蛋糕 甜','🎂':'生日 蛋糕 庆祝','🍪':'饼干 甜','☕':'咖啡 喝 提神','🍵':'茶 喝','🍺':'啤酒 喝','🍻':'干杯 喝','🥂':'干杯 庆祝','🍷':'红酒 喝','🥤':'奶茶 喝 饮料','⚽':'足球 运动','🏀':'篮球 运动','🎾':'网球 运动','🏈':'橄榄球 运动','⚾':'棒球 运动','🎮':'游戏 玩','🎯':'靶子 目标','🎤':'唱歌 麦克风','🎧':'听歌 音乐','🎵':'音乐 歌','🎶':'音乐 歌','📷':'拍照 图片','📺':'电视 看剧','🎬':'电影 拍戏','🎭':'戏剧 面具','🎨':'画画 艺术','🎪':'马戏','🎠':'旋转木马','🎡':'摩天轮','🎢':'过山车','🎉':'庆祝 派对 生日 开心','🎊':'庆祝 派对','🎁':'礼物 生日','🎈':'气球 生日','🏆':'冠军 奖杯','🥇':'第一 冠军','🎿':'滑雪 运动','🛷':'雪橇','❤️':'心 爱 红心 喜欢','🧡':'心 爱','💛':'心 爱','💚':'心 爱','💙':'心 爱','💜':'心 爱','🖤':'心 黑','🤍':'心 白','💔':'伤心 分手 难过','❣️':'心 爱','💕':'爱 心','💞':'爱 心','💓':'爱 心','💗':'爱 心','💖':'爱 心','💘':'爱 心 桃心','💝':'爱 心 礼物','⭐':'星 星星','🌟':'星 星星 闪亮','✨':'闪亮 棒','💫':'星 晕','🔥':'火 热 厉害','💧':'水 滴','🌈':'彩虹','❄️':'雪 冷','☀️':'太阳 晴 热','🌙':'月亮 晚上 晚安','⚡':'闪电 快','🌊':'海浪','💯':'满分 优秀 加油','❗':'重要 注意','❓':'疑问 问题','✅':'对 完成 可以','❌':'错 不行 禁止','⭕':'圈','🚫':'禁止 不行','💤':'困 睡 晚安','💌':'信 情书 爱','📜':'文书','📌':'定位 图钉','📍':'定位 地点','🔔':'铃 提醒'}
@@ -1203,11 +1348,56 @@ function Chat(p: any) {
   },[])
   const currentMessages:ChatMessage[]=p.messages[chatPerson]||[]
   const activeChatConversationId:string=p.activeConversationIds?.[chatPerson]||''
-  // 当前会话的缓发批次：倒计时条、气泡「待发」标记都从这里派生（不同助手/会话严格各看各的）。
-  const deferredKey=activeChatConversationId?deferredScopeKey(chatPerson,activeChatConversationId):''
-  const deferredBatch:DeferredBatch|null=(deferredKey&&p.deferredBatches?.[deferredKey])||null
-  const queuedChipIds=deferredBatch?queuedIdSet(deferredBatch):null
-  const queuedChipText=deferredBatch?(deferredBatch.status==='sending'?'⏳ 发送中':deferredBatch.status==='needs_review'?'⚠ 待确认':'⏱ 待发'):''
+  // 缓发已暂停：开关、倒计时、待发标记全部隐藏；但历史遗留队列不能静默丢失——
+  // 还有未发出的批次时在输入区上方给出恢复入口（pending 批次计时器也会自动补发）。
+  const recoveryBatches=Object.entries(p.deferredBatches||{}).map(([key,batch])=>({key,batch:batch as DeferredBatch})).filter(x=>x.batch&&Array.isArray(x.batch.messages)&&x.batch.messages.length>0)
+  const recoveryTotal=recoveryBatches.reduce((n,x)=>n+x.batch.messages.length,0)
+  // ── 消息操作菜单：常驻轻量图标栏 + 「更多」浮层（删除在浮层里，避免误触）──
+  const [menuFor,setMenuFor]=useState<string|null>(null)
+  const [editingId,setEditingId]=useState<string|null>(null)
+  const [editDraft,setEditDraft]=useState('')
+  const [copiedId,setCopiedId]=useState<string|null>(null)
+  const copyTimerRef=useRef<number|undefined>(undefined)
+  const longPressRef=useRef<number|undefined>(undefined)
+  useEffect(()=>()=>{if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current);if(longPressRef.current)window.clearTimeout(longPressRef.current)},[])
+  // 切换助手 / 会话：收起浮层与编辑态，避免菜单留在另一场对话上。
+  useEffect(()=>{setMenuFor(null);setEditingId(null);setEditDraft('')},[chatPerson,activeChatConversationId])
+  // 「更多」浮层：点击别处或按 Esc 关闭。
+  useEffect(()=>{
+    if(!menuFor)return
+    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.message-menu')&&!t.closest('.message-action-more'))setMenuFor(null)}
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')setMenuFor(null)}
+    document.addEventListener('pointerdown',onDown)
+    document.addEventListener('keydown',onKey)
+    return()=>{document.removeEventListener('pointerdown',onDown);document.removeEventListener('keydown',onKey)}
+  },[menuFor])
+  // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
+  // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
+  const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
+  useEffect(()=>{const list=editWatch||[];if(editingId&&!list.some((m:ChatMessage)=>m.id===editingId)){setEditingId(null);setEditDraft('')}},[editWatch,editingId])
+  async function copyMessage(m:ChatMessage){
+    if(!m.id||!m.content)return
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(m.content)
+      else{const ta=document.createElement('textarea');ta.value=m.content;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
+      setCopiedId(m.id)
+      if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current)
+      copyTimerRef.current=window.setTimeout(()=>setCopiedId(v=>v===m.id?null:v),1600)
+    }catch{p.setChatError('复制失败，请手动选择文本复制。')}
+  }
+  function startEdit(m:ChatMessage){if(m.role!=='user'||!m.id)return;setMenuFor(null);setEditingId(m.id);setEditDraft(m.content)}
+  function saveEdit(){if(!editingId)return;const text=editDraft.trim();if(!text)return;p.editMessage(editingId,text);setEditingId(null);setEditDraft('')}
+  function cancelEdit(){setEditingId(null);setEditDraft('')}
+  function removeMessage(m:ChatMessage){if(!m.id)return;setMenuFor(null);if(editingId===m.id)cancelEdit();p.deleteMessage(m.id)}
+  async function regenerate(m:ChatMessage){if(!m.id)return;setMenuFor(null);await p.regenerateMessage(m.id)}
+  // 触屏长按消息打开「更多」；桌面端用右键或「···」按钮。
+  function bubblePointerDown(e:React.PointerEvent,m:ChatMessage){
+    if(e.pointerType!=='touch'||!m.id)return
+    const targetId=m.id
+    if(longPressRef.current)window.clearTimeout(longPressRef.current)
+    longPressRef.current=window.setTimeout(()=>{setMenuFor(targetId)},480)
+  }
+  function bubblePointerEnd(){if(longPressRef.current){window.clearTimeout(longPressRef.current);longPressRef.current=undefined}}
   const lastMessage=currentMessages[currentMessages.length-1]
   const lastContent=lastMessage?String(lastMessage.content||''):''
   useEffect(()=>{
@@ -1288,6 +1478,39 @@ function Chat(p: any) {
   function startRename(id:string,title:string,from:'header'|'list'){setRenameId(id);setRenameVal(title||'');setRenameFrom(from)}
   const activeConv=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson])
   const activeTitle=activeConv?.title||p.displayName(p.person)
+  // 单条消息 = 气泡（或修改态）+ 常驻轻量操作栏 + 「更多」浮层。
+  // 操作栏始终显示但低对比度（悬停/聚焦高亮），不往消息旁堆一排醒目按钮；
+  // 删除只在「更多」里，避免误触。整行 flex-basis:100% 换行，不挤压气泡布局。
+  function renderMessageRow(m:ChatMessage,i:number,list:ChatMessage[]){
+    const msgId=m.id||''
+    const isLast=i===list.length-1
+    const isEditing=!!m.id&&editingId===m.id
+    const canAct=!!m.id
+    const canRegenerate=m.role==='assistant'&&isLast&&canAct&&!p.sending
+    return <div className={'message-row '+m.role} key={i} data-message-id={m.id||undefined}>
+      {m.role==='assistant'&&<span className="message-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>}
+      {isEditing
+        ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
+        : <div className={'bubble '+m.role}
+            onContextMenu={e=>{if(!m.id)return;e.preventDefault();setMenuFor(m.id)}}
+            onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
+          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}
+        </div>}
+      {m.role==='user'&&<span className="message-avatar message-avatar-me" aria-hidden="true">{myName.slice(0,1)}</span>}
+      {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
+      {m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}
+      {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
+      {canAct&&<div className="message-actions">
+        <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
+        {m.role==='user'&&<button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>}
+        {m.role==='assistant'&&isLast&&<button type="button" className="message-action" title={p.sending?'正在生成，稍后再试':'重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
+        <button type="button" className="message-action message-action-more" title="更多" aria-label="更多操作" aria-expanded={menuFor===msgId} onClick={()=>setMenuFor(v=>v===msgId?null:msgId)}><IconMore/></button>
+      </div>}
+      {menuFor===msgId&&<div className={'message-menu '+(m.role==='user'?'for-user':'for-assistant')} role="menu">
+        <button type="button" role="menuitem" onClick={()=>removeMessage(m)}>删除</button>
+      </div>}
+    </div>
+  }
   return <div className="fullscreen-chat">
     <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索聊天记录" title="搜索聊天记录" onClick={()=>setSearchOpen(v=>!v)}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {searchOpen&&<div className="history-search"><input autoFocus value={historyQuery} onChange={e=>setHistoryQuery(e.target.value)} placeholder="搜索当前助手的聊天记录……" aria-label="搜索聊天记录"/>{historyQuery.trim()&&<button type="button" onClick={()=>setHistoryQuery('')}>清除</button>}</div>}
@@ -1295,20 +1518,20 @@ function Chat(p: any) {
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
-    <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=><div className={'message-row '+m.role} key={i} data-message-id={m.id||undefined}>{m.role==='assistant'&&<span className="message-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>}<div className={'bubble '+m.role}>{m.content|| (p.sending&&i===p.messages[p.person].length-1?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}</div>{queuedChipIds&&m.role==='user'&&m.id&&queuedChipIds.has(m.id)&&<span className="message-deferred-chip" title={deferredBatch?.status==='needs_review'?'上次发送中断，待确认后重发':'消息已显示，等待 20 秒缓发合并送出'}>{queuedChipText}</span>}{m.role==='user'&&<span className="message-avatar message-avatar-me" aria-hidden="true">{myName.slice(0,1)}</span>}{m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}{m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}{m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}</div>) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
+    <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，点下面的按钮上传图片。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{if(window.confirm('清空全部图片表情包？')){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
-    <div className={'deferred-bar'+(deferredBatch?' has-batch':'')} role="status">
-      <button type="button" className={'deferred-toggle'+(p.deferredOn?' on':'')} aria-pressed={p.deferredOn} title="切换即时发送 / 20 秒缓发（缓发=先显示在聊天里，倒计时结束后合并为一次请求）" onClick={()=>p.setDeferredOn((v:boolean)=>!v)}>{p.deferredOn?'⏳ 缓发 20″':'⏱ 即时发送'}</button>
-      {deferredBatch&&deferredBatch.status==='pending'&&<span className="deferred-status">待发 {deferredBatch.messages.length} 条 · {Math.ceil(remainingMs(deferredBatch,p.deferredNow)/1000)}s 后合并发送</span>}
-      {deferredBatch&&deferredBatch.status==='sending'&&<span className="deferred-status">⏳ {deferredBatch.messages.length} 条待发消息合并发送中…</span>}
-      {deferredBatch&&deferredBatch.status==='needs_review'&&<span className="deferred-status warn">⚠ 上次发送中断（{deferredBatch.messages.length} 条），确认后才会重发</span>}
-      {deferredBatch&&deferredBatch.status!=='sending'&&<span className="deferred-actions"><button type="button" title="立即合并发送待发消息" onClick={()=>p.flushDeferredNow(deferredKey)}>立即发送</button><button type="button" title="撤回待发消息" onClick={()=>p.cancelDeferred(deferredKey)}>取消待发</button></span>}
-    </div>
+    {recoveryBatches.length>0&&<div className="deferred-recovery" role="status">
+      <span>⏳ {recoveryTotal} 条缓发消息尚未发出</span>
+      <span className="deferred-recovery-actions">
+        <button type="button" disabled={p.sending} title="立即串行发送所有待发批次" onClick={()=>{void (async()=>{for(const x of recoveryBatches)await p.flushDeferredNow(x.key)})()}}>立即发送</button>
+        <button type="button" title="撤回全部待发消息（会从队列移除）" onClick={()=>{for(const x of recoveryBatches)p.cancelDeferred(x.key)}}>撤回</button>
+      </span>
+    </div>}
     <form className="compose compose-wechat" onSubmit={submit}>
-      <input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder={p.deferredOn?'写点什么……（20 秒缓发中）':'写点什么……'} aria-label="聊天消息"/>
+      <input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息"/>
       <button type="button" title="表情与贴纸" aria-label="表情与贴纸" className={'compose-icon'+(emojiOpen&&emojiTab!=='fav'?' tool-active':'')} onClick={()=>{if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)}setMoreOpen(false)}}>☺</button>
-      <button className="send-button" disabled={p.deferredOn?(!p.draft.trim()&&!files.length):(p.sending||(!p.draft.trim()&&!files.length))}>{p.sending&&!p.deferredOn?'生成中…':p.deferredOn?'缓发':'发送'}</button>
+      <button className="send-button" disabled={p.sending||(!p.draft.trim()&&!files.length)}>{p.sending?'生成中…':'发送'}</button>
       <button type="button" title="更多：图片与文件" aria-label="更多" className={'compose-icon compose-more-button'+(moreOpen?' tool-active':'')} onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false)}}>{moreOpen?'×':'＋'}</button>
       {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
     </form>

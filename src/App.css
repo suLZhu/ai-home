@@ -339,6 +339,32 @@
 .message-row.message-flash .bubble{animation:message-flash 2.4s ease}
 @keyframes message-flash{0%{box-shadow:0 0 0 3px var(--accent-soft)}70%{box-shadow:0 0 0 3px var(--accent-soft)}100%{box-shadow:0 0 0 3px transparent}}
 
+/* ── 消息操作栏：常驻小图标（复制/修改/重新生成/更多） ── */
+.message-row{position:relative}
+.message-actions{flex-basis:100%;display:flex;align-items:center;gap:2px;margin:-1px 0 -7px 42px;opacity:.5;transition:opacity .15s ease}
+.message-row:hover .message-actions,.message-actions:focus-within{opacity:1}
+.message-action{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;padding:0;border:none;background:transparent;color:var(--muted);border-radius:7px;cursor:pointer}
+.message-action::before{content:"";position:absolute;inset:-9px -4px}
+.message-action svg{width:15px;height:15px;display:block}
+.message-action:disabled{opacity:.35;cursor:default}
+.message-action:not(:disabled):hover{background:var(--accent-soft,#f1ecfb);color:var(--accent,#7a5cd0)}
+.message-action-done{font-size:12px;line-height:1;color:var(--accent,#7a5cd0)}
+.message-action-more{margin-left:auto}
+/* 更多菜单（当前仅删除）：柔和圆角浅色浮层 */
+.message-menu{position:absolute;top:calc(100% - 4px);z-index:6;display:flex;flex-direction:column;min-width:96px;padding:4px;border:1px solid var(--line,#e8e2ee);border-radius:12px;background:var(--surface,#fff);box-shadow:var(--shadow-lift,0 10px 28px rgba(64,50,74,.14))}
+.message-menu.for-user{right:44px}
+.message-menu.for-assistant{left:44px}
+.message-menu button{border:none;background:transparent;color:var(--danger,#c0453f);font-size:13px;text-align:left;padding:8px 12px;border-radius:8px;cursor:pointer}
+.message-menu button:hover{background:var(--danger-soft,#fdeceb)}
+/* 修改消息：行内编辑框 */
+.message-edit{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--accent,#7a5cd0);border-radius:14px;background:var(--card,#fff);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.08))}
+.message-edit textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--field,#faf8fc);color:var(--ink,#2c2536);font-size:16px;line-height:1.55;padding:8px 10px;font-family:inherit}
+.message-edit textarea:focus{outline:none;border-color:var(--accent,#7a5cd0)}
+.message-edit-actions{display:flex;justify-content:flex-end;gap:8px}
+.message-edit-actions button{min-height:30px;padding:0 14px;border-radius:9px;border:1px solid var(--line,#e8e2ee);background:var(--card,#fff);color:var(--ink,#2c2536);font-size:13px;cursor:pointer}
+.message-edit-actions .primary{border-color:transparent;background:var(--accent,#7a5cd0);color:#fff}
+.message-edit-actions button:disabled{opacity:.5;cursor:default}
+
 /* ── 图片表情包：上传与网格 ── */
 .sticker-grid>button{padding:4px}
 .sticker-thumb{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;background:var(--field)}
@@ -541,6 +567,14 @@
 .message-deferred-chip{align-self:center;flex-shrink:0;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:10px;white-space:nowrap}
 /* 深夜主题：浮条换成同色系的深半透明，文字保持浅色可读。 */
 .shell.theme-night .deferred-bar{background:rgba(34,39,53,.72)}
+
+/* 缓发已暂停：仅当存在未发出的缓发批次时，才显示这条恢复条（避免静默丢失）。 */
+.deferred-recovery{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;margin:0 0 8px;border:1px dashed var(--line,#ddd6e4);border-radius:14px;background:var(--surface,#fff);color:var(--muted);font-size:12px}
+.deferred-recovery-actions{display:flex;gap:6px;margin-left:auto}
+.deferred-recovery-actions button{border:1px solid var(--line,#e8e2ee);border-radius:999px;background:var(--field,#f6f4f9);color:var(--ink,#2c2536);padding:5px 11px;font-size:12px;white-space:nowrap;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.deferred-recovery-actions button:hover:not(:disabled){background:var(--accent-soft,#f1ecfb);border-color:var(--accent,#7a5cd0)}
+.deferred-recovery-actions button:disabled{opacity:.5;cursor:default}
+.shell.theme-night .deferred-recovery{background:rgba(34,39,53,.72)}
 
 /* ═══════════ 悬浮输入框：柔和、圆角、半透明 ═══════════
    .shell 前缀与主题层同权重，靠文件顺序覆盖；半透明 + 毛玻璃让它像浮在聊天背景上的一片云。 */
