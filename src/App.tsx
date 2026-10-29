@@ -21,6 +21,7 @@ import { deferredScopeKey, loadDeferredBatches, saveDeferredBatches } from './de
 import { selectDueBatch, queuedIdSet, mergeQueuedForRequest, removeMessagesByIds } from './deferredChat.mjs'
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
+import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -34,7 +35,7 @@ const ASSISTANT_PEOPLE: Person[] = [YWX, YS]
 // 启动时把旧版以中文人名为键的本机数据一次性迁移到 assistantId（幂等）。
 migrateLocalStorage()
 type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板'
-type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string }
+type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string }
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string }
@@ -866,6 +867,21 @@ export default function App() {
     if (next) commitBatches(next)
     updateActiveConversationMessages(target, prev => prev.filter(m => !(m.id && idSet.has(m.id))), convId)
     markConversationDirty()
+    releaseUnusedAssets(idSet, next || batches)
+  }
+  // 附件引用安全：删除后扫描全局（全部助手会话 + 视图镜像 + 缓发队列），
+  // 只对「本次被移除且已无人再引用」的图片调 DELETE，绝不误删其他消息仍在使用的文件。
+  function releaseUnusedAssets(excludedMessageIds:Set<string>, batchesAfter:Record<string,DeferredBatch>|null){
+    const removed = new Set<string>()
+    for (const m of messages[person] || []) if (m.id && excludedMessageIds.has(m.id)) for (const id of assetIdsOfMessages([m])) removed.add(id)
+    const convList = (conversations[person] || []).find(c => c.id === (activeConversationIds[person] || ''))?.messages || []
+    for (const m of convList) if (m.id && excludedMessageIds.has(m.id)) for (const id of assetIdsOfMessages([m])) removed.add(id)
+    if (!removed.size) return
+    const stillReferenced = collectReferencedAssetIds({ conversations, messages, deferredBatches: batchesAfter, excludeMessageIds: excludedMessageIds })
+    for (const assetId of releasedAssetIds(removed, stillReferenced)) {
+      // 失败无妨：孤儿文件不影响功能，后续清理即可，绝不能因删附件失败阻断消息删除。
+      fetch('/api/attachments/' + encodeURIComponent(assetId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {})
+    }
   }
   // 重新生成：仅会话最新一条 AI 回复。复用 send() 重发同一条用户输入（历史截断到该用户消息之前），
   // 原位替换旧回复；失败/空白恢复原回复；regenLock + sending 双保险防重复请求。
@@ -1388,6 +1404,8 @@ function Chat(p: any) {
   const [selectedIds,setSelectedIds]=useState<string[]>([])  // 已勾选的消息 id
   const [armedDelId,setArmedDelId]=useState<string|null>(null)   // 单条删除二次确认（点一次变红，再点一次才删）
   const [armedSelKey,setArmedSelKey]=useState<string|null>(null) // 批量删除二次确认（键=选中集合）
+  // 图片加载失败的 preview 集合：历史消息的 blob: 死链走这里，显示明确的失效态而不是伪装成正常图片。
+  const [brokenPreviews,setBrokenPreviews]=useState<Record<string,boolean>>({})
   const [editingId,setEditingId]=useState<string|null>(null)
   const [editDraft,setEditDraft]=useState('')
   const [copiedId,setCopiedId]=useState<string|null>(null)
@@ -1485,10 +1503,27 @@ function Chat(p: any) {
     const el=chatBodyRef.current
     if(el)el.scrollTop=el.scrollHeight
   },[chatPerson,activeChatConversationId,p.person])
+  // 图片上传换稳定引用：字节存后端（见 server/attachments.mjs），preview 持久化为
+  // /api/attachments/<id>，聊天记录只带 assetId+URL，Base64 永不进 localStorage/云端快照。
+  // 时机选在「选择图片」而非「发送」：loadFiles 本就是 async，这样立即发送与缓发两条
+  // 路径（App.tsx send/enqueueDeferred）一行都不用改。
+  async function uploadAttachment(item:MessageAttachment):Promise<{id:string,url:string}|null>{
+    try{
+      const dataUrl=item.dataUrl||''
+      const comma=dataUrl.indexOf(',')
+      if(comma<0)return null
+      const res=await fetch('/api/attachments',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item.name,mime:item.type,data:dataUrl.slice(comma+1)})})
+      if(!res.ok)return null
+      const body=await res.json()
+      if(!body||!body.id||!body.url)return null
+      return {id:String(body.id),url:String(body.url)}
+    }catch{return null}
+  }
   async function loadFiles(list: FileList | null, imagesOnly=false) {
     if(!list)return
     const selected=Array.from(list).slice(0,8)
     const loaded:MessageAttachment[]=[]
+    let uploadFailed=0
     for(const file of selected){
       if(imagesOnly&&!file.type.startsWith('image/'))continue
       if(file.size>12*1024*1024){p.setChatError('单个文件不能超过 12 MB：'+file.name);continue}
@@ -1496,14 +1531,31 @@ function Chat(p: any) {
       if(file.type.startsWith('image/')){
         item.dataUrl=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('图片读取失败'));r.readAsDataURL(file)})
         item.preview=URL.createObjectURL(file)
+        // 图片表情包（preview 本就是持久的 data:）不重复上传，保持既有链路。
+        if(needsUpload(item)){
+          const saved=await uploadAttachment(item)
+          if(saved){item.preview=saved.url;item.assetId=saved.id}
+          else uploadFailed++   // 降级：保留 blob: 本次会话仍可见，但刷新会失效，必须明示
+        }
       } else if(/\.(txt|md|json|csv|log)$/i.test(file.name)&&file.size<500*1024){
         item.textContent=await file.text()
       }
       loaded.push(item)
     }
+    if(uploadFailed)p.setChatError(uploadFailed+' 张图片保存到云端失败，当前仅本次会话可见，刷新后会显示为失效。')
     setFiles(prev=>[...prev,...loaded].slice(0,8))
     if(imageInput.current)imageInput.current.value=''
     if(fileInput.current)fileInput.current.value=''
+  }
+  // 移除发送栏里还没发出的附件：已上传的图片要同步释放，否则会留孤儿文件。
+  // 用全局引用扫描兜底——只要还有任何消息引用它就绝不删。
+  function removePendingFile(index:number){
+    const target=files[index]
+    setFiles(prev=>prev.filter((_,j)=>j!==index))
+    if(!target||!target.assetId)return
+    const stillReferenced=collectReferencedAssetIds({conversations:p.conversations,messages:p.messages,deferredBatches:p.deferredBatches})
+    if(stillReferenced.has(String(target.assetId)))return
+    fetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'same-origin'}).catch(()=>{})
   }
   async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.deferredOn&&activeChatConversationId){/* 缓发：消息立即显示但不请求模型；队列不可追加（发送中/待确认）时保留草稿并提示 */if(!p.enqueueDeferred(text,payload)){p.setChatError('这条会话的缓发队列正在发送或有待确认的待发消息，先处理完再继续加入。');return}}else{if(p.sending)return;p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);setSearchOpen(false);setHistoryQuery('')}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
@@ -1570,7 +1622,7 @@ function Chat(p: any) {
           : <div className={'bubble '+m.role}
               onClick={()=>bubbleClick(m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
-          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={a.preview} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
         </div>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
           <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
@@ -1596,7 +1648,7 @@ function Chat(p: any) {
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
-    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
+    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，点下面的按钮上传图片。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{if(window.confirm('清空全部图片表情包？')){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
     {recoveryBatches.length>0&&<div className="deferred-recovery" role="status">
       <span>⏳ {recoveryTotal} 条缓发消息尚未发出</span>

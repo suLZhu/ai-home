@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { initMemoryIndex, rebuildMemoryIndex, searchMemoryIndex } from './memoryIndex.mjs'
+import { initAttachments, saveAttachment, getAttachment, deleteAttachment, ATTACH_MAX_BODY } from './server/attachments.mjs'
 import { initInbox, addInboxMessage, addTaskResult, listInbox, markInboxRead } from './inbox.mjs'
 import { createRollingBackup } from './server/backup.mjs'
 import { initToolLogs, createToolLog, finishToolLog, listToolLogs } from './toolLog.mjs'
@@ -73,6 +74,8 @@ db.exec(`
 
 
 `)
+// 图片附件字节表：与 app_state 快照解耦，避免 Base64 撞 2 MB 整包上限（详见 REVIEW-2026-10-29）。
+initAttachments(db)
 // Backwards-compatible workflow ownership metadata. Existing user-created tasks stay protected.
 const workflowColumns = db.prepare('PRAGMA table_info(scheduled_tasks)').all().map(row => row.name)
 if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_tasks ADD COLUMN created_by TEXT NOT NULL DEFAULT 'user'")
@@ -106,6 +109,17 @@ if (secretKey.length !== 32) { console.error('AI_HOME_SECRET_KEY must be a 32-by
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers })
   res.end(JSON.stringify(body))
+}
+// 附件字节流：id 是 uuid 且内容不可变，可长期私有缓存（仅同源登录态可取，故 private）。
+function sendBinary(res, status, buf, contentType, headers = {}) {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Length': buf.length,
+    'Cache-Control': 'private, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+    ...headers,
+  })
+  res.end(buf)
 }
 function readBody(req, max = MAX_BODY) {
   return new Promise((resolveBody, reject) => {
@@ -705,6 +719,24 @@ createServer(async (req, res) => {
       const body = await readBody(req)
       return send(res, 200, { record: memoryProvider.transition(memoryTransitionMatch[1], String(body.lifecycle || '')) })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '状态变更失败' }) }
+  }
+
+  // ---- 图片附件：字节存 sqlite，聊天记录只存 assetId + 稳定 URL，Base64 永不进 app_state 快照 ----
+  if (url.pathname === '/api/attachments' && req.method === 'POST') {
+    try {
+      const body = await readBody(req, ATTACH_MAX_BODY)
+      return send(res, 201, saveAttachment(db, { name: body.name, mime: body.mime, data: body.data }))
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '附件保存失败' }) }
+  }
+  const attachmentMatch = url.pathname.match(/^\/api\/attachments\/([0-9a-f-]{36})$/)
+  if (attachmentMatch && req.method === 'GET') {
+    const row = getAttachment(db, attachmentMatch[1])
+    if (!row) return send(res, 404, { error: '附件不存在或已被清理' })
+    return sendBinary(res, 200, row.data, row.mime || 'application/octet-stream', { 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(row.name)}` })
+  }
+  if (attachmentMatch && req.method === 'DELETE') {
+    // 引用安全由前端保证：删除消息后先扫描全部会话+缓发队列，只对无人再引用的 id 调本接口。
+    return send(res, 200, { ok: true, deleted: deleteAttachment(db, attachmentMatch[1]) })
   }
 
   if (url.pathname === '/api/state' && req.method === 'GET') {
