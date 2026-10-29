@@ -525,3 +525,27 @@
 .msg-tool-call-detail summary{font-size:11px;color:var(--muted);cursor:pointer;user-select:none}
 .msg-tool-call-detail pre{margin:6px 0 0;padding:8px;border-radius:8px;background:var(--field,#f6f3f7);font-size:11px;line-height:1.5;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .message-context-note{flex-basis:100%;max-width:82%;margin:3px 0 0 auto;padding:0 5px;font-size:10px;line-height:1.6;color:var(--muted,#8b858b);text-align:right;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ═══════════ 20 秒缓发：开关 / 倒计时状态条 / 气泡待发标记 ═══════════
+   颜色全部引用主题变量，四套主题自动跟随；奶灰＋浅紫下是一条半透明的浮条。 */
+.deferred-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 10px;margin:0 0 8px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.06))}
+.deferred-toggle{border:1px solid var(--line);border-radius:999px;background:var(--field);color:var(--muted);padding:6px 12px;font-size:12px;white-space:nowrap;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.deferred-toggle:hover{border-color:var(--accent)}
+.deferred-toggle.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.deferred-status{flex:1;min-width:90px;font-size:11px;line-height:1.5;color:var(--muted)}
+.deferred-status.warn{color:var(--danger,#ac5f68)}
+.deferred-actions{display:flex;gap:6px;margin-left:auto}
+.deferred-actions button{border:1px solid var(--line);border-radius:999px;background:var(--field);color:var(--ink);padding:5px 11px;font-size:12px;white-space:nowrap;transition:background .15s ease,border-color .15s ease}
+.deferred-actions button:hover{background:var(--accent-soft);border-color:var(--accent)}
+.message-deferred-chip{align-self:center;flex-shrink:0;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:10px;white-space:nowrap}
+/* 深夜主题：浮条换成同色系的深半透明，文字保持浅色可读。 */
+.shell.theme-night .deferred-bar{background:rgba(34,39,53,.72)}
+
+/* ═══════════ 悬浮输入框：柔和、圆角、半透明 ═══════════
+   .shell 前缀与主题层同权重，靠文件顺序覆盖；半透明 + 毛玻璃让它像浮在聊天背景上的一片云。 */
+.shell .compose-wechat{border-radius:24px;border-color:rgba(255,255,255,.55);background:rgba(252,249,253,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 8px 26px rgba(64,50,74,.10),inset 0 1px 0 rgba(255,255,255,.5)}
+.shell .compose-wechat>input{border-radius:14px;border-color:rgba(203,192,211,.55);background:rgba(255,255,255,.5)}
+.shell .compose-wechat .send-button{border-radius:14px}
+.shell .compose-icon{border-radius:14px}
+.shell.theme-night .compose-wechat{border-color:rgba(168,163,217,.22);background:rgba(34,39,53,.66);box-shadow:0 8px 26px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.05)}
+.shell.theme-night .compose-wechat>input{border-color:rgba(85,92,115,.6);background:rgba(44,51,68,.55)}
