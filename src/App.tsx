@@ -778,7 +778,10 @@ export default function App() {
   const bubbleClass=bubbleId==='image'?'image':bubbleId
   const bgUrl=bgId==='custom1'?customAssets.bg1:bgId==='custom2'?customAssets.bg2:''
   const bubbleUrl=bubbleId==='image'?customAssets.bubble:''
-  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
+  // 聊天打开时给整条布局链上锁：shell 用 height 封顶（而非 min-height），
+  // 消息列表成为唯一滚动容器，页面整体不再被聊天记录撑长。
+  const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
+  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
     <button className={"mobile-menu-toggle"+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起百宝箱':'打开百宝箱'} onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
     {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {toast.person} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
@@ -1212,6 +1215,14 @@ function Chat(p: any) {
     const el=chatBodyRef.current
     if(el)el.scrollTop=el.scrollHeight
   },[currentMessages.length,lastContent,p.person,activeChatConversationId,p.sending])
+  // 打开聊天、切换助手或会话时直接贴底（新会话从最新消息开始看）；
+  // 此后新消息只在用户仍在底部时跟随（上面的效果），向上翻阅不打扰。
+  // jumpToSource 的定向跳转在其后 80ms 执行，仍能覆盖这里的位置。
+  useEffect(()=>{
+    scrollPinned.current=true
+    const el=chatBodyRef.current
+    if(el)el.scrollTop=el.scrollHeight
+  },[chatPerson,activeChatConversationId,p.person])
   async function loadFiles(list: FileList | null, imagesOnly=false) {
     if(!list)return
     const selected=Array.from(list).slice(0,8)

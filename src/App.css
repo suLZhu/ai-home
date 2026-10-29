@@ -466,10 +466,11 @@
 .shell .home-person-circle{border-color:transparent;background:transparent;box-shadow:none;color:var(--ink)}
 .shell .home-person.is-me .home-person-circle{background:transparent;border-color:transparent}
 .shell .home-person:hover .home-person-circle{background:var(--card)}
-/* 自定义聊天背景图：伪元素铺图 + 透明度可调，内容始终压在图上方 */
-.shell.chatbg-image .chat-body{position:relative;background:var(--field)}
-.shell.chatbg-image .chat-body::before{content:"";position:absolute;inset:0;background-image:var(--chat-bg-image);background-size:cover;background-position:center;opacity:var(--chat-bg-opacity,1);pointer-events:none}
-.shell.chatbg-image .chat-body>*{position:relative}
+/* 自定义聊天背景图：直接铺在滚动容器「自身背景」上（background-attachment:scroll → 背景贴在
+   元素边框盒上、不随内容滚动，替代会随内容滚走的 ::before 绝对定位方案）。
+   渐变叠层复刻原 ::before 的 opacity 效果（--chat-bg-opacity 越小越淡）。 */
+.shell.chatbg-image .chat-body{background-color:var(--field);background-image:var(--chat-bg-image);background-size:cover;background-position:center;background-repeat:no-repeat;background-attachment:scroll}
+@supports (color:color-mix(in srgb,red 50%,transparent)){.shell.chatbg-image .chat-body{background-image:linear-gradient(color-mix(in srgb,var(--field) calc((1 - var(--chat-bg-opacity,1)) * 100%),transparent)),var(--chat-bg-image)}}
 .shell.bubble-image .bubble{background-image:var(--bubble-image);background-size:cover;background-position:center}
 
 /* 工作区小条说明 */
@@ -549,3 +550,34 @@
 .shell .compose-icon{border-radius:14px}
 .shell.theme-night .compose-wechat{border-color:rgba(168,163,217,.22);background:rgba(34,39,53,.66);box-shadow:0 8px 26px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.05)}
 .shell.theme-night .compose-wechat>input{border-color:rgba(85,92,115,.6);background:rgba(44,51,68,.55)}
+
+/* ═══════════ 聊天视口锁定：消息列表独立滚动，整页不被撑长 ═══════════
+   根因：.shell 与 .fullscreen-chat 都只有 min-height（不封顶），
+   聊天内容把整条链顶长，.chat-body 的 overflow:auto 永远不触发。
+   聊天打开时给 .shell 加 shell-chat-lock：整链用 height 封顶 + min-height:0，
+   只有 .chat-body 一处滚动；未打开聊天的页面维持原有 min-height 行为。
+   顶部栏 / 侧边栏不参与滚动（sidebar 本就 position:fixed），输入区固定在聊天区底部。 */
+.shell.shell-chat-lock{height:100vh;height:100dvh;min-height:0;max-height:100vh;max-height:100dvh;overflow:hidden}
+@media(min-width:600px){.shell.shell-chat-lock{height:calc(100vh - 48px);height:calc(100dvh - 48px);max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px)}}
+/* .screen 变为纵向 flex 舞台；去掉为底部导航预留的 84px 空档（聊天态没有 bottom-nav） */
+.shell.shell-chat-lock .screen{display:flex;flex-direction:column;min-height:0;max-height:100%;overflow:hidden;padding-bottom:0}
+/* 唯一的消息滚动容器 */
+.shell.shell-chat-lock .fullscreen-chat{flex:1;min-height:0;overflow:hidden}
+/* 固定区一律不被压缩：头部 / 搜索 / 会话条 / 错误条 / 工具条 / 表情面板 / 缓发条 / 输入区 / 脚注 */
+.shell.shell-chat-lock .chat-header,
+.shell.shell-chat-lock .history-search,
+.shell.shell-chat-lock .history-search-results,
+.shell.shell-chat-lock .conversation-bar,
+.shell.shell-chat-lock .chat-error,
+.shell.shell-chat-lock .tool-live-bar,
+.shell.shell-chat-lock .attachment-tray,
+.shell.shell-chat-lock .emoji-panel,
+.shell.shell-chat-lock .deferred-bar,
+.shell.shell-chat-lock .compose-wechat,
+.shell.shell-chat-lock .attachment-note{flex-shrink:0}
+.shell.shell-chat-lock .chat-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+/* 弹出面板限高，不许吃掉整个消息区；滚动条只出现在面板内部与消息列表 */
+.shell.shell-chat-lock .history-search-results{max-height:min(260px,30dvh)}
+.shell.shell-chat-lock .emoji-panel{max-height:38dvh;overflow-y:auto}
+/* 移动端安全区：脚注贴底时留出 home indicator */
+.shell.shell-chat-lock .attachment-note{padding-bottom:max(6px,env(safe-area-inset-bottom,0px))}
