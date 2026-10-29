@@ -339,9 +339,14 @@
 .message-row.message-flash .bubble{animation:message-flash 2.4s ease}
 @keyframes message-flash{0%{box-shadow:0 0 0 3px var(--accent-soft)}70%{box-shadow:0 0 0 3px var(--accent-soft)}100%{box-shadow:0 0 0 3px transparent}}
 
-/* ── 消息操作栏：常驻小图标（复制/修改/重新生成/更多） ── */
+/* ── 消息布局：气泡与操作栏同处 message-stack 列容器（无绝对定位，天然对齐气泡） ── */
 .message-row{position:relative}
-.message-actions{flex-basis:100%;display:flex;align-items:center;gap:2px;margin:-1px 0 -7px 42px;opacity:.5;transition:opacity .15s ease}
+.message-stack{display:flex;flex-direction:column;min-width:0;max-width:calc(100% - 42px)}
+.message-stack.stack-start{align-items:flex-start}
+.message-stack.stack-end{align-items:flex-end;margin-left:auto}
+.message-stack .bubble{margin:0}
+/* 操作栏：贴在气泡正下方（列内 flex-basis/margin 都要改回列方向语义） */
+.message-stack .message-actions{flex-basis:auto;display:flex;align-items:center;gap:3px;margin:3px 0 0;opacity:.52;transition:opacity .15s ease}
 .message-row:hover .message-actions,.message-actions:focus-within{opacity:1}
 .message-action{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;padding:0;border:none;background:transparent;color:var(--muted);border-radius:7px;cursor:pointer}
 .message-action::before{content:"";position:absolute;inset:-9px -4px}
@@ -349,13 +354,15 @@
 .message-action:disabled{opacity:.35;cursor:default}
 .message-action:not(:disabled):hover{background:var(--accent-soft,#f1ecfb);color:var(--accent,#7a5cd0)}
 .message-action-done{font-size:12px;line-height:1;color:var(--accent,#7a5cd0)}
-.message-action-more{margin-left:auto}
-/* 更多菜单（当前仅删除）：柔和圆角浅色浮层 */
-.message-menu{position:absolute;top:calc(100% - 4px);z-index:6;display:flex;flex-direction:column;min-width:96px;padding:4px;border:1px solid var(--line,#e8e2ee);border-radius:12px;background:var(--surface,#fff);box-shadow:var(--shadow-lift,0 10px 28px rgba(64,50,74,.14))}
-.message-menu.for-user{right:44px}
-.message-menu.for-assistant{left:44px}
-.message-menu button{border:none;background:transparent;color:var(--danger,#c0453f);font-size:13px;text-align:left;padding:8px 12px;border-radius:8px;cursor:pointer}
-.message-menu button:hover{background:var(--danger-soft,#fdeceb)}
+/* 删除：垃圾桶图标；点一次进入确认态（红色「删除？」），再点一次才执行 */
+.message-action.danger:not(.armed):hover{background:var(--danger-soft,#fdeceb);color:var(--danger,#c0453f)}
+.message-action.danger.armed{width:auto;padding:0 9px;background:var(--danger-soft,#fdeceb);color:var(--danger,#c0453f);font-weight:600}
+.message-action-armed-text{font-size:11px;line-height:1;white-space:nowrap}
+/* 多选模式：行首圆形复选标记（点击气泡或标记都可切换选中） */
+.msg-check{position:relative;display:grid;place-items:center;flex-shrink:0;align-self:center;width:21px;height:21px;padding:0;border:1.6px solid var(--line,#d8d0c5);border-radius:50%;background:var(--card,#fff);color:transparent;font-size:12px;line-height:1;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.msg-check::before{content:"";position:absolute;inset:-11px -8px}
+.msg-check.on{background:var(--accent,#7a5cd0);border-color:var(--accent,#7a5cd0);color:#fff}
+.message-row.select-mode .bubble{cursor:pointer}
 /* 修改消息：行内编辑框 */
 .message-edit{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--accent,#7a5cd0);border-radius:14px;background:var(--card,#fff);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.08))}
 .message-edit textarea{width:100%;min-height:76px;resize:vertical;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--field,#faf8fc);color:var(--ink,#2c2536);font-size:16px;line-height:1.55;padding:8px 10px;font-family:inherit}
@@ -364,6 +371,30 @@
 .message-edit-actions button{min-height:30px;padding:0 14px;border-radius:9px;border:1px solid var(--line,#e8e2ee);background:var(--card,#fff);color:var(--ink,#2c2536);font-size:13px;cursor:pointer}
 .message-edit-actions .primary{border-color:transparent;background:var(--accent,#7a5cd0);color:#fff}
 .message-edit-actions button:disabled{opacity:.5;cursor:default}
+/* 编辑框在列容器里：宽度撑满 stack（旧规则的 flex:1 是行方向语义） */
+.message-stack .message-edit{flex:0 0 auto;width:100%;align-self:stretch}
+/* 元信息在列容器里：不要 flex-basis:100%（列方向=高度 100%） */
+.message-stack .message-context-note{flex-basis:auto;max-width:100%;margin:3px 0 0}
+.message-stack .message-usage{align-self:stretch}
+
+/* ── 聊天滚动条：默认隐藏轨道与滑块（滚动能力不变），滚动时短暂显示 3px 细指示条 ── */
+.chat-body{scrollbar-width:none;-ms-overflow-style:none}
+.chat-body::-webkit-scrollbar{width:0;height:0;display:none;background:transparent}
+.fullscreen-chat{position:relative}
+.chat-scroll-indicator{position:absolute;right:4px;width:3px;border-radius:999px;background:var(--muted,#8b858b);opacity:0;pointer-events:none;z-index:5;transition:opacity .4s ease}
+.chat-scroll-indicator.show{opacity:.34}
+
+/* ── 多选删除：底部操作条（已选数量 / 取消 / 删除 + 二次确认） ── */
+.multi-select-bar{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:8px;border:1px solid var(--line,#e8e2ee);border-radius:16px;background:var(--surface,#fff);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.06))}
+.multi-select-bar .ms-count{flex:1;min-width:0;font-size:13px;color:var(--ink,#2c2536)}
+.multi-select-bar .ms-count b{color:var(--accent,#7a5cd0);font-size:15px}
+.multi-select-bar button{border:1px solid var(--line,#e8e2ee);border-radius:999px;background:var(--card,#fff);color:var(--ink,#2c2536);padding:8px 16px;font-size:13px;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.multi-select-bar .ms-delete{color:var(--danger,#c0453f);border-color:var(--danger,#c0453f)}
+.multi-select-bar .ms-delete:hover,.multi-select-bar .ms-delete.armed{background:var(--danger,#c0453f);border-color:var(--danger,#c0453f);color:#fff}
+.multi-select-bar .ms-delete:disabled{opacity:.45;cursor:default;background:var(--card,#fff);color:var(--danger,#c0453f)}
+/* 头部「选择」入口：默认宽 40px 圆钮，这里放宽成文字胶囊 */
+.chat-header-actions button.select-toggle{width:auto;min-width:44px;border-radius:999px;padding:0 10px;font-size:13px}
+.shell.theme-night .multi-select-bar{background:rgba(34,39,53,.72)}
 
 /* ── 图片表情包：上传与网格 ── */
 .sticker-grid>button{padding:4px}

@@ -836,23 +836,35 @@ export default function App() {
   // 删除：视图与持久化同时过滤。若删的是正在生成的回复——先中止请求；
   // 流式回写按 id 匹配，消息删除后无处可写，绝不会删除后又重新出现。
   function deleteMessage(messageId: string) {
-    if (!messageId) return
+    deleteMessages([messageId])
+  }
+  // 多选批量删除：一次性中止在途请求、把所有选中消息从缓发出队列移除，
+  // 再同时过滤当前会话的视图与持久化——刷新不恢复，也不碰其他助手/会话。
+  function deleteMessages(ids: string[]) {
+    const idSet = new Set(ids.filter(Boolean))
+    if (!idSet.size) return
     const target = person
     const convId = activeConversationIds[target] || ''
     const inFlight = sendAbortRef.current
-    if (inFlight && inFlight.id === messageId) { try { inFlight.controller.abort() } catch { /* 请求可能已结束 */ } }
-    // 这条消息还在缓发队列里（历史遗留）：先出队，否则到期 flush 会按队列内容把它重新发出去。
+    if (inFlight && inFlight.id && idSet.has(inFlight.id)) { try { inFlight.controller.abort() } catch { /* 请求可能已结束 */ } }
     const batches = deferredBatches
+    let next: Record<string, DeferredBatch> | null = null
     for (const [key, batch] of Object.entries(batches)) {
-      if (!batch || batch.status !== 'pending' || !batch.messages.some(x => x.id === messageId)) continue
-      const removed = removeQueuedMessage(batch, messageId)
-      const next = { ...batches }
-      if (removed) next[key] = removed
+      if (!batch || batch.status !== 'pending') continue
+      if (!batch.messages.some(x => x.id && idSet.has(x.id))) continue
+      let b: DeferredBatch | null = batch
+      for (const item of [...batch.messages]) {
+        if (item.id && idSet.has(item.id)) {
+          b = removeQueuedMessage(b!, item.id)
+          if (!b) break
+        }
+      }
+      if (!next) next = { ...batches }
+      if (b) next[key] = b
       else delete next[key]
-      commitBatches(next)
-      break
     }
-    updateActiveConversationMessages(target, prev => prev.filter(m => m.id !== messageId), convId)
+    if (next) commitBatches(next)
+    updateActiveConversationMessages(target, prev => prev.filter(m => !(m.id && idSet.has(m.id))), convId)
     markConversationDirty()
   }
   // 重新生成：仅会话最新一条 AI 回复。复用 send() 重发同一条用户输入（历史截断到该用户消息之前），
@@ -930,7 +942,7 @@ export default function App() {
         personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} customAssets={customAssets}
         deferredOn={deferredOn} setDeferredOn={setDeferredOn} deferredBatches={deferredBatches} deferredNow={deferredNow}
         enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>flushDeferred(key,true)} cancelDeferred={cancelDeferred}
-        editMessage={editMessage} deleteMessage={deleteMessage} regenerateMessage={regenerateMessage}
+        editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage}
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
@@ -1019,6 +1031,7 @@ function Room(props: {
   // 消息操作菜单：修改/删除/重新生成在 App 层完成持久化与请求控制，Chat 只负责交互。
   editMessage: (messageId:string, newText:string)=>boolean,
   deleteMessage: (messageId:string)=>void,
+  deleteMessages: (ids:string[])=>void,
   regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>
 }) {
   if (props.chatOpen) return <Chat {...props} />
@@ -1301,7 +1314,7 @@ const DEFAULT_AVATAR="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/sv
 const IconCopy=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15A2.5 2.5 0 0 1 3 12.5v-7A2.5 2.5 0 0 1 5.5 3h7A2.5 2.5 0 0 1 15 5.5"/></svg>
 const IconEdit=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 6.5l3 3"/></svg>
 const IconRegen=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20.5 4.5V10H15"/></svg>
-const IconMore=()=><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor"/></svg>
+const IconTrash=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6.5h16"/><path d="M9.5 6.5V5a1.2 1.2 0 0 1 1.2-1.2h2.6A1.2 1.2 0 0 1 14.5 5v1.5"/><path d="M6.5 6.5l.8 11.6A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.9l.8-11.6"/><path d="M10.4 10v6M13.6 10v6"/></svg>
 
 // 微信式表情面板：内置表情集（分类顺序≈微信：面孔→手势→动物→食物→活动→符号）与搜索关键词表。
 const STICKERS=['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😋','😛','😜','🤪','😝','🤗','🤭','🫢','🤫','🤔','🫡','🤐','😶','😐','😑','😬','🙄','😯','😪','😮','😴','🤤','😌','😔','😏','🥲','😢','😭','😮‍💨','😲','😵','😵‍💫','🤠','😎','🤓','🧐','😕','🫤','😟','🙁','☹️','😰','😨','🥶','🥵','😱','😣','😫','😩','😖','😞','😤','😠','😡','🤬','🤯','😳','🥴','🤢','🤮','😷','🤒','🤕','👋','🤚','👌','🤌','✌️','🤞','🫰','🤟','🤙','👍','👎','🫱','🫲','🙏','💪','🙌','👏','🫶','🤝','🖖','☝️','👇','👈','👉','🧑','👨','👩','🧔','👦','👧','🕺','💃','🧎','🧘','🙇','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🦄','🐝','🦋','🐢','🐍','🐙','🐧','🐦','🦅','🦉','🐞','🐟','🐠','🐬','🐳','🦈','🐊','🐉','🐲','🌵','🌴','🌳','🍀','🍁','🍂','🌿','🌷','🌹','🌺','🌻','🌼','🌸','🍉','🍓','🍒','🍑','🍊','🍋','🍌','🍇','🥝','🍅','🥑','🍞','🍔','🍟','🍕','🌭','🌮','🌯','🥪','🍜','🍛','🍚','🍣','🍤','🍳','🥞','🧀','🍰','🎂','🍪','☕','🍵','🍺','🍻','🥂','🍷','🥤','⚽','🏀','🎾','🏈','⚾','🎮','🎯','🎤','🎧','🎵','🎶','📷','📺','🎬','🎭','🎨','🎪','🎠','🎡','🎢','🎉','🎊','🎁','🎈','🏆','🥇','🎿','🛷','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','⭐','🌟','✨','💫','🔥','💧','🌈','❄️','☀️','🌙','⚡','🌊','💯','❗','❓','✅','❌','⭕','🚫','💤','💌','📜','📌','📍','🔔']
@@ -1338,13 +1351,31 @@ function Chat(p: any) {
   // 用户向上翻阅时不再打扰；jumpToSource 的定向跳转不受影响（它随后会覆盖位置）。
   const chatBodyRef=useRef<HTMLDivElement>(null)
   const scrollPinned=useRef(true)
+  const scrollIndicatorRef=useRef<HTMLDivElement|null>(null)
+  const indicatorTimerRef=useRef<number|undefined>(undefined)
   useEffect(()=>{
     const el=chatBodyRef.current
     if(!el)return
-    const onScroll=()=>{scrollPinned.current=el.scrollHeight-el.scrollTop-el.clientHeight<80}
+    const onScroll=()=>{
+      scrollPinned.current=el.scrollHeight-el.scrollTop-el.clientHeight<80
+      // 系统滚动条已隐藏：滚动时自绘一条 3px 细指示条，停手 ~0.8s 后淡出；
+      // 贴底跟随（新消息自动滚动）时不闪，只有向上翻阅历史才出现。
+      const ind=scrollIndicatorRef.current
+      if(!ind)return
+      const total=el.scrollHeight,view=el.clientHeight
+      if(total<=view+4||scrollPinned.current){ind.classList.remove('show');return}
+      const thumbH=Math.max(26,Math.round(view*view/total))
+      const travel=view-thumbH
+      const progress=total>view?Math.min(1,Math.max(0,el.scrollTop/(total-view))):0
+      ind.style.height=thumbH+'px'
+      ind.style.top=(el.offsetTop+progress*travel)+'px'
+      ind.classList.add('show')
+      if(indicatorTimerRef.current)window.clearTimeout(indicatorTimerRef.current)
+      indicatorTimerRef.current=window.setTimeout(()=>{scrollIndicatorRef.current?.classList.remove('show')},800)
+    }
     onScroll()
     el.addEventListener('scroll',onScroll,{passive:true})
-    return ()=>el.removeEventListener('scroll',onScroll)
+    return ()=>{el.removeEventListener('scroll',onScroll);if(indicatorTimerRef.current)window.clearTimeout(indicatorTimerRef.current)}
   },[])
   const currentMessages:ChatMessage[]=p.messages[chatPerson]||[]
   const activeChatConversationId:string=p.activeConversationIds?.[chatPerson]||''
@@ -1352,25 +1383,31 @@ function Chat(p: any) {
   // 还有未发出的批次时在输入区上方给出恢复入口（pending 批次计时器也会自动补发）。
   const recoveryBatches=Object.entries(p.deferredBatches||{}).map(([key,batch])=>({key,batch:batch as DeferredBatch})).filter(x=>x.batch&&Array.isArray(x.batch.messages)&&x.batch.messages.length>0)
   const recoveryTotal=recoveryBatches.reduce((n,x)=>n+x.batch.messages.length,0)
-  // ── 消息操作菜单：常驻轻量图标栏 + 「更多」浮层（删除在浮层里，避免误触）──
-  const [menuFor,setMenuFor]=useState<string|null>(null)
+  // ── 消息操作：常驻轻量图标栏（复制/修改/重新生成/删除）+ 微信式多选删除 ──
+  const [selectMode,setSelectMode]=useState(false)          // 多选模式（只作用于当前会话）
+  const [selectedIds,setSelectedIds]=useState<string[]>([])  // 已勾选的消息 id
+  const [armedDelId,setArmedDelId]=useState<string|null>(null)   // 单条删除二次确认（点一次变红，再点一次才删）
+  const [armedSelKey,setArmedSelKey]=useState<string|null>(null) // 批量删除二次确认（键=选中集合）
   const [editingId,setEditingId]=useState<string|null>(null)
   const [editDraft,setEditDraft]=useState('')
   const [copiedId,setCopiedId]=useState<string|null>(null)
   const copyTimerRef=useRef<number|undefined>(undefined)
   const longPressRef=useRef<number|undefined>(undefined)
-  useEffect(()=>()=>{if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current);if(longPressRef.current)window.clearTimeout(longPressRef.current)},[])
-  // 切换助手 / 会话：收起浮层与编辑态，避免菜单留在另一场对话上。
-  useEffect(()=>{setMenuFor(null);setEditingId(null);setEditDraft('')},[chatPerson,activeChatConversationId])
-  // 「更多」浮层：点击别处或按 Esc 关闭。
+  const delArmTimerRef=useRef<number|undefined>(undefined)
+  const pressStartRef=useRef(0)
+  useEffect(()=>()=>{if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current);if(longPressRef.current)window.clearTimeout(longPressRef.current);if(delArmTimerRef.current)window.clearTimeout(delArmTimerRef.current)},[])
+  // 切换助手 / 会话：多选只属于当前会话——自动退出；同时收起编辑与删除确认。
   useEffect(()=>{
-    if(!menuFor)return
-    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.message-menu')&&!t.closest('.message-action-more'))setMenuFor(null)}
-    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape')setMenuFor(null)}
-    document.addEventListener('pointerdown',onDown)
+    setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)
+    setEditingId(null);setEditDraft('')
+  },[chatPerson,activeChatConversationId])
+  // 多选模式下按 Esc 退出（监听放在事件回调里，非 effect 渲染期调用）。
+  useEffect(()=>{
+    if(!selectMode)return
+    const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)}}
     document.addEventListener('keydown',onKey)
-    return()=>{document.removeEventListener('pointerdown',onDown);document.removeEventListener('keydown',onKey)}
-  },[menuFor])
+    return()=>document.removeEventListener('keydown',onKey)
+  },[selectMode])
   // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
   // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
   const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
@@ -1385,19 +1422,54 @@ function Chat(p: any) {
       copyTimerRef.current=window.setTimeout(()=>setCopiedId(v=>v===m.id?null:v),1600)
     }catch{p.setChatError('复制失败，请手动选择文本复制。')}
   }
-  function startEdit(m:ChatMessage){if(m.role!=='user'||!m.id)return;setMenuFor(null);setEditingId(m.id);setEditDraft(m.content)}
+  function startEdit(m:ChatMessage){if(m.role!=='user'||!m.id||selectMode)return;setEditingId(m.id);setEditDraft(m.content)}
   function saveEdit(){if(!editingId)return;const text=editDraft.trim();if(!text)return;p.editMessage(editingId,text);setEditingId(null);setEditDraft('')}
   function cancelEdit(){setEditingId(null);setEditDraft('')}
-  function removeMessage(m:ChatMessage){if(!m.id)return;setMenuFor(null);if(editingId===m.id)cancelEdit();p.deleteMessage(m.id)}
-  async function regenerate(m:ChatMessage){if(!m.id)return;setMenuFor(null);await p.regenerateMessage(m.id)}
-  // 触屏长按消息打开「更多」；桌面端用右键或「···」按钮。
+  // 单条删除：轻量二次确认——第一次点垃圾桶变红「删除？」，3 秒内再点一次才执行。
+  function removeMessage(m:ChatMessage){
+    if(!m.id||selectMode)return
+    if(armedDelId!==m.id){
+      setArmedDelId(m.id)
+      if(delArmTimerRef.current)window.clearTimeout(delArmTimerRef.current)
+      delArmTimerRef.current=window.setTimeout(()=>setArmedDelId(v=>v===m.id?null:v),3200)
+      return
+    }
+    if(delArmTimerRef.current)window.clearTimeout(delArmTimerRef.current)
+    setArmedDelId(null)
+    if(editingId===m.id)cancelEdit()
+    p.deleteMessage(m.id)
+  }
+  async function regenerate(m:ChatMessage){if(!m.id||selectMode)return;await p.regenerateMessage(m.id)}
+  // ── 多选：进入 / 退出 / 勾选 / 批量删除（二次确认键=当前选中集合，选择一变即自动失效）──
+  function enterSelect(id?:string){
+    setSelectMode(true)
+    setSelectedIds(id?[id]:[])
+    setArmedSelKey(null);setArmedDelId(null)
+    setEditingId(null);setEditDraft('')
+    setEmojiOpen(false);setMoreOpen(false);setSearchOpen(false);setHistoryQuery('')
+  }
+  function exitSelect(){setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)}
+  function toggleSelect(id:string){if(!id)return;setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
+  const selectKey=selectedIds.join('|')
+  function batchDelete(){
+    if(!selectedIds.length)return
+    if(armedSelKey!==selectKey){setArmedSelKey(selectKey);return}
+    p.deleteMessages(selectedIds)
+    exitSelect()
+  }
+  // 触屏长按进入多选并选中该消息（松手后的 click 由 pressStartRef 判定吞掉，避免立刻反选）。
   function bubblePointerDown(e:React.PointerEvent,m:ChatMessage){
-    if(e.pointerType!=='touch'||!m.id)return
+    pressStartRef.current=Date.now()
+    if(e.pointerType!=='touch'||!m.id||selectMode)return
     const targetId=m.id
     if(longPressRef.current)window.clearTimeout(longPressRef.current)
-    longPressRef.current=window.setTimeout(()=>{setMenuFor(targetId)},480)
+    longPressRef.current=window.setTimeout(()=>{enterSelect(targetId)},480)
   }
   function bubblePointerEnd(){if(longPressRef.current){window.clearTimeout(longPressRef.current);longPressRef.current=undefined}}
+  function bubbleClick(m:ChatMessage){
+    if(Date.now()-pressStartRef.current>420){pressStartRef.current=0;return} // 长按刚触发，吞掉这次 click
+    if(selectMode){if(m.id)toggleSelect(m.id)}
+  }
   const lastMessage=currentMessages[currentMessages.length-1]
   const lastContent=lastMessage?String(lastMessage.content||''):''
   useEffect(()=>{
@@ -1478,48 +1550,53 @@ function Chat(p: any) {
   function startRename(id:string,title:string,from:'header'|'list'){setRenameId(id);setRenameVal(title||'');setRenameFrom(from)}
   const activeConv=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson])
   const activeTitle=activeConv?.title||p.displayName(p.person)
-  // 单条消息 = 气泡（或修改态）+ 常驻轻量操作栏 + 「更多」浮层。
-  // 操作栏始终显示但低对比度（悬停/聚焦高亮），不往消息旁堆一排醒目按钮；
-  // 删除只在「更多」里，避免误触。整行 flex-basis:100% 换行，不挤压气泡布局。
+  // 单条消息 = [复选框(多选时)] + [头像] + message-stack 列容器（气泡/修改框 + 操作栏 + 元信息）。
+  // 图标栏与气泡在同一 flex 列里，天然贴在气泡正下方：AI 左对齐（不压头像）、用户右对齐。
+  // 用户消息 = 复制/修改/删除；最新 AI 回复 = 复制/重新生成/删除；其他 AI 回复 = 复制/删除。
   function renderMessageRow(m:ChatMessage,i:number,list:ChatMessage[]){
-    const msgId=m.id||''
     const isLast=i===list.length-1
     const isEditing=!!m.id&&editingId===m.id
     const canAct=!!m.id
+    const inSelect=selectMode
+    const selected=!!(inSelect&&canAct&&m.id&&selectedIds.includes(m.id))
+    const armed=!!(m.id&&armedDelId===m.id)
     const canRegenerate=m.role==='assistant'&&isLast&&canAct&&!p.sending
-    return <div className={'message-row '+m.role} key={i} data-message-id={m.id||undefined}>
+    return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')} key={i} data-message-id={m.id||undefined}>
+      {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
       {m.role==='assistant'&&<span className="message-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>}
-      {isEditing
-        ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
-        : <div className={'bubble '+m.role}
-            onContextMenu={e=>{if(!m.id)return;e.preventDefault();setMenuFor(m.id)}}
-            onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
-          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>setLightbox({src:a.preview!,name:a.name})}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>downloadText(a)}>下载文本副本</button>}</div></div>}</div>)}
+      <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
+        {isEditing
+          ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
+          : <div className={'bubble '+m.role}
+              onClick={()=>bubbleClick(m)}
+              onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
+          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={a.preview} alt={a.name}/></button>:<>🖼 {a.name}</>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
         </div>}
+        {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
+          <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
+          {m.role==='user'&&<button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>}
+          {m.role==='assistant'&&isLast&&<button type="button" className="message-action" title={p.sending?'正在生成，稍后再试':'重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
+          {armed
+            ? <button type="button" className="message-action danger armed" title="再点一次确认删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-armed-text">删除？</span></button>
+            : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><IconTrash/></button>}
+        </div>}
+        {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
+        {m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}
+        {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
+      </div>
       {m.role==='user'&&<span className="message-avatar message-avatar-me" aria-hidden="true">{myName.slice(0,1)}</span>}
-      {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
-      {m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}
-      {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
-      {canAct&&<div className="message-actions">
-        <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
-        {m.role==='user'&&<button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>}
-        {m.role==='assistant'&&isLast&&<button type="button" className="message-action" title={p.sending?'正在生成，稍后再试':'重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
-        <button type="button" className="message-action message-action-more" title="更多" aria-label="更多操作" aria-expanded={menuFor===msgId} onClick={()=>setMenuFor(v=>v===msgId?null:msgId)}><IconMore/></button>
-      </div>}
-      {menuFor===msgId&&<div className={'message-menu '+(m.role==='user'?'for-user':'for-assistant')} role="menu">
-        <button type="button" role="menuitem" onClick={()=>removeMessage(m)}>删除</button>
-      </div>}
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索聊天记录" title="搜索聊天记录" onClick={()=>setSearchOpen(v=>!v)}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索聊天记录" title="搜索聊天记录" onClick={()=>setSearchOpen(v=>!v)}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {searchOpen&&<div className="history-search"><input autoFocus value={historyQuery} onChange={e=>setHistoryQuery(e.target.value)} placeholder="搜索当前助手的聊天记录……" aria-label="搜索聊天记录"/>{historyQuery.trim()&&<button type="button" onClick={()=>setHistoryQuery('')}>清除</button>}</div>}
     {searchOpen&&historyQuery.trim()&&<div className="history-search-results" role="list">{historyMatches.length?historyMatches.map((x:any,i:number)=><button type="button" role="listitem" key={x.conversation.id+'-'+x.index+'-'+i} onClick={()=>jumpToMatch(x.conversation)}><b>{x.conversation.title||'新对话'} · {x.message.role==='user'?'你':'助手'}</b><span>{x.message.content.slice(0,180)}</span></button>):<p>没有找到匹配的聊天内容。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
-    {files.length>0&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
+    <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
+    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，点下面的按钮上传图片。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{if(window.confirm('清空全部图片表情包？')){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
     {recoveryBatches.length>0&&<div className="deferred-recovery" role="status">
       <span>⏳ {recoveryTotal} 条缓发消息尚未发出</span>
@@ -1528,14 +1605,20 @@ function Chat(p: any) {
         <button type="button" title="撤回全部待发消息（会从队列移除）" onClick={()=>{for(const x of recoveryBatches)p.cancelDeferred(x.key)}}>撤回</button>
       </span>
     </div>}
-    <form className="compose compose-wechat" onSubmit={submit}>
+    {selectMode
+      ? <div className="multi-select-bar" role="toolbar" aria-label="多选删除操作">
+          <span className="ms-count">已选择 <b>{selectedIds.length}</b> 条</span>
+          <button type="button" className="ms-cancel" onClick={exitSelect}>取消</button>
+          <button type="button" className={'ms-delete'+(armedSelKey===selectKey&&selectedIds.length?' armed':'')} disabled={!selectedIds.length} title={armedSelKey===selectKey&&selectedIds.length?'再点一次确认删除':'删除选中的消息'} onClick={batchDelete}>{armedSelKey===selectKey&&selectedIds.length?`确认删除 ${selectedIds.length} 条`:'删除'}</button>
+        </div>
+      : <form className="compose compose-wechat" onSubmit={submit}>
       <input value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息"/>
       <button type="button" title="表情与贴纸" aria-label="表情与贴纸" className={'compose-icon'+(emojiOpen&&emojiTab!=='fav'?' tool-active':'')} onClick={()=>{if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)}setMoreOpen(false)}}>☺</button>
       <button className="send-button" disabled={p.sending||(!p.draft.trim()&&!files.length)}>{p.sending?'生成中…':'发送'}</button>
       <button type="button" title="更多：图片与文件" aria-label="更多" className={'compose-icon compose-more-button'+(moreOpen?' tool-active':'')} onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false)}}>{moreOpen?'×':'＋'}</button>
       {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
-    </form>
-    <small className="attachment-note">图片可点击放大；TXT、MD、JSON、CSV、LOG 可读取文本并下载读取出的文本副本。其他文件的原文件下载与云端上传后续接入。</small>
+    </form>}
+    {!selectMode&&<small className="attachment-note">图片可点击放大；TXT、MD、JSON、CSV、LOG 可读取文本并下载读取出的文本副本。其他文件的原文件下载与云端上传后续接入。</small>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={lightbox.src} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
   </div>
 }
