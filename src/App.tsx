@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -26,6 +26,8 @@ import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAss
 import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSearch.mjs'
 // 云端恢复决策（数据安全）：启动动作判定、覆盖前本地备份、快照→视图提取。
 import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
+// 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
+import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiagLogs, formatDiagSummary } from './requestDiag.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -223,6 +225,19 @@ export default function App() {
   // 记录「最早未保存变更」的时间，超过 CLOUD_FLUSH_MAX_MS 就强制保存。
   const CLOUD_FLUSH_MAX_MS = 5000
   const firstDirtyAtRef = useRef(0)
+
+  // ── 模型请求诊断（黑匣子）──
+  // 只在请求链旁路记录「最终交给 fetch 的 requestBody」，绝不修改请求、
+  // 绝不阻断聊天（recordDiagLog 全程 try/catch）。诊断数据只存本地
+  // localStorage（DIAG_STORAGE_KEY），不进 /api/state、不上传云端。
+  const [diagLogs, setDiagLogs] = useState(() => { try { return loadDiagLogs(localStorage) } catch { return [] } })
+  const persistDiagLogs = (next: any[]) => { try { saveDiagLogs(localStorage, next) } catch { /* 诊断失败不影响聊天 */ } }
+  const recordDiagLog = (snapshot: any) => {
+    try {
+      setDiagLogs(prev => { const next = appendDiagLog(prev, snapshot); persistDiagLogs(next); return next })
+    } catch { /* 诊断是旁路观察器，任何异常都不得影响正常发送 */ }
+  }
+  const clearDiagLogs = () => { try { setDiagLogs([]); persistDiagLogs([]) } catch { /* 诊断失败不影响聊天 */ } }
 
   const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone])
   // Keep the latest snapshot available without making the one-time cloud-load callback
@@ -668,6 +683,19 @@ export default function App() {
       for(let round=0;round<5&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
+        // 黑匣子旁路：此刻 requestBody 就是即将被序列化发给 /api/chat 的最终 payload
+        // （服务端仅再注入一条时间 system 消息）。recordDiagLog 全程 try/catch，异常不影响发送。
+        recordDiagLog(buildDiagSnapshot({
+          requestBody, assistantId: target, conversationId: sendConversationId,
+          trigger: regen ? 'regenerate' : round > 0 ? 'follow-up' : (options.queuedIds ? 'follow-up' : 'normal'),
+          round: round + 1, provider: 'openai-compatible', endpoint: activeModel.endpoint.trim(),
+          historyTrimmed: priorHistory.length > previous.length || history.length > previous.length,
+          historyBefore: history.length, historyAfter: previous.length,
+          // memory/context 与角色设定共同拼进首条 system，无法拆成独立块——如实标注而非猜测。
+          memoryNote: '角色设定+补充提示+长期记忆+记忆库召回+世界书 均拼进首条 system（无法区分独立 memory 块）',
+          // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
+          requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
+        }))
         const chatProxy=()=>fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
         let response=await chatProxy()
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
@@ -1011,7 +1039,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} />}
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端暂不可用，本地数据已保留':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>重连云端</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
@@ -1787,7 +1815,7 @@ function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];setProj
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void}) {
+function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void}) {
   const [section,setSection]=useState('')
   // 输入框是「编辑缓冲」：null 表示未在编辑，直接显示当前生效时区；
   // 云端快照回填 timeZone 后无需任何同步逻辑，派生值自动跟随。
@@ -1799,6 +1827,92 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   // 时区预览：只读展示当前时区此刻的日期/星期/时间/时段。
   const tzPreview=buildTimeContext(new Date(timeTick),timeZone)
   const tzError=(()=>{const raw=tzInput.trim();if(!raw)return '';try{new Intl.DateTimeFormat('en-US',{timeZone:raw});return ''}catch{return '无法识别的时区名称，请输入 IANA 时区（如 Asia/Shanghai）'}})()
-  const cards=[{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
-  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}</div>}</div>
+  const cards=[{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
+  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}{section==='dev'&&<RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/>}</div>}</div>
+}
+
+// ── 模型请求诊断（黑匣子）详情页 ──
+// 只读展示本地环形日志：概览 / 提示词消息（可折叠）/ 记忆与上下文 / 参数 / 原始请求（可折叠）。
+// 复制功能走剪贴板，内容均已脱敏（凭证已滤、图片 Base64 已替换为占位）。
+function RequestDiagnostics({ logs, onClear }: { logs: any[], onClear: () => void }) {
+  const [selectedId, setSelectedId] = useState<string>('')
+  const [showMessages, setShowMessages] = useState(false)
+  const [showRaw, setShowRaw] = useState(false)
+  const [copyNote, setCopyNote] = useState('')
+  const selected: any = logs.find(l => l && l.id === selectedId) || logs[0] || null
+  const flash = (msg: string) => { setCopyNote(msg); window.setTimeout(() => setCopyNote(''), 2400) }
+  const copy = async (text: string, label: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); flash(label + '已复制'); return }
+      throw new Error('no clipboard')
+    } catch {
+      // file:// 或非安全上下文下 clipboard API 不可用：降级到临时 textarea。
+      try {
+        const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
+        document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove()
+        flash(ok ? label + '已复制' : '复制失败：浏览器拒绝了剪贴板访问')
+      } catch { flash('复制失败：浏览器拒绝了剪贴板访问') }
+    }
+  }
+  const fmtTime = (iso: string) => { try { const d = new Date(iso); return d.toLocaleString('zh-CN', { hour12: false }) } catch { return iso || '' } }
+  const PARAM_DISPLAY = ['model', 'stream', 'temperature', 'top_p', 'max_tokens', 'max_completion_tokens', 'frequency_penalty', 'presence_penalty', 'seed', 'stop', 'reasoning_effort', 'thinking', 'response_format', 'tool_choice']
+  const roleText = selected && selected.roles ? Object.entries(selected.roles as Record<string, number>).map(([k, v]) => k + '×' + v).join(' · ') : '—'
+  // 单条消息 content 的可读化：字符串直出；多模态数组逐段拼（图片段已在脱敏时换成占位）。
+  const contentText = (content: any): string => {
+    if (typeof content === 'string') return content
+    if (Array.isArray(content)) return content.map((p: any) => {
+      if (typeof p === 'string') return p
+      if (p && p.type === 'image_url') { const u = p.image_url && typeof p.image_url === 'object' ? p.image_url.url : p.image_url; return '[image] ' + (u || '') }
+      if (p && p.type === 'text') return String(p.text || '')
+      return JSON.stringify(p)
+    }).join('\n')
+    return JSON.stringify(content)
+  }
+  return <div className="tool-panel diag-panel">
+    <h3>模型请求诊断（黑匣子）</h3>
+    <p className="muted">记录每次发给模型的「最终请求」快照，用于排查换前端后人设/语气变化的原因。只读、仅本机、不上传云端，不含 API Key；最多保留 {MAX_DIAG_LOGS} 条。</p>
+    {copyNote && <p className="mcp-notice">{copyNote}</p>}
+    {logs.length === 0 ? <p className="muted" style={{marginTop:16}}>还没有记录。正常发一条消息后，这里会出现对应请求的快照。</p> : <>
+      <div className="diag-list-head"><b>最近记录（{logs.length} / {MAX_DIAG_LOGS}）</b><button type="button" className="mcp-remove" onClick={()=>{ if (window.confirm('清空全部诊断记录？只清诊断快照，不影响聊天数据。')) { onClear(); setSelectedId(''); flash('已清空') } }}>清空记录</button></div>
+      <div className="diag-list">{logs.map((l: any, i: number) => <button type="button" key={l.id} className={'diag-item' + (selected && l.id === selected.id ? ' active' : '')} onClick={() => { setSelectedId(l.id); setShowMessages(false); setShowRaw(false) }}>
+        <b>#{logs.length - i} · {fmtTime(l.at)}</b>
+        <span>{l.assistantId || '—'} · 会话 {(l.conversationId || '').slice(0, 8)} · {l.trigger}{(l.round || 1) > 1 ? '（第 ' + l.round + ' 轮）' : ''}</span>
+        <span>{l.model || '（模型未设置）'} · {l.messagesTotal} 条消息 · 约 {Math.round((l.requestChars || 0) / 1024)} KB</span>
+      </button>)}</div>
+    </>}
+    {selected && <div className="diag-detail">
+      <h4>概览</h4>
+      <div className="diag-kv">
+        <b>时间</b><span>{fmtTime(selected.at)}</span>
+        <b>助手 / 会话</b><span>{selected.assistantId} · {selected.conversationId}</span>
+        <b>触发方式</b><span>{selected.trigger}{(selected.round || 1) > 1 ? '（工具续轮 第 ' + selected.round + ' 轮）' : ''}</span>
+        <b>Provider / 模型</b><span>{selected.provider} / {selected.model || '（未设置）'}</span>
+        <b>Endpoint</b><span>{selected.endpoint || '（未设置）'}</span>
+        <b>消息结构</b><span>共 {selected.messagesTotal} 条：{roleText}</span>
+        <b>请求体大小</b><span>约 {selected.requestChars} 字符（{Math.round((selected.requestChars || 0) / 1024)} KB）</span>
+        <b>历史裁剪</b><span>{selected.historyTrimmed ? '发生（' + selected.historyBefore + ' → ' + selected.historyAfter + ' 条）' : '未发生 / 未知'}</span>
+        <b>服务端注入</b><span>时间上下文 system 消息（服务端实时生成，插在 messages 最前）</span>
+      </div>
+      <h4>提示词消息（真实顺序）</h4>
+      <button type="button" className="diag-toggle" onClick={() => setShowMessages(v => !v)}>{showMessages ? '收起 ▲' : '展开 ▼'}（{selected.messagesTotal} 条）</button>
+      {showMessages && <div className="diag-messages">{(selected.messages || []).map((m: any, i: number) => <div className="diag-message" key={i}>
+        <b>{m.role || 'unknown'}{m.tool_calls ? ' · 含 tool_calls' : ''}{m.tool_call_id ? ' · 回 tool ' + m.tool_call_id : ''}</b>
+        <pre>{contentText(m.content)}</pre>
+        {Array.isArray(m.tool_calls) && m.tool_calls.map((tc: any, j: number) => <pre key={j} className="diag-toolcall">🔧 {tc.function && tc.function.name}({tc.function && tc.function.arguments})</pre>)}
+      </div>)}</div>}
+      <h4>记忆与上下文</h4>
+      <p className="muted">{selected.memoryNote || '角色设定+补充提示+长期记忆+记忆库召回+世界书 均拼进首条 system（无法区分独立 memory 块）'}</p>
+      <h4>参数（只显示实际发送的键）</h4>
+      <div className="diag-kv">{PARAM_DISPLAY.map(k => <Fragment key={k}><b>{k}</b><span>{selected.params && selected.params[k] !== undefined ? (typeof selected.params[k] === 'object' ? JSON.stringify(selected.params[k]) : String(selected.params[k])) : <i className="diag-unset">未设置</i>}</span></Fragment>)}
+        <b>tools</b><span>{selected.tools && selected.tools.count ? selected.tools.count + ' 个（' + (selected.tools.names || []).join(', ') + '）· tool_choice=' + String(selected.tools.toolChoice !== undefined ? selected.tools.toolChoice : '未设置') : '无'}</span>
+      </div>
+      <h4>原始请求（已脱敏）</h4>
+      <button type="button" className="diag-toggle" onClick={() => setShowRaw(v => !v)}>{showRaw ? '收起 ▲' : '展开 ▼'}</button>
+      {showRaw && <pre className="diag-raw">{JSON.stringify(selected.raw, null, 2)}</pre>}
+      <div className="diag-actions">
+        <button type="button" onClick={() => copy(formatDiagSummary(selected), '诊断摘要')}>复制诊断摘要（文本）</button>
+        <button type="button" onClick={() => copy(JSON.stringify(selected.raw, null, 2), '脱敏 Raw JSON')}>复制脱敏 Raw JSON</button>
+      </div>
+    </div>}
+  </div>
 }

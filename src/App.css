@@ -661,3 +661,25 @@
 .shell.shell-chat-lock .emoji-panel{max-height:38dvh;overflow-y:auto}
 /* 移动端安全区：脚注贴底时留出 home indicator */
 .shell.shell-chat-lock .attachment-note{padding-bottom:max(6px,env(safe-area-inset-bottom,0px))}
+
+/* ── 模型请求诊断（黑匣子）：设置 → 开发者/调试 ── */
+.diag-panel h4{margin:18px 0 8px;font-size:14px}
+.diag-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+.diag-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;max-height:300px;overflow-y:auto}
+.diag-item{display:flex;flex-direction:column;gap:2px;text-align:left;padding:9px 12px;border:1px solid var(--line,#e8e2ee);border-radius:10px;background:var(--card,#fff);color:var(--ink,#2c2536);cursor:pointer;font-size:12px}
+.diag-item b{font-size:12.5px}
+.diag-item span{color:var(--muted,#7d7488)}
+.diag-item.active{border-color:var(--accent,#8d7bb8);box-shadow:0 0 0 1px var(--accent,#8d7bb8) inset}
+.diag-kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:13px;align-items:baseline}
+.diag-kv b{font-weight:600;white-space:nowrap}
+.diag-kv span{word-break:break-all}
+.diag-unset{color:var(--muted,#7d7488);font-style:normal;opacity:.75}
+.diag-toggle{min-height:32px;padding:0 14px;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--card,#fff);color:var(--ink,#2c2536);font-size:12.5px;cursor:pointer}
+.diag-messages{display:flex;flex-direction:column;gap:8px;margin-top:10px;max-height:360px;overflow-y:auto}
+.diag-message{border:1px solid var(--line,#e8e2ee);border-radius:9px;padding:8px 10px;background:var(--field,#faf8fc)}
+.diag-message b{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#7d7488)}
+.diag-message pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.5;font-family:inherit}
+.diag-toolcall{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--running,#7a71b5)}
+.diag-raw{margin-top:10px;max-height:360px;overflow:auto;padding:10px;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--field,#faf8fc);font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;user-select:text}
+.diag-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.diag-actions button{min-height:34px;padding:0 16px;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--card,#fff);color:var(--ink,#2c2536);font-size:13px;cursor:pointer}
