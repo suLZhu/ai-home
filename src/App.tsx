@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, type FormEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -22,6 +22,8 @@ import { selectDueBatch, queuedIdSet, mergeQueuedForRequest, removeMessagesByIds
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
+// 会话内消息搜索（微信式）：纯字符串匹配 + 上一条/下一条循环 + messageId 定位。
+import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSearch.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -1339,7 +1341,9 @@ function matchEmoji(e:string,q:string){if(!q)return true;if(e===q)return true;co
 
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
-  const [historyQuery,setHistoryQuery]=useState('')
+  // 会话内搜索：只搜当前会话（p.messages[chatPerson]），不跨会话、不跨助手。
+  const [searchQuery,setSearchQuery]=useState('')
+  const [searchActiveIdx,setSearchActiveIdx]=useState(-1)  // 当前定位到的匹配下标（-1=尚未选中）
   const [files,setFiles]=useState<MessageAttachment[]>([])
   const [emojiOpen,setEmojiOpen]=useState(false)
   const [emojiTab,setEmojiTab]=useState<'emoji'|'fav'|'search'>('emoji')
@@ -1414,10 +1418,11 @@ function Chat(p: any) {
   const delArmTimerRef=useRef<number|undefined>(undefined)
   const pressStartRef=useRef(0)
   useEffect(()=>()=>{if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current);if(longPressRef.current)window.clearTimeout(longPressRef.current);if(delArmTimerRef.current)window.clearTimeout(delArmTimerRef.current)},[])
-  // 切换助手 / 会话：多选只属于当前会话——自动退出；同时收起编辑与删除确认。
+  // 切换助手 / 会话：多选只属于当前会话——自动退出；同时收起编辑、删除确认与搜索。
   useEffect(()=>{
     setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)
     setEditingId(null);setEditDraft('')
+    setSearchOpen(false);setSearchQuery('');setSearchActiveIdx(-1)
   },[chatPerson,activeChatConversationId])
   // 多选模式下按 Esc 退出（监听放在事件回调里，非 effect 渲染期调用）。
   useEffect(()=>{
@@ -1464,7 +1469,7 @@ function Chat(p: any) {
     setSelectedIds(id?[id]:[])
     setArmedSelKey(null);setArmedDelId(null)
     setEditingId(null);setEditDraft('')
-    setEmojiOpen(false);setMoreOpen(false);setSearchOpen(false);setHistoryQuery('')
+    setEmojiOpen(false);setMoreOpen(false);closeSearch()
   }
   function exitSelect(){setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)}
   function toggleSelect(id:string){if(!id)return;setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
@@ -1476,16 +1481,17 @@ function Chat(p: any) {
     exitSelect()
   }
   // 触屏长按进入多选并选中该消息（松手后的 click 由 pressStartRef 判定吞掉，避免立刻反选）。
+  // 时间戳用事件自带的 e.timeStamp（同一单调时钟），避免在组件体内调用 Date.now。
   function bubblePointerDown(e:React.PointerEvent,m:ChatMessage){
-    pressStartRef.current=Date.now()
+    pressStartRef.current=e.timeStamp
     if(e.pointerType!=='touch'||!m.id||selectMode)return
     const targetId=m.id
     if(longPressRef.current)window.clearTimeout(longPressRef.current)
     longPressRef.current=window.setTimeout(()=>{enterSelect(targetId)},480)
   }
   function bubblePointerEnd(){if(longPressRef.current){window.clearTimeout(longPressRef.current);longPressRef.current=undefined}}
-  function bubbleClick(m:ChatMessage){
-    if(Date.now()-pressStartRef.current>420){pressStartRef.current=0;return} // 长按刚触发，吞掉这次 click
+  function bubbleClick(e:React.MouseEvent,m:ChatMessage){
+    if(e.timeStamp-pressStartRef.current>420){pressStartRef.current=0;return} // 长按刚触发，吞掉这次 click
     if(selectMode){if(m.id)toggleSelect(m.id)}
   }
   const lastMessage=currentMessages[currentMessages.length-1]
@@ -1557,7 +1563,7 @@ function Chat(p: any) {
     if(stillReferenced.has(String(target.assetId)))return
     fetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'same-origin'}).catch(()=>{})
   }
-  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.deferredOn&&activeChatConversationId){/* 缓发：消息立即显示但不请求模型；队列不可追加（发送中/待确认）时保留草稿并提示 */if(!p.enqueueDeferred(text,payload)){p.setChatError('这条会话的缓发队列正在发送或有待确认的待发消息，先处理完再继续加入。');return}}else{if(p.sending)return;p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);setSearchOpen(false);setHistoryQuery('')}
+  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.deferredOn&&activeChatConversationId){/* 缓发：消息立即显示但不请求模型；队列不可追加（发送中/待确认）时保留草稿并提示 */if(!p.enqueueDeferred(text,payload)){p.setChatError('这条会话的缓发队列正在发送或有待确认的待发消息，先处理完再继续加入。');return}}else{if(p.sending)return;p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);closeSearch()}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   function pickEmoji(emoji:string){p.setDraft(p.draft+emoji);const next=[emoji,...recentEmojis.filter(x=>x!==emoji)].slice(0,24);setRecentEmojis(next);localStorage.setItem('ai-home.recentEmojis',JSON.stringify(next))}
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
@@ -1576,8 +1582,39 @@ function Chat(p: any) {
     if(!Number.isFinite(rate)||rate<=0)return null
     return (((prompt-cached)*input+cached*cachePrice+completion*output)/1_000_000)*rate
   }
-  const historyMatches=(p.conversations[chatPerson]||[]).flatMap((c:Conversation)=>c.messages.map((m:ChatMessage,index:number)=>({conversation:c,message:m,index}))).filter((x:any)=>historyQuery.trim()&&x.message.content.toLowerCase().includes(historyQuery.trim().toLowerCase())).slice(0,30)
-  function jumpToMatch(conversation:Conversation){p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:old[chatPerson].map(c=>c.id===p.activeConversationIds[chatPerson]?{...c,messages:p.messages[chatPerson]}:c)}));p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:conversation.id}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:conversation.messages}));setHistoryQuery('');p.setChatError('')}
+  // ── 会话内消息搜索（微信式）：只匹配当前会话的用户消息与 AI 回复。
+  // useMemo：长聊天下只有「消息字典引用 / 助手 / 关键词」变化才重算，纯子串扫描 O(n)，不卡输入。
+  // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组，不能直接依赖）。
+  // 不调用模型、不改写任何消息、不触发重新生成。
+  const searchWatch:ChatMessage[]|undefined=p.messages[chatPerson]
+  const searchResult:ChatSearchResult=useMemo(()=>searchMessages(searchWatch,searchQuery),[searchWatch,searchQuery])
+  const searchCurrentId=searchOpen&&searchActiveIdx>=0?(searchResult.items[searchActiveIdx]?.messageId||''):''
+  const flashTimerRef=useRef<number|undefined>(undefined)
+  useEffect(()=>()=>{if(flashTimerRef.current)window.clearTimeout(flashTimerRef.current)},[])
+  // 定位一律走真实消息节点（data-message-id，alignMessageIds 保证每条消息都有 id），
+  // 不依赖数组下标——消息增删后下标会漂移，节点查询不会。
+  function scrollToMatch(messageId:string){
+    const body=chatBodyRef.current
+    if(!body||!messageId)return
+    const node=body.querySelector('[data-message-id="'+CSS.escape(messageId)+'"]')
+    if(!node)return
+    node.scrollIntoView({block:'center',behavior:'smooth'})
+    // 短暂高亮：先移除再强制 reflow 再加回，连续跳转到同一条也能重放动画。
+    node.classList.remove('search-flash')
+    void (node as HTMLElement).offsetWidth
+    node.classList.add('search-flash')
+    if(flashTimerRef.current)window.clearTimeout(flashTimerRef.current)
+    flashTimerRef.current=window.setTimeout(()=>node.classList.remove('search-flash'),1700)
+  }
+  function stepMatch(dir:number){
+    const total=searchResult.items.length
+    if(!total)return
+    const next=stepMatchIndex(searchActiveIdx,total,dir)
+    setSearchActiveIdx(next)
+    const item=searchResult.items[next]
+    if(item&&item.messageId)scrollToMatch(item.messageId)
+  }
+  function closeSearch(){setSearchOpen(false);setSearchQuery('');setSearchActiveIdx(-1)}
   const creatingConversation = useRef(false)
   function createConversation(){
     if(creatingConversation.current)return
@@ -1613,14 +1650,14 @@ function Chat(p: any) {
     const selected=!!(inSelect&&canAct&&m.id&&selectedIds.includes(m.id))
     const armed=!!(m.id&&armedDelId===m.id)
     const canRegenerate=m.role==='assistant'&&isLast&&canAct&&!p.sending
-    return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')} key={i} data-message-id={m.id||undefined}>
+    return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')} key={i} data-message-id={m.id||undefined}>
       {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
       {m.role==='assistant'&&<span className="message-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>}
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
           : <div className={'bubble '+m.role}
-              onClick={()=>bubbleClick(m)}
+              onClick={e=>bubbleClick(e,m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
           {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={a.preview} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
         </div>}
@@ -1640,9 +1677,9 @@ function Chat(p: any) {
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索聊天记录" title="搜索聊天记录" onClick={()=>setSearchOpen(v=>!v)}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
-    {searchOpen&&<div className="history-search"><input autoFocus value={historyQuery} onChange={e=>setHistoryQuery(e.target.value)} placeholder="搜索当前助手的聊天记录……" aria-label="搜索聊天记录"/>{historyQuery.trim()&&<button type="button" onClick={()=>setHistoryQuery('')}>清除</button>}</div>}
-    {searchOpen&&historyQuery.trim()&&<div className="history-search-results" role="list">{historyMatches.length?historyMatches.map((x:any,i:number)=><button type="button" role="listitem" key={x.conversation.id+'-'+x.index+'-'+i} onClick={()=>jumpToMatch(x.conversation)}><b>{x.conversation.title||'新对话'} · {x.message.role==='user'?'你':'助手'}</b><span>{x.message.content.slice(0,180)}</span></button>):<p>没有找到匹配的聊天内容。</p>}</div>}
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
+    {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>

@@ -206,7 +206,13 @@
 .message-usage{display:flex;flex-wrap:wrap;gap:5px 10px;margin:5px 3px 0;color:var(--muted,#8b858b);font-size:10px;line-height:1.4}.message-usage span{white-space:nowrap}.message-row.user .message-usage{display:none}
 .pricing-settings{display:grid;gap:7px;padding:12px;border:1px solid var(--line,#e4dce2);border-radius:12px;margin:12px 0}.pricing-settings>b{font-size:13px}.pricing-settings>small{font-size:11px;line-height:1.5;color:var(--muted,#8b858b)}.pricing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.pricing-grid label{display:grid;gap:5px;font-size:11px;color:var(--muted,#8b858b)}.pricing-grid input{min-width:0;width:100%;box-sizing:border-box;padding:9px 7px;border:1px solid var(--line,#ded5dc);border-radius:9px;background:var(--surface,#fff);color:inherit}@media(max-width:420px){.pricing-grid{grid-template-columns:1fr}}
 .usage-panel{padding:16px;border:1px solid var(--line,#e4dce2);border-radius:18px;background:var(--surface,#fff);margin:12px 0 18px}.usage-panel-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.usage-panel-heading h3{margin:0 0 5px}.usage-panel-heading p{margin:0;color:var(--muted,#8b858b);font-size:12px;line-height:1.5}.usage-panel-heading select{max-width:112px;padding:8px;border:1px solid var(--line,#ded5dc);border-radius:9px;background:var(--surface,#fff);color:inherit}.usage-total-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0}.usage-total-grid>div{padding:12px 9px;border-radius:12px;background:rgba(140,120,150,.09);display:grid;gap:6px;min-width:0}.usage-total-grid small{font-size:11px;color:var(--muted,#8b858b)}.usage-total-grid b{font-size:17px;overflow-wrap:anywhere}.usage-assistant-row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:12px 0;border-top:1px solid var(--line,#e4dce2);font-size:12px}.usage-assistant-row span{color:var(--muted,#8b858b)}.usage-note{display:block;margin-top:10px;font-size:11px;line-height:1.6;color:var(--muted,#8b858b)}@media(max-width:420px){.usage-panel-heading{flex-direction:column}.usage-total-grid b{font-size:14px}}
-.history-search{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line,#e4dce2)}.history-search input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line,#ded5dc);border-radius:12px;background:var(--surface,#fff);color:inherit}.history-search>button{border:1px solid var(--line,#ded5dc);border-radius:10px;padding:0 12px;background:transparent;color:inherit}.history-search-results{max-height:260px;overflow:auto;padding:8px 12px;display:grid;gap:6px;border-bottom:1px solid var(--line,#e4dce2);background:var(--surface,#fff)}.history-search-results>button{display:grid;gap:5px;text-align:left;padding:10px 12px;border:1px solid var(--line,#e4dce2);border-radius:10px;background:transparent;color:inherit}.history-search-results>button b{font-size:12px}.history-search-results>button span,.history-search-results>p{font-size:12px;color:var(--muted,#8b858b);white-space:normal;overflow-wrap:anywhere}
+/* 会话内消息搜索（微信式）：头部展开的输入条 + 命中列表；颜色全走主题变量，夜间自动跟随。 */
+.chat-search{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line,#e4dce2)}.chat-search input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line,#ded5dc);border-radius:12px;background:var(--surface,#fff);color:inherit}.chat-search>button{flex-shrink:0;border:1px solid var(--line,#ded5dc);border-radius:10px;padding:0 11px;min-height:38px;background:transparent;color:inherit}.chat-search>button:disabled{opacity:.4;cursor:default}.chat-search-count{flex-shrink:0;padding:3px 9px;border-radius:999px;background:var(--accent-soft,#f1ecfb);color:var(--accent,#7a5cd0);font-size:11px;white-space:nowrap}.chat-search-results{max-height:260px;overflow:auto;padding:8px 12px;display:grid;gap:6px;border-bottom:1px solid var(--line,#e4dce2);background:var(--surface,#fff)}.chat-search-results>button{display:grid;gap:5px;text-align:left;padding:10px 12px;border:1px solid var(--line,#e4dce2);border-radius:10px;background:transparent;color:inherit}.chat-search-results>button.current{border-color:var(--accent,#7a5cd0);background:var(--accent-soft,#f1ecfb)}.chat-search-results>button b{font-size:12px}.chat-search-results>button span,.chat-search-results>p{font-size:12px;color:var(--muted,#8b858b);white-space:normal;overflow-wrap:anywhere}.chat-search-results>.chat-search-overflow{margin:2px 0 0;text-align:center;font-size:11px}
+/* 跳转定位后的短暂高亮：整行淡入淡出的强调背景，不动消息内容本身。 */
+@keyframes search-flash{0%{background:var(--accent-soft,#f1ecfb)}100%{background:transparent}}.message-row.search-flash{animation:search-flash 1.6s ease;border-radius:12px}
+/* 当前选中的匹配（上一条/下一条停在哪条）：常驻细描边，搜索关闭即消失。 */
+.message-row.search-current{box-shadow:0 0 0 2px var(--accent,#7a5cd0);border-radius:12px}
+@media(prefers-reduced-motion:reduce){.message-row.search-flash{animation:none;outline:2px solid var(--accent,#7a5cd0);outline-offset:2px}}
 .skill-workbench>input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line,#ded5dc);border-radius:10px;background:var(--surface,#fff);color:inherit;margin:8px 0}.skill-list{display:grid;gap:12px;margin-top:14px}.skill-card{border:1px solid var(--line,#e4dce2);border-radius:14px;padding:12px}.skill-card>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:8px}.skill-card p{font-size:13px;color:var(--muted,#8b858b)}.skill-card pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:12px;line-height:1.55;background:rgba(140,120,150,.07);padding:10px;border-radius:10px}.skill-card small{color:var(--muted,#8b858b);font-size:11px}.skill-enabled,.skill-disabled{font-size:11px;padding:4px 8px;border-radius:99px;background:rgba(70,140,90,.12)}.skill-disabled{background:rgba(130,130,130,.12)}
 .local-context-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;width:100%;padding:5px 0 8px;font-size:11px;color:var(--muted,#8b858b)}.local-context-controls>span{font-weight:600}.local-context-controls label{display:flex;align-items:center;gap:4px;cursor:pointer}.local-context-controls input{accent-color:var(--accent,#9b83ae);width:14px;height:14px;margin:0}.local-context-controls small{font-size:10px}
 /* Responsive app sidebar */
@@ -262,6 +268,8 @@
 .chat-error{border-radius:12px;background:var(--danger-soft);color:var(--danger)}
 .empty-chat{color:var(--muted);line-height:1.9;font-size:14px;text-align:center;padding:30px 12px}
 .sent-file{background:var(--field);border:1px solid var(--line)}
+/* 图片占位框背景改主题变量：原先固定 #f7f2e9，夜间模式下图片周围仍有一圈米白框（上轮遗留）。 */
+.shell .sent-image-placeholder{background:var(--field)}
 .attachment-chip{border-color:var(--line);background:var(--card)}
 .attachment-note{color:var(--muted)}
 .compose-wechat{border-radius:calc(var(--radius,16px) + 4px);border-color:var(--line);box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.06))}
@@ -277,9 +285,9 @@
 .compose-more-actions button:hover{background:var(--accent-soft)}
 .emoji-panel{border-color:var(--line);background:var(--surface);border-radius:16px}
 .emoji-panel button:hover{background:var(--accent-soft)}
-.history-search{background:var(--surface)}
-.history-search input{font-size:16px;border-radius:12px}
-.history-search-results{background:var(--surface)}
+.chat-search{background:var(--surface)}
+.chat-search input{font-size:16px;border-radius:12px}
+.chat-search-results{background:var(--surface)}
 .local-context-controls{color:var(--muted)}
 .local-context-controls input{accent-color:var(--accent)}
 
@@ -637,8 +645,8 @@
 .shell.shell-chat-lock .fullscreen-chat{flex:1;min-height:0;overflow:hidden}
 /* 固定区一律不被压缩：头部 / 搜索 / 会话条 / 错误条 / 工具条 / 表情面板 / 缓发条 / 输入区 / 脚注 */
 .shell.shell-chat-lock .chat-header,
-.shell.shell-chat-lock .history-search,
-.shell.shell-chat-lock .history-search-results,
+.shell.shell-chat-lock .chat-search,
+.shell.shell-chat-lock .chat-search-results,
 .shell.shell-chat-lock .conversation-bar,
 .shell.shell-chat-lock .chat-error,
 .shell.shell-chat-lock .tool-live-bar,
@@ -649,7 +657,7 @@
 .shell.shell-chat-lock .attachment-note{flex-shrink:0}
 .shell.shell-chat-lock .chat-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 /* 弹出面板限高，不许吃掉整个消息区；滚动条只出现在面板内部与消息列表 */
-.shell.shell-chat-lock .history-search-results{max-height:min(260px,30dvh)}
+.shell.shell-chat-lock .chat-search-results{max-height:min(260px,30dvh)}
 .shell.shell-chat-lock .emoji-panel{max-height:38dvh;overflow-y:auto}
 /* 移动端安全区：脚注贴底时留出 home indicator */
 .shell.shell-chat-lock .attachment-note{padding-bottom:max(6px,env(safe-area-inset-bottom,0px))}
