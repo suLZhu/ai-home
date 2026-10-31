@@ -24,6 +24,8 @@ import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
 // 会话内消息搜索（微信式）：纯字符串匹配 + 上一条/下一条循环 + messageId 定位。
 import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSearch.mjs'
+// 云端恢复决策（数据安全）：启动动作判定、覆盖前本地备份、快照→视图提取。
+import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -233,10 +235,19 @@ export default function App() {
     if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(applyDefaultDisplayNames(data.assistants))
     if (data.conversations && ASSISTANT_PEOPLE.every(id=>Array.isArray(data.conversations[id]))) {
       const convs:Record<Person,Conversation[]>=Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.conversations[id]])) as Record<Person,Conversation[]>
+      // 数据安全（云端优先恢复的冲突保护）：本快照即将覆盖本地会话。若本地持有
+      // 云端没有的内容（典型：上次会话末尾云保存失败，本地新、云端旧），先把本地
+      // 整体备份到 localStorage——产品行为仍是云端优先，但本地不会静默消失。
+      if (shouldBackupBeforeApply(conversationsRef.current, convs)) {
+        try {
+          localStorage.setItem(RECOVERY_BACKUP_KEY, JSON.stringify(buildRecoveryBackup(conversationsRef.current, activeConversationIdsRef.current)))
+          console.warn('[ai-home] 云端快照覆盖前已备份本地聊天到 ' + RECOVERY_BACKUP_KEY)
+        } catch { /* 备份失败不阻断恢复流程 */ }
+      }
       setConversations(convs)
       const ids=data.activeConversationIds||{}
-      setActiveConversationIds(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,convs[id].some((c:Conversation)=>c.id===ids[id])?ids[id]:convs[id][0]?.id||''])) as Record<Person,string>)
-      setMessages(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,convs[id].find((c:Conversation)=>c.id===ids[id])?.messages||[]])) as Record<Person,ChatMessage[]>)
+      setActiveConversationIds(pickActiveConversationIds(convs, ids) as Record<Person,string>)
+      setMessages(pickActiveMessagesFromSnapshot(convs, ids) as Record<Person,ChatMessage[]>)
     } else if (data.messages && typeof data.messages === 'object') {
       const legacy=Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(data.messages[id])?data.messages[id]:[]])) as Record<Person,ChatMessage[]>
       setMessages(legacy)
@@ -259,12 +270,25 @@ export default function App() {
   }, [])
   const loadCloudState = useCallback(async () => {
     const response = await fetch('/api/state', { credentials: 'same-origin' })
-    if (!response.ok) throw new Error(response.status === 401 ? '登录已过期，请重新登录。' : '读取云端数据失败：HTTP ' + response.status)
+    if (!response.ok) {
+      // status 挂在错误上：调用方用 classifyCloudLoadError 区分「凭证失效」
+      // （必须回登录页）与「云端暂不可用」（离线进入，本地数据保留）。
+      const err = new Error(response.status === 401 ? '登录已过期，请重新登录。' : '读取云端数据失败：HTTP ' + response.status) as Error & { status?: number }
+      err.status = response.status
+      throw err
+    }
     const result = await response.json()
-    if (result.state) applySnapshot(result.state)
+    // 启动决策统一走纯函数（tests/cloud-recovery.test.mjs 锁定）：
+    // 云端有快照 → apply（空本地绝无路径进入 PUT 分支，非空云端不被覆盖）；
+    // 云端无快照 → 首次迁移上传本机状态。
+    if (decideCloudLoadAction({ cloudState: result.state ?? null }) === 'apply-cloud') applySnapshot(result.state)
     else {
       const saved = await fetch('/api/state', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:latestSnapshot.current}) })
-      if (!saved.ok) throw new Error('首次迁移本机数据到云端失败：HTTP ' + saved.status)
+      if (!saved.ok) {
+        const err = new Error('首次迁移本机数据到云端失败：HTTP ' + saved.status) as Error & { status?: number }
+        err.status = saved.status
+        throw err
+      }
     }
     setCloudReady(true)
     setCloudStatus('saved')
@@ -278,6 +302,23 @@ export default function App() {
       })
     }).catch(() => { /* 非关键路径，失败则仅用本机缓存 */ })
   }, [applySnapshot])
+  // 云端加载失败的统一处理（任务书场景 D）：凭证失效才回登录页；其余一律
+  // 「云端暂不可用」——允许带本地数据进入（cloudReady 保持 false，所有云写入
+  // 路径被门控关闭，本地数据原样保留），底部横幅非侵入提示并提供重连。
+  const enterOfflineMode = useCallback((error: unknown) => {
+    if (classifyCloudLoadError((error as { status?: number } | null)?.status) === 'auth') {
+      setAuthError(error instanceof Error ? error.message : String(error))
+      setAuthStatus('signedOut')
+      return
+    }
+    setAuthStatus('signedIn')
+    setCloudStatus('error')
+  }, [])
+  // 重连云端：成功后 loadCloudState 内部会 setCloudReady(true)+saved，同步自然恢复。
+  const retryCloudConnection = useCallback(async () => {
+    setCloudStatus('loading')
+    try { await loadCloudState() } catch (error) { enterOfflineMode(error) }
+  }, [loadCloudState, enterOfflineMode])
   const login = useCallback(async (e: FormEvent) => {
     e.preventDefault()
     setAuthError('')
@@ -285,13 +326,15 @@ export default function App() {
       const response = await fetch('/api/login', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:loginPassword}) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || '登录失败')
-      await loadCloudState()
       setLoginPassword('')
-      setAuthStatus('signedIn')
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : String(error))
+      return
     }
-  }, [loginPassword, loadCloudState])
+    // 密码已验证成功；云端读取失败不再阻拦进入（离线模式，本地数据保留）。
+    try { await loadCloudState(); setAuthStatus('signedIn') }
+    catch (error) { enterOfflineMode(error) }
+  }, [loginPassword, loadCloudState, enterOfflineMode])
   const logout = useCallback(async () => {
     await fetch('/api/logout', {method:'POST',credentials:'same-origin'}).catch(()=>{})
     setCloudReady(false)
@@ -305,10 +348,14 @@ export default function App() {
       if(cancelled)return
       if(!result.authenticated){setAuthStatus('signedOut');return}
       try { await loadCloudState(); if(!cancelled)setAuthStatus('signedIn') }
-      catch(error){ if(!cancelled){setAuthError(error instanceof Error?error.message:String(error));setAuthStatus('signedOut')} }
-    }).catch(()=>{if(!cancelled){setAuthError('无法连接云端数据服务，请稍后重试。');setAuthStatus('signedOut')}})
+      catch(error){ if(!cancelled)enterOfflineMode(error) }
+    }).catch(()=>{
+      // 连 /api/session 都不通（后端未启动/断网）：本地数据仍可用，
+      // 进入离线模式而不是把用户挡在登录页外。
+      if(!cancelled){setAuthStatus('signedIn');setCloudStatus('error')}
+    })
     return ()=>{cancelled=true}
-  }, [loadCloudState])
+  }, [loadCloudState, enterOfflineMode])
 
   useEffect(() => {
     if (!cloudReady || authStatus !== 'signedIn') return
@@ -966,7 +1013,7 @@ export default function App() {
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} />}
     </section>
-    {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端保存失败':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={logout}>重新登录</button>}</div>}
+    {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端暂不可用，本地数据已保留':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>重连云端</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
       {(['home','room','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => navigate(p)}>{['主页','房间','设置'][i]}</button>)}
     </nav>}

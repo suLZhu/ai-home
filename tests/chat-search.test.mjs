@@ -3,7 +3,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  normalizeQuery, countOccurrences, snippetAround,
+  normalizeQuery, snippetAround,
   searchMessages, stepMatchIndex,
 } from '../src/chatSearch.mjs'
 
@@ -134,7 +134,7 @@ test('会话隔离：搜索只作用于传入的当前会话消息列表', () =>
   const r = searchMessages(ywxConversation, '今晚')
   assert.equal(r.total, 2)
   assert.ok(r.items.every(x => x.messageId.startsWith('a')), '结果只来自当前会话，不含另一助手的消息')
-  assert.ok(!r.items.some(x => x.messageId === 'b1'))
+  assert.ok(!r.items.some(x => ysConversation.some(o => o.id === x.messageId)), '另一助手会话的消息 id 不出现在结果中')
 })
 
 test('会话内用户消息与 AI 回复都被搜索到', () => {
