@@ -100,6 +100,10 @@ const sessions = new Map()
 const failures = new Map()
 const COOKIE = 'ai_home_session'
 const ALLOWED_ORIGIN = process.env.AI_HOME_ALLOWED_ORIGIN || ''
+// 会话 Cookie 的 SameSite 属性（Android WebView 跨源访问时需设为 None；默认 Strict 与历史行为一致）。
+const COOKIE_SAMESITE = ['Strict', 'Lax', 'None'].includes((process.env.AI_HOME_COOKIE_SAMESITE || '').trim())
+  ? (process.env.AI_HOME_COOKIE_SAMESITE || '').trim()
+  : 'Strict'
 const MAX_BODY = 2 * 1024 * 1024
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000
 const passwordHash = createHash('sha256').update(password).digest()
@@ -107,7 +111,7 @@ const secretKey = Buffer.from(process.env.AI_HOME_SECRET_KEY || '', 'hex')
 if (secretKey.length !== 32) { console.error('AI_HOME_SECRET_KEY must be a 32-byte hex key.'); process.exit(1) }
 
 function send(res, status, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers })
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...(res.corsHeaders || {}), ...headers })
   res.end(JSON.stringify(body))
 }
 // 附件字节流：id 是 uuid 且内容不可变，可长期私有缓存（仅同源登录态可取，故 private）。
@@ -117,6 +121,7 @@ function sendBinary(res, status, buf, contentType, headers = {}) {
     'Content-Length': buf.length,
     'Cache-Control': 'private, max-age=31536000, immutable',
     'X-Content-Type-Options': 'nosniff',
+    ...(res.corsHeaders || {}),
     ...headers,
   })
   res.end(buf)
@@ -257,7 +262,20 @@ function deliverTaskResult(entry) {
 createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost')
   if (!url.pathname.startsWith('/api/')) return send(res, 404, { error: 'not found' })
-  if (req.method === 'OPTIONS') return send(res, 204, {})
+  // 跨域（Android WebView / 独立部署）：仅当显式配置 AI_HOME_ALLOWED_ORIGIN 且请求 Origin 与之相等时，
+  // 才回显 CORS 头并放行凭证；未配置时行为与历史版本完全一致（同源直连，无 CORS 头）。
+  if (ALLOWED_ORIGIN && req.headers.origin === ALLOWED_ORIGIN) {
+    res.corsHeaders = {
+      'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+      'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin',
+    }
+  }
+  if (req.method === 'OPTIONS') {
+    return send(res, 204, {}, res.corsHeaders
+      ? { ...res.corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': req.headers['access-control-request-headers'] || 'Content-Type, Authorization', 'Access-Control-Max-Age': '600' }
+      : {})
+  }
   if (['POST', 'PUT', 'DELETE'].includes(req.method) && !sameOrigin(req)) return send(res, 403, { error: '跨站请求已拒绝' })
 
   if (url.pathname === '/api/session' && req.method === 'GET') {
@@ -281,14 +299,14 @@ createServer(async (req, res) => {
       failures.delete(key)
       const token = randomBytes(32).toString('hex')
       sessions.set(token, { expires: Date.now() + SESSION_TTL })
-      return send(res, 200, { authenticated: true }, { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=${SESSION_TTL / 1000}` })
+      return send(res, 200, { authenticated: true }, { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=${COOKIE_SAMESITE}; Secure; Max-Age=${SESSION_TTL / 1000}` })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '请求无效' }) }
   }
 
   if (url.pathname === '/api/logout' && req.method === 'POST') {
     const token = cookieValue(req)
     sessions.delete(token)
-    return send(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0` })
+    return send(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=${COOKIE_SAMESITE}; Secure; Max-Age=0` })
   }
 
   if (!getSession(req)) return send(res, 401, { error: '请先登录' })

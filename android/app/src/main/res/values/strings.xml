@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AI 小家</string>
+    <string name="title_activity_main">AI 小家</string>
+    <string name="package_name">com.sulzhu.aihome</string>
+    <string name="custom_url_scheme">com.sulzhu.aihome</string>
+</resources>

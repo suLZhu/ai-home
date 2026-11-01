@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import './ToolDashboard.css'
+import { apiFetch } from './apiBase.mjs'
 import {
   useAgentRuns, useAgentRunDetail, useApprovals, startRun, cancelRun, decideApproval, subscribeAgentEvents,
   RUN_STATUS_LABEL, RUN_SOURCE_LABEL, isRunActive, type AgentRun,
@@ -94,7 +95,7 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
     if (source !== '全部') params.set('source', source)
     if (status !== '全部') params.set('status', status)
     try {
-      const response = await fetch('/api/tool-logs?' + params.toString(), { credentials: 'same-origin' })
+      const response = await apiFetch('/api/tool-logs?' + params.toString(), { credentials: 'include' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || '读取调用记录失败')
       // 过期响应守卫：快速切换筛选时，慢的旧请求不得覆盖新结果。
@@ -164,7 +165,7 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
     let alive = true
     queueMicrotask(() => {
       if (!alive) return
-      fetch('/api/agent/policies?person=' + encodeURIComponent(person), { credentials: 'same-origin' })
+      apiFetch('/api/agent/policies?person=' + encodeURIComponent(person), { credentials: 'include' })
         .then(r => r.json())
         .then((d: { policies?: { tool: string; mode: string }[] }) => {
           if (alive && Array.isArray(d.policies)) setPolicies(Object.fromEntries(d.policies.map(p => [p.tool, p.mode])))
@@ -186,8 +187,8 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
   async function handlePolicyChange(tool: string, mode: string) {
     setPolicyError('')
     try {
-      const response = await fetch('/api/agent/policies', {
-        method: 'PUT', credentials: 'same-origin',
+      const response = await apiFetch('/api/agent/policies', {
+        method: 'PUT', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ person, tool, mode }),
       })

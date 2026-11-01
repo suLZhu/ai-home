@@ -7,10 +7,17 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\" \"tests/time-context.test.mjs\" \"tests/deferred-send.test.mjs\" \"tests/deferred-storage.test.mjs\" \"tests/deferred-flow.test.mjs\" \"tests/message-ops.test.mjs\" \"tests/attachment-persistence.test.mjs\" \"tests/chat-search.test.mjs\" \"tests/cloud-recovery.test.mjs\" \"tests/request-diag.test.mjs\"",
-    "preview": "vite preview"
+    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\" \"tests/time-context.test.mjs\" \"tests/deferred-send.test.mjs\" \"tests/deferred-storage.test.mjs\" \"tests/deferred-flow.test.mjs\" \"tests/message-ops.test.mjs\" \"tests/attachment-persistence.test.mjs\" \"tests/chat-search.test.mjs\" \"tests/cloud-recovery.test.mjs\" \"tests/request-diag.test.mjs\" \"tests/api-base.test.mjs\" \"tests/back-stack.test.mjs\"",
+    "preview": "vite preview",
+    "android:sync": "npm run build && cap sync android",
+    "android:apk": "npm run android:sync && cd android && gradlew assembleDebug",
+    "android:assets": "node scripts/gen-android-assets.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

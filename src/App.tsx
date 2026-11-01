@@ -28,6 +28,11 @@ import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSea
 import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
 // 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
 import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiagLogs, formatDiagSummary } from './requestDiag.mjs'
+// 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
+import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase } from './apiBase.mjs'
+// Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
+import { pushBackHandler, handleBack as runBackStack } from './backStack.mjs'
+import { App as CapApp } from '@capacitor/app'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -127,6 +132,22 @@ export default function App() {
   // 不发起任何网络请求。非法或空值由 normalizeTimeZone 回退到 Asia/Shanghai。
   const [timeZone,setTimeZone]=useState<string>(()=>normalizeTimeZone(read<string>('ai-home.timeZone','')))
   useEffect(()=>{ try{localStorage.setItem('ai-home.timeZone',JSON.stringify(timeZone))}catch{ /* private mode */ } },[timeZone])
+  // ── Android 返回键 ──
+  // 顺序：先让返回键处理栈关临时层（灯泡图/搜索/多选/表情/设置子页）；
+  // 栈空且在聊天页 → 关聊天回房间；栈空且在根页面 → 退出 App。
+  // Web 端无 backButton 事件，此 effect 静默不生效，不影响浏览器行为。
+  const chatOpenRef = useRef(chatOpen)
+  useEffect(()=>{ chatOpenRef.current = chatOpen },[chatOpen])
+  useEffect(()=>{
+    let cancelled = false
+    const listener = CapApp.addListener('backButton', () => {
+      if (cancelled) return
+      if (runBackStack()) return           // 临时层消费了本次返回
+      if (chatOpenRef.current) { setChatOpen(false); return } // 聊天页 → 房间
+      void CapApp.exitApp()                // 根页面 → 退出
+    })
+    return () => { cancelled = true; void listener.then(h => h.remove()).catch(() => {}) }
+  },[])
   // ── 20 秒缓发聊天 ──
   // 队列严格按「助手 + 会话」隔离（一个 scope 至多一个批次）；刷新后由 loadDeferredBatches
   // 恢复，上次发送中断（sending）的批次恢复为 needs_review——绝不自动重发，必须用户确认。
@@ -171,7 +192,7 @@ export default function App() {
     let alive=true
     const poll=async()=>{
       try {
-        const response=await fetch('/api/inbox',{credentials:'same-origin'})
+        const response=await apiFetch('/api/inbox',{credentials:'include'})
         if(!response.ok)return
         const data=await response.json()
         if(!alive)return
@@ -211,7 +232,7 @@ export default function App() {
       }
       return
     }
-    try{await fetch('/api/inbox/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:message.id})})}catch{}
+    try{await apiFetch('/api/inbox/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:message.id})})}catch{}
     setInbox(old=>old.map(m=>m.id===message.id?{...m,read_at:new Date().toISOString()}:m))
   }
   const [loginPassword, setLoginPassword] = useState('')
@@ -284,7 +305,7 @@ export default function App() {
     if (typeof data.timeZone === 'string' && data.timeZone.trim()) setTimeZone(normalizeTimeZone(data.timeZone))
   }, [])
   const loadCloudState = useCallback(async () => {
-    const response = await fetch('/api/state', { credentials: 'same-origin' })
+    const response = await apiFetch('/api/state', { credentials: 'include' })
     if (!response.ok) {
       // status 挂在错误上：调用方用 classifyCloudLoadError 区分「凭证失效」
       // （必须回登录页）与「云端暂不可用」（离线进入，本地数据保留）。
@@ -298,7 +319,7 @@ export default function App() {
     // 云端无快照 → 首次迁移上传本机状态。
     if (decideCloudLoadAction({ cloudState: result.state ?? null }) === 'apply-cloud') applySnapshot(result.state)
     else {
-      const saved = await fetch('/api/state', { method: 'PUT', credentials: 'same-origin', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:latestSnapshot.current}) })
+      const saved = await apiFetch('/api/state', { method: 'PUT', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({state:latestSnapshot.current}) })
       if (!saved.ok) {
         const err = new Error('首次迁移本机数据到云端失败：HTTP ' + saved.status) as Error & { status?: number }
         err.status = saved.status
@@ -307,7 +328,7 @@ export default function App() {
     }
     setCloudReady(true)
     setCloudStatus('saved')
-    fetch('/api/keys', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(d => {
+    apiFetch('/api/keys', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(d => {
       const saved = d && d.keys && typeof d.keys === 'object' ? d.keys : null
       if (!saved) return
       setApiKey(prev => {
@@ -338,7 +359,7 @@ export default function App() {
     e.preventDefault()
     setAuthError('')
     try {
-      const response = await fetch('/api/login', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:loginPassword}) })
+      const response = await apiFetch('/api/login', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:loginPassword}) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || '登录失败')
       setLoginPassword('')
@@ -351,7 +372,7 @@ export default function App() {
     catch (error) { enterOfflineMode(error) }
   }, [loginPassword, loadCloudState, enterOfflineMode])
   const logout = useCallback(async () => {
-    await fetch('/api/logout', {method:'POST',credentials:'same-origin'}).catch(()=>{})
+    await apiFetch('/api/logout', {method:'POST',credentials:'include'}).catch(()=>{})
     setCloudReady(false)
     setAuthStatus('signedOut')
     setCloudStatus('loading')
@@ -359,7 +380,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/session', {credentials:'same-origin'}).then(r=>r.json()).then(async result=>{
+    apiFetch('/api/session', {credentials:'include'}).then(r=>r.json()).then(async result=>{
       if(cancelled)return
       if(!result.authenticated){setAuthStatus('signedOut');return}
       try { await loadCloudState(); if(!cancelled)setAuthStatus('signedIn') }
@@ -393,7 +414,7 @@ export default function App() {
       try {
         while (nextSnapshot) {
           queuedCloudSnapshot.current = null
-          const response = await fetch('/api/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:nextSnapshot})})
+          const response = await apiFetch('/api/state', {method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:nextSnapshot})})
           if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
           if (!response.ok) throw new Error('HTTP '+response.status)
           lastSaved = nextSnapshot
@@ -409,7 +430,7 @@ export default function App() {
             const persisted = Array.isArray(convs) && convs.some((c: any) => c && c.id === info.conversationId && Array.isArray(c.messages) && c.messages.some((x: any) => x && x.taskRunId === info.runId))
             if (!persisted) continue
             pendingTaskAcks.current.delete(inboxId)
-            fetch('/api/inbox/read', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: inboxId }) })
+            apiFetch('/api/inbox/read', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: inboxId }) })
               .then(r => { if (!r.ok) pendingTaskAcks.current.set(inboxId, info) })
               .catch(() => { pendingTaskAcks.current.set(inboxId, info) })
             setInbox(old => old.map(m => m.id === inboxId ? { ...m, read_at: new Date().toISOString() } : m))
@@ -472,7 +493,7 @@ export default function App() {
   useEffect(() => {
     if (!cloudReady) return
     const t = window.setTimeout(() => {
-      for (const p of ASSISTANT_PEOPLE) fetch('/api/keys', { method:'PUT', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({person:p, apiKey:apiKey[p]||''}) }).catch(() => {})
+      for (const p of ASSISTANT_PEOPLE) apiFetch('/api/keys', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({person:p, apiKey:apiKey[p]||''}) }).catch(() => {})
     }, 600)
     return () => window.clearTimeout(t)
   }, [apiKey, cloudReady])
@@ -496,7 +517,7 @@ export default function App() {
     if (convId) setConversations(prev=>({...prev,[target]:(prev[target]||[]).map(c=>c.id===convId?{...c,messages:update(c.messages||[]),updatedAt:new Date().toISOString()}:c)}))
   }
   function ackInbox(id: string) {
-    fetch('/api/inbox/read', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {})
+    apiFetch('/api/inbox/read', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {})
     setInbox(old => old.map(m => m.id === id ? { ...m, read_at: new Date().toISOString() } : m))
   }
   // 定时任务结果消费：kind='task_result' 的收件箱行凭信封里的 conversationId
@@ -588,7 +609,7 @@ export default function App() {
     let recalledContext = ''
     if (text.length >= 2) {
       try {
-        const recallResponse = await fetch('/api/memory/search?person='+encodeURIComponent(target)+'&q='+encodeURIComponent(text.slice(0,160))+'&exclude='+encodeURIComponent(sendConversationId||''), { credentials:'same-origin' })
+        const recallResponse = await apiFetch('/api/memory/search?person='+encodeURIComponent(target)+'&q='+encodeURIComponent(text.slice(0,160))+'&exclude='+encodeURIComponent(sendConversationId||''), { credentials:'include' })
         if (recallResponse.ok) {
           const recallData = await recallResponse.json()
           const excerpts = (recallData.results||[]).slice(0,5).map((r:{title:string;role:string;content:string})=>'【'+r.title+' / '+(r.role==='user'?'用户':'助手')+'原话】\n'+r.content)
@@ -662,12 +683,12 @@ export default function App() {
       openAITools.push({type:'function',function:{name:'scheduled_task_manage',description:'管理当前助手已创建的定时任务：pause 暂停、resume 恢复、delete 删除。仅能操作助手自己创建的任务；用户创建的或长期(非临时)任务会被服务端拒绝，此时应如实告知用户去工作区手动处理。',parameters:{type:'object',properties:{id:{type:'string',description:'任务 ID，来自 scheduled_task_list'},action:{type:'string',enum:['pause','resume','delete']}},required:['id','action'],additionalProperties:false}}})
 
       try {
-        const listResponse=await fetch('/api/mcp?person='+encodeURIComponent(target),{credentials:'same-origin'})
+        const listResponse=await apiFetch('/api/mcp?person='+encodeURIComponent(target),{credentials:'include'})
         if(listResponse.ok){
           const listData=await listResponse.json()
           for(const connection of (listData.connections||[]).filter((c:any)=>c.enabled)){
             try {
-              const toolResponse=await fetch('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})})
+              const toolResponse=await apiFetch('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})})
               if(!toolResponse.ok) continue
               const toolData=await toolResponse.json()
               for(const tool of (toolData.tools||[])){
@@ -696,7 +717,7 @@ export default function App() {
           // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
           requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
         }))
-        const chatProxy=()=>fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
         let response=await chatProxy()
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
@@ -746,22 +767,22 @@ export default function App() {
             }else if(scheduledTaskTool){
             // 定时任务/工作流走服务端；创建用 workflows/manage（写入 created_by=当前助手），查询用 /api/tasks。
             if(call.function.name==='scheduled_task_list'){
-              const r=await fetch('/api/tasks?person='+encodeURIComponent(target),{credentials:'same-origin'})
+              const r=await apiFetch('/api/tasks?person='+encodeURIComponent(target),{credentials:'include'})
               const d=await r.json();if(!r.ok)throw new Error(d.error||'查询定时任务失败')
               resultContent=JSON.stringify({person:target,tasks:(d.tasks||[]).map((t:any)=>({id:t.id,title:t.title,prompt:t.prompt,runAt:t.run_at,recurrence:t.recurrence,status:t.status,createdBy:t.created_by,temporary:!!t.temporary}))})
             }else if(call.function.name==='scheduled_task_create'){
-              const r=await fetch('/api/workflows/manage',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,action:'create',title:args.title,prompt:args.prompt,runAt:args.runAt,recurrence:args.recurrence||'once',temporary:args.temporary!==false,conversationId:toolConversationId})})
+              const r=await apiFetch('/api/workflows/manage',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,action:'create',title:args.title,prompt:args.prompt,runAt:args.runAt,recurrence:args.recurrence||'once',temporary:args.temporary!==false,conversationId:toolConversationId})})
               const d=await r.json();if(!r.ok)throw new Error(d.error||'创建定时任务失败')
               resultContent=JSON.stringify({ok:true,message:'定时任务已创建。',task:{id:d.task.id,title:d.task.title,runAt:d.task.run_at,recurrence:d.task.recurrence,status:d.task.status}})
             }else{
-              const r=await fetch('/api/workflows/manage',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,action:args.action,id:args.id})})
+              const r=await apiFetch('/api/workflows/manage',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,action:args.action,id:args.id})})
               const d=await r.json();if(!r.ok)throw new Error(d.error||'管理定时任务失败')
               resultContent=JSON.stringify(d.ok?{ok:true,message:'操作成功。'}:d)
             }
             }else{
             const toolResponse=call.function.name==='ledger_add_entry'
-              ? await fetch('/api/ledger',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({...args,actor:target,requestId:call.id})})
-              : await fetch('/api/mcp/'+route!.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route!.name,arguments:args})})
+              ? await apiFetch('/api/ledger',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({...args,actor:target,requestId:call.id})})
+              : await apiFetch('/api/mcp/'+route!.id+'/call',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,name:route!.name,arguments:args})})
             const toolData=await toolResponse.json();if(!toolResponse.ok)throw new Error(toolData.error||'MCP 工具调用失败')
             resultContent=JSON.stringify(call.function.name==='ledger_add_entry'?toolData:toolData.result)
             }
@@ -793,9 +814,9 @@ export default function App() {
         if(regen){
           // 重新生成失败 → 恢复原有有效回复，绝不把旧回复换成失败占位。
           restoreRegenerate()
-          setChatError('重新生成失败：'+(msg.includes('Failed to fetch')?'连接失败，请确认后端服务（127.0.0.1:4180）正在运行。':msg))
+          setChatError('重新生成失败：'+(msg.includes('Failed to fetch')?'连接失败，请确认后端服务（'+(getApiBase()||'本机后端')+'）正在运行。':msg))
         }else{
-          setChatError(msg.includes('Failed to fetch')?'连接失败：本机后端代理未响应，请确认后端服务（127.0.0.1:4180）正在运行，或检查网络后重试。':msg)
+          setChatError(msg.includes('Failed to fetch')?'连接失败：后端未响应，请确认后端服务（'+(getApiBase()||'本机后端 127.0.0.1:4180')+'）正在运行，或检查网络后重试。':msg)
           // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
           updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
         }
@@ -957,7 +978,7 @@ export default function App() {
     const stillReferenced = collectReferencedAssetIds({ conversations, messages, deferredBatches: batchesAfter, excludeMessageIds: excludedMessageIds })
     for (const assetId of releasedAssetIds(removed, stillReferenced)) {
       // 失败无妨：孤儿文件不影响功能，后续清理即可，绝不能因删附件失败阻断消息删除。
-      fetch('/api/attachments/' + encodeURIComponent(assetId), { method: 'DELETE', credentials: 'same-origin' }).catch(() => {})
+      apiFetch('/api/attachments/' + encodeURIComponent(assetId), { method: 'DELETE', credentials: 'include' }).catch(() => {})
     }
   }
   // 重新生成：仅会话最新一条 AI 回复。复用 send() 重发同一条用户输入（历史截断到该用户消息之前），
@@ -1235,13 +1256,13 @@ function TaskManager({person}:{person:Person}) {
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const [notice,setNotice]=useState('')
-  const refresh=useCallback(async()=>{const r=await fetch('/api/tasks?person='+encodeURIComponent(person),{credentials:'same-origin'});const d=await r.json();if(!r.ok)throw new Error(d.error||'读取任务失败');setTasks(d.tasks||[])},[person])
+  const refresh=useCallback(async()=>{const r=await apiFetch('/api/tasks?person='+encodeURIComponent(person),{credentials:'include'});const d=await r.json();if(!r.ok)throw new Error(d.error||'读取任务失败');setTasks(d.tasks||[])},[person])
   useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
   // 任务状态由服务端调度器推进；有未完成任务时轻量轮询，避免看到过期状态。
   useEffect(()=>{if(!tasks.some(t=>t.status==='scheduled'||t.status==='ready'))return;const timer=window.setInterval(()=>{if(!document.hidden)refresh().catch(()=>{})},10000);return()=>window.clearInterval(timer)},[tasks,refresh])
-  async function create(e:FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const r=await fetch('/api/tasks',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,title,prompt,runAt:new Date(runAt).toISOString(),recurrence})});const d=await r.json();if(!r.ok)throw new Error(d.error||'创建任务失败');setTitle('');setPrompt('');setNotice('任务已保存到云端调度队列。');await refresh()}catch(e){setError(e instanceof Error?e.message:'创建任务失败')}finally{setBusy(false)}}
-  async function update(task:ScheduledTask,patch:Record<string,unknown>){setError('');setNotice('');try{const r=await fetch('/api/tasks/'+task.id,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...patch})});const d=await r.json();if(!r.ok)throw new Error(d.error||'更新任务失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'更新任务失败')}}
-  async function remove(task:ScheduledTask){if(!window.confirm('删除任务“'+task.title+'”？'))return;try{const r=await fetch('/api/tasks/'+task.id,{method:'DELETE',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
+  async function create(e:FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const r=await apiFetch('/api/tasks',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,title,prompt,runAt:new Date(runAt).toISOString(),recurrence})});const d=await r.json();if(!r.ok)throw new Error(d.error||'创建任务失败');setTitle('');setPrompt('');setNotice('任务已保存到云端调度队列。');await refresh()}catch(e){setError(e instanceof Error?e.message:'创建任务失败')}finally{setBusy(false)}}
+  async function update(task:ScheduledTask,patch:Record<string,unknown>){setError('');setNotice('');try{const r=await apiFetch('/api/tasks/'+task.id,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...patch})});const d=await r.json();if(!r.ok)throw new Error(d.error||'更新任务失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'更新任务失败')}}
+  async function remove(task:ScheduledTask){if(!window.confirm('删除任务“'+task.title+'”？'))return;try{const r=await apiFetch('/api/tasks/'+task.id,{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
   const localDate=(iso:string)=>{const d=new Date(iso);return Number.isNaN(d.getTime())?'时间无效':d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})}
   const statusLabel=(s:ScheduledTask['status'])=>({scheduled:'等待执行',ready:'执行中 · 助手正在跑',completed:'已完成',paused:'已暂停'}[s])
   return <div className="tool-panel task-manager"><h3>{person} · 工作流</h3><p className="muted">工作流和定时触发合并管理。到期任务会由服务端 Agent Runner 真实执行（最多 5 轮工具循环），执行记录见「工具调用看板 · Agent 运行」。</p>{error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
@@ -1254,10 +1275,10 @@ function ProactivePanel({person}:{person:Person}) {
  const [events,setEvents]=useState<any[]>([])
  const [notice,setNotice]=useState('')
  const [busy,setBusy]=useState(false)
- const refresh=useCallback(async()=>{const r=await fetch('/api/proactive?person='+encodeURIComponent(person));const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');setConfig(d.settings);setEvents(d.events||[])},[person])
+ const refresh=useCallback(async()=>{const r=await apiFetch('/api/proactive?person='+encodeURIComponent(person));const d=await r.json();if(!r.ok)throw Error(d.error||'读取失败');setConfig(d.settings);setEvents(d.events||[])},[person])
  useEffect(()=>{refresh().catch(e=>setNotice(e.message))},[refresh])
- async function act(body:any){setBusy(true);setNotice('');try{const r=await fetch('/api/proactive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...body})});const d=await r.json();if(!r.ok)throw Error(d.error||'操作失败');setNotice(body.action==='wake'?(d.queued?'已生成一条待处理唤醒事件。接入后台模型后才能生成并投递消息。':'没有排队：'+d.reason):'已保存');await refresh()}catch(e){setNotice(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
- return <div className="tool-panel"><h3>{person} · 自主生活</h3><p className="muted">独立心跳、主动程度、免打扰与唤醒记录。当前只生成待处理事件，不会冒充 AI 发消息；接入安全的后台模型执行器后才能真正主动发信。</p>{config&&<section className="memory-create"><label>自主唤醒 <input type="checkbox" checked={!!config.enabled} onChange={e=>setConfig({...config,enabled:e.target.checked?1:0})}/></label><label>主动程度<select value={config.mode} onChange={e=>setConfig({...config,mode:e.target.value})}><option value="quiet">安静陪伴</option><option value="natural">自然主动</option><option value="lively">活泼黏人</option></select></label><label>心跳间隔（小时）<input type="number" min={2} max={72} value={config.interval_hours} onChange={e=>setConfig({...config,interval_hours:Number(e.target.value)})}/></label><label>免打扰开始（0–23时）<input type="number" min={0} max={23} value={config.quiet_start} onChange={e=>setConfig({...config,quiet_start:Number(e.target.value)})}/></label><label>免打扰结束（0–23时）<input type="number" min={0} max={23} value={config.quiet_end} onChange={e=>setConfig({...config,quiet_end:Number(e.target.value)})}/></label><div className="memory-form-actions"><button disabled={busy} onClick={()=>act({action:'configure',...config,enabled:!!config.enabled})}>保存设置</button><button disabled={busy} onClick={()=>act({action:'wake'})}>测试唤醒</button><button disabled={busy} onClick={()=>refresh().catch(e=>setNotice(e.message))}>刷新记录</button><button disabled={busy} onClick={async()=>{try{const r=await fetch('/api/inbox/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});if(!r.ok)throw Error('发送失败');setNotice('测试消息已进入小家收件箱，前台横幅会在下一次轮询时出现。')}catch(e){setNotice(String(e))}}}>测试消息弹窗</button></div></section>}{notice&&<p className="muted" role="status">{notice}</p>}<h4>最近唤醒事件</h4>{events.length===0?<p className="muted">还没有唤醒记录。</p>:events.map(e=><article className="memory-item" key={e.id}><b>{e.mood==='curious'?'✨ 好奇 / 想分享':'自主唤醒'}</b><p>{e.reason}</p><small>{new Date(e.created_at).toLocaleString()} · {e.status==='pending'?'待接入模型处理':'已忽略'}</small>{e.status==='pending'&&<button disabled={busy} onClick={()=>act({action:'dismiss',id:e.id})}>忽略</button>}</article>)}</div>
+ async function act(body:any){setBusy(true);setNotice('');try{const r=await apiFetch('/api/proactive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...body})});const d=await r.json();if(!r.ok)throw Error(d.error||'操作失败');setNotice(body.action==='wake'?(d.queued?'已生成一条待处理唤醒事件。接入后台模型后才能生成并投递消息。':'没有排队：'+d.reason):'已保存');await refresh()}catch(e){setNotice(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ return <div className="tool-panel"><h3>{person} · 自主生活</h3><p className="muted">独立心跳、主动程度、免打扰与唤醒记录。当前只生成待处理事件，不会冒充 AI 发消息；接入安全的后台模型执行器后才能真正主动发信。</p>{config&&<section className="memory-create"><label>自主唤醒 <input type="checkbox" checked={!!config.enabled} onChange={e=>setConfig({...config,enabled:e.target.checked?1:0})}/></label><label>主动程度<select value={config.mode} onChange={e=>setConfig({...config,mode:e.target.value})}><option value="quiet">安静陪伴</option><option value="natural">自然主动</option><option value="lively">活泼黏人</option></select></label><label>心跳间隔（小时）<input type="number" min={2} max={72} value={config.interval_hours} onChange={e=>setConfig({...config,interval_hours:Number(e.target.value)})}/></label><label>免打扰开始（0–23时）<input type="number" min={0} max={23} value={config.quiet_start} onChange={e=>setConfig({...config,quiet_start:Number(e.target.value)})}/></label><label>免打扰结束（0–23时）<input type="number" min={0} max={23} value={config.quiet_end} onChange={e=>setConfig({...config,quiet_end:Number(e.target.value)})}/></label><div className="memory-form-actions"><button disabled={busy} onClick={()=>act({action:'configure',...config,enabled:!!config.enabled})}>保存设置</button><button disabled={busy} onClick={()=>act({action:'wake'})}>测试唤醒</button><button disabled={busy} onClick={()=>refresh().catch(e=>setNotice(e.message))}>刷新记录</button><button disabled={busy} onClick={async()=>{try{const r=await apiFetch('/api/inbox/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});if(!r.ok)throw Error('发送失败');setNotice('测试消息已进入小家收件箱，前台横幅会在下一次轮询时出现。')}catch(e){setNotice(String(e))}}}>测试消息弹窗</button></div></section>}{notice&&<p className="muted" role="status">{notice}</p>}<h4>最近唤醒事件</h4>{events.length===0?<p className="muted">还没有唤醒记录。</p>:events.map(e=><article className="memory-item" key={e.id}><b>{e.mood==='curious'?'✨ 好奇 / 想分享':'自主唤醒'}</b><p>{e.reason}</p><small>{new Date(e.created_at).toLocaleString()} · {e.status==='pending'?'待接入模型处理':'已忽略'}</small>{e.status==='pending'&&<button disabled={busy} onClick={()=>act({action:'dismiss',id:e.id})}>忽略</button>}</article>)}</div>
 }
 
 function MCPSettings({person}:{person:Person}) {
@@ -1274,7 +1295,7 @@ function MCPSettings({person}:{person:Person}) {
   const [args,setArgs] = useState<Record<string,string>>({})
   const [results,setResults] = useState<Record<string,string>>({})
   const refresh = useCallback(async()=>{
-    const r = await fetch('/api/mcp?person='+encodeURIComponent(person),{credentials:'same-origin'})
+    const r = await apiFetch('/api/mcp?person='+encodeURIComponent(person),{credentials:'include'})
     const data = await r.json()
     if(!r.ok) throw new Error(data.error || '读取 MCP 列表失败')
     setConnections(data.connections)
@@ -1283,7 +1304,7 @@ function MCPSettings({person}:{person:Person}) {
   async function add(e:FormEvent) {
     e.preventDefault();setBusy(true);setError('');setNotice('')
     try {
-      const r=await fetch('/api/mcp',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name,url,transport,token})})
+      const r=await apiFetch('/api/mcp',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name,url,transport,token})})
       const data=await r.json();if(!r.ok)throw new Error(data.error||'保存失败')
       setName('');setUrl('');setToken('');await refresh();setNotice('配置已安全保存，可以尝试连接并读取工具。')
     } catch(e){setError(e instanceof Error?e.message:String(e))} finally{setBusy(false)}
@@ -1291,7 +1312,7 @@ function MCPSettings({person}:{person:Person}) {
   async function loadTools(c:MCPConnection) {
     setBusy(true);setError('');setNotice('正在连接 '+c.name+'…')
     try {
-      const r=await fetch('/api/mcp/'+c.id+'/tools',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})})
+      const r=await apiFetch('/api/mcp/'+c.id+'/tools',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})})
       const data=await r.json();if(!r.ok)throw new Error(data.error||'连接失败')
       setTools(old=>({...old,[c.id]:data.tools}));setExpandedTools(old=>({...old,[c.id]:false}));setNotice('连接成功：发现 '+data.tools.length+' 个工具，可按需展开。')
     }catch(e){setError(e instanceof Error?e.message:String(e));setNotice('')}finally{setBusy(false)}
@@ -1299,13 +1320,13 @@ function MCPSettings({person}:{person:Person}) {
   async function remove(c:MCPConnection) {
     if(!window.confirm('移除绑定到'+person+'的 MCP 服务“'+c.name+'”？'))return
     setError('');setNotice('')
-    try{const r=await fetch('/api/mcp/'+c.id,{method:'DELETE',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const data=await r.json();if(!r.ok)throw new Error(data.error||'移除失败');await refresh();setTools(old=>{const n={...old};delete n[c.id];return n});setNotice('已移除该人物的 MCP 绑定。')}catch(e){setError(e instanceof Error?e.message:String(e))}
+    try{const r=await apiFetch('/api/mcp/'+c.id,{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const data=await r.json();if(!r.ok)throw new Error(data.error||'移除失败');await refresh();setTools(old=>{const n={...old};delete n[c.id];return n});setNotice('已移除该人物的 MCP 绑定。')}catch(e){setError(e instanceof Error?e.message:String(e))}
   }
   async function callTool(c:MCPConnection,t:{name:string;description:string}) {
     const key=c.id+':'+t.name;setError('');setNotice('正在调用 '+t.name+'…')
     let parsed:unknown={};try{parsed=JSON.parse(args[key]||'{}')}catch{setError('参数必须是合法 JSON');setNotice('');return}
     if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)){setError('工具参数必须是 JSON 对象');setNotice('');return}
-    try{const r=await fetch('/api/mcp/'+c.id+'/call',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name:t.name,arguments:parsed})});const data=await r.json();if(!r.ok)throw new Error(data.error||'调用失败');setResults(old=>({...old,[key]:JSON.stringify(data.result,null,2)}));setNotice('工具调用完成：'+t.name)}catch(e){setError(e instanceof Error?e.message:String(e));setNotice('')}
+    try{const r=await apiFetch('/api/mcp/'+c.id+'/call',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,name:t.name,arguments:parsed})});const data=await r.json();if(!r.ok)throw new Error(data.error||'调用失败');setResults(old=>({...old,[key]:JSON.stringify(data.result,null,2)}));setNotice('工具调用完成：'+t.name)}catch(e){setError(e instanceof Error?e.message:String(e));setNotice('')}
   }
   return <div className="tool-panel mcp-panel"><h3>{person} · MCP 工具</h3><p className="muted">每个服务独立绑定人物。连接凭证只保存在云端后端，并使用 AES-256-GCM 加密；不会返回给浏览器或写进人物世界书。</p><div className="mcp-boundary"><b>当前绑定：{person}</b><span>本页面只会列出绑定给{person}的 MCP。另一人物不能通过本页面调用这些连接。</span></div>
     {error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
@@ -1343,7 +1364,7 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
    if(!value.endpoint.trim()||!value.model.trim()||!apiKey.trim()){setTestResult({ok:false,text:'请先填写 API 地址、模型名称和 API Key。'});return}
    setTesting(true);setTestResult(null)
    try{
-     const response=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:value.endpoint,apiKey})})
+     const response=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:value.endpoint,apiKey})})
      const data=await response.json().catch(()=>({}))
      if(!response.ok)throw new Error(data?.error||('HTTP '+response.status))
      const ids=Array.isArray(data?.models)?data.models:[]
@@ -1358,7 +1379,7 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
    if(!apiKey.trim()){setModelList({ok:false,text:'请先填写 API Key，再获取模型列表。',ids:[]});return}
    setListing(true);setModelList(null)
    try{
-     const response=await fetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:value.endpoint,apiKey})})
+     const response=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:value.endpoint,apiKey})})
      const data=await response.json().catch(()=>({}))
      if(!response.ok)throw new Error(data?.error||('HTTP '+response.status))
      const ids=Array.isArray(data?.models)?data.models:[]
@@ -1506,6 +1527,21 @@ function Chat(p: any) {
     document.addEventListener('keydown',onKey)
     return()=>document.removeEventListener('keydown',onKey)
   },[selectMode])
+  // Android 返回键：聊天页内临时层优先关闭（灯泡图→搜索→多选→表情/更多面板），
+  // 全关完才把返回事件交还给上层（房间页/根），由 App 决定是否退出。
+  useEffect(()=>{
+    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||moreOpen
+    if(!anyLayer)return
+    const unregister=pushBackHandler(()=>{
+      if(lightbox){setLightbox(null);return true}
+      if(searchOpen){closeSearch();return true}
+      if(selectMode){exitSelect();return true}
+      if(emojiOpen){setEmojiOpen(false);return true}
+      if(moreOpen){setMoreOpen(false);return true}
+      return false
+    })
+    return unregister
+  },[lightbox,searchOpen,selectMode,emojiOpen,moreOpen])
   // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
   // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
   const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
@@ -1593,7 +1629,7 @@ function Chat(p: any) {
       const dataUrl=item.dataUrl||''
       const comma=dataUrl.indexOf(',')
       if(comma<0)return null
-      const res=await fetch('/api/attachments',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item.name,mime:item.type,data:dataUrl.slice(comma+1)})})
+      const res=await apiFetch('/api/attachments',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:item.name,mime:item.type,data:dataUrl.slice(comma+1)})})
       if(!res.ok)return null
       const body=await res.json()
       if(!body||!body.id||!body.url)return null
@@ -1636,7 +1672,7 @@ function Chat(p: any) {
     if(!target||!target.assetId)return
     const stillReferenced=collectReferencedAssetIds({conversations:p.conversations,messages:p.messages,deferredBatches:p.deferredBatches})
     if(stillReferenced.has(String(target.assetId)))return
-    fetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'same-origin'}).catch(()=>{})
+    apiFetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'include'}).catch(()=>{})
   }
   async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.deferredOn&&activeChatConversationId){/* 缓发：消息立即显示但不请求模型；队列不可追加（发送中/待确认）时保留草稿并提示 */if(!p.enqueueDeferred(text,payload)){p.setChatError('这条会话的缓发队列正在发送或有待确认的待发消息，先处理完再继续加入。');return}}else{if(p.sending)return;p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);closeSearch()}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
@@ -1734,7 +1770,7 @@ function Chat(p: any) {
           : <div className={'bubble '+m.role}
               onClick={e=>bubbleClick(e,m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
-          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={a.preview} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
         </div>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
           <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
@@ -1760,7 +1796,7 @@ function Chat(p: any) {
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
-    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={a.preview||a.dataUrl} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
+    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，点下面的按钮上传图片。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{if(window.confirm('清空全部图片表情包？')){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
     {recoveryBatches.length>0&&<div className="deferred-recovery" role="status">
       <span>⏳ {recoveryTotal} 条缓发消息尚未发出</span>
@@ -1783,7 +1819,7 @@ function Chat(p: any) {
       {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
     </form>}
     {!selectMode&&<small className="attachment-note">图片可点击放大；TXT、MD、JSON、CSV、LOG 可读取文本并下载读取出的文本副本。其他文件的原文件下载与云端上传后续接入。</small>}
-    {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={lightbox.src} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
+    {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
   </div>
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
@@ -1817,6 +1853,12 @@ function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];setProj
 
 function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void}) {
   const [section,setSection]=useState('')
+  // Android 返回键：设置子页先退回「全部设置」列表；已在列表时不消费，交给上层。
+  useEffect(()=>{
+    if(!section)return
+    const unregister=pushBackHandler(()=>{setSection('');return true})
+    return unregister
+  },[section])
   // 输入框是「编辑缓冲」：null 表示未在编辑，直接显示当前生效时区；
   // 云端快照回填 timeZone 后无需任何同步逻辑，派生值自动跟随。
   const [tzDraft,setTzDraft]=useState<string|null>(null)
@@ -1828,7 +1870,31 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   const tzPreview=buildTimeContext(new Date(timeTick),timeZone)
   const tzError=(()=>{const raw=tzInput.trim();if(!raw)return '';try{new Intl.DateTimeFormat('en-US',{timeZone:raw});return ''}catch{return '无法识别的时区名称，请输入 IANA 时区（如 Asia/Shanghai）'}})()
   const cards=[{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
-  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}{section==='dev'&&<RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/>}</div>}</div>
+  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}{section==='dev'&&<><ApiBaseSettings/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+}
+
+// ── API 服务器地址（开发者）──
+// 运行时覆盖优先级高于构建期 VITE_API_BASE_URL；留空 = 回退到构建期值或同源直连。
+// 只影响请求地址拼接，不改任何 /api/* 的业务语义；保存后立即 setApiBase 生效。
+function ApiBaseSettings() {
+  const buildBase = (import.meta as any).env?.VITE_API_BASE_URL ?? ''
+  const [draft, setDraft] = useState(() => { try { return localStorage.getItem(API_BASE_STORAGE_KEY) || '' } catch { return '' } })
+  const [note, setNote] = useState('')
+  const apply = () => {
+    try {
+      const normalized = normalizeApiBase(draft)
+      if (!normalized) localStorage.removeItem(API_BASE_STORAGE_KEY)
+      else localStorage.setItem(API_BASE_STORAGE_KEY, normalized)
+      setDraft(normalized)
+      setApiBase(resolveApiBase({ override: normalized, buildBase }))
+      setNote(normalized ? '已生效：后续请求将发往 ' + normalized : '已清除覆盖，回退到同源/构建期地址')
+    } catch { setNote('保存失败：浏览器存储不可用') }
+  }
+  const reset = () => {
+    try { localStorage.removeItem(API_BASE_STORAGE_KEY) } catch { /* 忽略 */ }
+    setDraft(''); setApiBase(resolveApiBase({ buildBase })); setNote('已恢复默认')
+  }
+  return <div className="setting-card settings-inner-card"><b>API 服务器地址</b><p className="muted">Android/独立部署时填写后端地址（如 https://你的域名）；留空 = 同源直连。仅影响请求地址，不改聊天与数据逻辑。</p><input className="memory-search" value={draft} onChange={e=>{setDraft(e.target.value);setNote('')}} placeholder="https://example.com" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false}/><div className="settings-shortcuts"><button type="button" onClick={apply}>保存地址</button><button type="button" onClick={reset}>恢复默认</button></div>{note&&<p className="muted" role="status">{note}</p>}</div>
 }
 
 // ── 模型请求诊断（黑匣子）详情页 ──

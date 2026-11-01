@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import './Ledger.css'
+import { apiFetch } from './apiBase.mjs'
 
 type Entry = { id:string; kind:'expense'|'income'; amount:number; category:string; note:string; date:string }
 const storageKey='ai-home.ledger.v1'
@@ -10,7 +11,7 @@ export function Ledger(){
  const [entries,setEntries]=useState<Entry[]>([])
  const [loading,setLoading]=useState(true)
  const [legacy]=useState<Entry[]>(load)
- async function refresh(){const r=await fetch('/api/ledger',{credentials:'same-origin'});const d=await r.json();if(!r.ok)throw new Error(d.error||'读取账本失败');setEntries(d.entries||[])}
+ async function refresh(){const r=await apiFetch('/api/ledger',{credentials:'include'});const d=await r.json();if(!r.ok)throw new Error(d.error||'读取账本失败');setEntries(d.entries||[])}
  useEffect(()=>{refresh().catch(e=>setError(e.message)).finally(()=>setLoading(false))},[])
  const [kind,setKind]=useState<'expense'|'income'>('expense')
  const [amount,setAmount]=useState('')
@@ -23,8 +24,8 @@ export function Ledger(){
  const visible=useMemo(()=>entries.filter(e=>e.date.startsWith(month)).sort((a,b)=>b.date.localeCompare(a.date)),[entries,month])
  const income=visible.filter(e=>e.kind==='income').reduce((s,e)=>s+e.amount,0)
  const expense=visible.filter(e=>e.kind==='expense').reduce((s,e)=>s+e.amount,0)
- async function add(e:FormEvent){e.preventDefault();const value=Number(amount);if(!Number.isFinite(value)||value<=0||value>1e10||!date){setError('请填写有效日期和大于 0 的金额。');return}try{const r=await fetch('/api/ledger',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,amount:value,currency:'CNY',category,note,date,actor:'user',requestId:crypto.randomUUID()})});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');await refresh();setMonth(date.slice(0,7));setAmount('');setNote('');setError('')}catch(e){setError(e instanceof Error?e.message:'保存失败')}}
- async function remove(id:string){if(!window.confirm('确定删除这条账目吗？'))return;try{const r=await fetch('/api/ledger/'+id,{method:'DELETE',credentials:'same-origin'});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
+ async function add(e:FormEvent){e.preventDefault();const value=Number(amount);if(!Number.isFinite(value)||value<=0||value>1e10||!date){setError('请填写有效日期和大于 0 的金额。');return}try{const r=await apiFetch('/api/ledger',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,amount:value,currency:'CNY',category,note,date,actor:'user',requestId:crypto.randomUUID()})});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');await refresh();setMonth(date.slice(0,7));setAmount('');setNote('');setError('')}catch(e){setError(e instanceof Error?e.message:'保存失败')}}
+ async function remove(id:string){if(!window.confirm('确定删除这条账目吗？'))return;try{const r=await apiFetch('/api/ledger/'+id,{method:'DELETE',credentials:'include'});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
  return <section className="ledger"><header className="ledger-heading"><h3>我的记账单</h3><small>私人收支记录 · 云端共享账本</small></header>
  <label className="ledger-month">查看月份 <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label>
  <div className="ledger-summary"><div><small>本月收入</small><b>＋{money(income)}</b></div><div><small>本月支出</small><b>－{money(expense)}</b></div><div><small>本月结余</small><b>{money(income-expense)}</b></div></div>

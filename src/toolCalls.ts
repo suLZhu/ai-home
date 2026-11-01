@@ -9,6 +9,7 @@
 //   3. two-way persistence: server SQLite rows (source of truth) + a bounded
 //      localStorage cache so cards survive a refresh before the server answers.
 import { useEffect, useState } from 'react'
+import { apiFetch } from './apiBase.mjs'
 
 export type ToolCallStatus = 'queued' | 'awaiting_confirmation' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 export type ToolCallSource = 'mcp' | 'worldbook' | 'ledger' | 'workflow'
@@ -206,9 +207,9 @@ export function reportToolCallEnd(key: string, input: ToolCallEndInput): void {
 
 async function pushCreate(record: ToolCallRecord) {
   try {
-    const response = await fetch('/api/tool-logs', {
+    const response = await apiFetch('/api/tool-logs', {
       method: 'POST',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         person: record.person,
@@ -238,9 +239,9 @@ async function pushCreate(record: ToolCallRecord) {
 async function pushTransition(record: ToolCallRecord) {
   if (!record.id) return
   try {
-    await fetch('/api/tool-logs/' + record.id, {
+    await apiFetch('/api/tool-logs/' + record.id, {
       method: 'PUT',
-      credentials: 'same-origin',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: record.status,
@@ -256,7 +257,7 @@ async function pushTransition(record: ToolCallRecord) {
 export async function restoreToolCalls(conversationId: string): Promise<void> {
   if (!conversationId) return
   try {
-    const response = await fetch('/api/tool-logs?conversationId=' + encodeURIComponent(conversationId) + '&limit=200', { credentials: 'same-origin' })
+    const response = await apiFetch('/api/tool-logs?conversationId=' + encodeURIComponent(conversationId) + '&limit=200', { credentials: 'include' })
     if (!response.ok) return
     const data = await response.json()
     const rows: any[] = Array.isArray(data.logs) ? data.logs : []

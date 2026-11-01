@@ -7,6 +7,7 @@
 // REST response is the state — so a dropped connection degrades to the
 // existing polling instead of freezing cards.
 import { useEffect, useState } from 'react'
+import { apiFetch, apiUrl } from './apiBase.mjs'
 
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 
@@ -72,7 +73,7 @@ export function subscribeAgentEvents(listener: (event: AgentEvent) => void): () 
   refCount++
   if (!source) {
     try {
-      source = new EventSource('/api/agent/events')
+      source = new EventSource(apiUrl('/api/agent/events'), { withCredentials: true })
       const types = ['run_created', 'run_finished', 'round_started', 'tool_started', 'tool_awaiting', 'tool_finished', 'approval_decided']
       for (const type of types) source.addEventListener(type, e => dispatch((e as MessageEvent<string>).data))
       source.onmessage = e => dispatch((e as MessageEvent<string>).data)
@@ -90,7 +91,7 @@ export function subscribeAgentEvents(listener: (event: AgentEvent) => void): () 
 // ------------------------------------------------------------------ REST 拉取
 
 async function getJson(url: string, init?: RequestInit) {
-  const response = await fetch(url, { credentials: 'same-origin', ...init })
+  const response = await apiFetch(url, { credentials: 'include', ...init })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error((data as { error?: string }).error || '请求失败')
   return data as Record<string, any>

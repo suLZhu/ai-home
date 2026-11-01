@@ -683,3 +683,13 @@
 .diag-raw{margin-top:10px;max-height:360px;overflow:auto;padding:10px;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--field,#faf8fc);font-size:12px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;user-select:text}
 .diag-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
 .diag-actions button{min-height:34px;padding:0 16px;border:1px solid var(--line,#e8e2ee);border-radius:9px;background:var(--card,#fff);color:var(--ink,#2c2536);font-size:13px;cursor:pointer}
+
+/* ── Android 安全区适配（status bar / 刘海 / 底部手势条） ──
+   viewport-fit=cover 后内容延伸到系统区域，这里用 env() 把关键区域撑开。
+   桌面端 env() 恒为 0，不影响原有布局。 */
+.chat-header{padding-top:max(10px,env(safe-area-inset-top,0px))}
+.settings-heading,.fun-screen,.settings-screen{padding-top:max(30px,calc(env(safe-area-inset-top,0px) + 12px))}
+.room-header,.home-people{padding-top:max(15px,calc(env(safe-area-inset-top,0px) + 8px))}
+/* 底部输入区：给手势条让位，避免发送按钮被遮住 */
+.shell.shell-chat-lock .compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+.lounge-compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}

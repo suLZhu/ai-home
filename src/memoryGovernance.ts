@@ -30,8 +30,10 @@ export const SCOPE_LABEL: Record<MemoryScope, string> = {
   world: '世界观', private: '私密', ops: '事务',
 }
 
+import { apiFetch } from './apiBase.mjs'
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { credentials: 'same-origin', ...init })
+  const response = await apiFetch(url, { credentials: 'include', ...init })
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || '请求失败（HTTP ' + response.status + '）')
   return data as T
