@@ -29,7 +29,7 @@ import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, sho
 // 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
 import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiagLogs, formatDiagSummary } from './requestDiag.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
-import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase } from './apiBase.mjs'
+import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
 import { pushBackHandler, handleBack as runBackStack } from './backStack.mjs'
 import { App as CapApp } from '@capacitor/app'
@@ -362,6 +362,8 @@ export default function App() {
       const response = await apiFetch('/api/login', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:loginPassword}) })
       const result = await response.json()
       if (!response.ok) throw new Error(result.error || '登录失败')
+      // 服务端返回的登录 token：Android 跨源收不到 Cookie，靠它维持会话（Web 端与 Cookie 并存不冲突）。
+      if (result.token) setSessionToken(result.token)
       setLoginPassword('')
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : String(error))
@@ -373,6 +375,7 @@ export default function App() {
   }, [loginPassword, loadCloudState, enterOfflineMode])
   const logout = useCallback(async () => {
     await apiFetch('/api/logout', {method:'POST',credentials:'include'}).catch(()=>{})
+    clearSessionToken()
     setCloudReady(false)
     setAuthStatus('signedOut')
     setCloudStatus('loading')

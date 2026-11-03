@@ -7,7 +7,7 @@
 // REST response is the state — so a dropped connection degrades to the
 // existing polling instead of freezing cards.
 import { useEffect, useState } from 'react'
-import { apiFetch, apiUrl } from './apiBase.mjs'
+import { apiFetch, apiUrl, getSessionToken } from './apiBase.mjs'
 
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 
@@ -73,7 +73,12 @@ export function subscribeAgentEvents(listener: (event: AgentEvent) => void): () 
   refCount++
   if (!source) {
     try {
-      source = new EventSource(apiUrl('/api/agent/events'), { withCredentials: true })
+      // EventSource 无法设置 Authorization 头：跨源（Android 局域网）时凭证走 ?token= 查询参数，
+      // 同源（Web）时 token 留空、继续走 Cookie。
+      const eventsUrl = apiUrl('/api/agent/events')
+      const token = getSessionToken()
+      const withToken = token ? eventsUrl + (eventsUrl.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token) : eventsUrl
+      source = new EventSource(withToken, { withCredentials: true })
       const types = ['run_created', 'run_finished', 'round_started', 'tool_started', 'tool_awaiting', 'tool_finished', 'approval_decided']
       for (const type of types) source.addEventListener(type, e => dispatch((e as MessageEvent<string>).data))
       source.onmessage = e => dispatch((e as MessageEvent<string>).data)

@@ -151,13 +151,27 @@ function cookieValue(req) {
   }
   return ''
 }
-function getSession(req) {
-  const token = cookieValue(req)
+function getSession(req, url) {
+  const token = authToken(req, url)
   const session = sessions.get(token)
   if (!session) return null
   if (session.expires < Date.now()) { sessions.delete(token); return null }
   session.expires = Date.now() + SESSION_TTL
   return token
+}
+// 凭证解析：Cookie（Web 同源）→ Authorization: Bearer（Android 局域网跨源 JSON 请求）
+// → ?token= 查询参数（EventSource 与 <img> 无法自定义请求头时的降级通道）。
+// 三者共用同一张 sessions 表与同一 7 天滑动 TTL，注销即全部失效。
+function authToken(req, url) {
+  const cookie = cookieValue(req)
+  if (cookie) return cookie
+  const auth = String(req.headers.authorization || '')
+  if (auth.startsWith('Bearer ')) {
+    const bearer = auth.slice(7).trim()
+    if (bearer) return bearer
+  }
+  const query = url && url.searchParams ? String(url.searchParams.get('token') || '') : ''
+  return query
 }
 function sameOrigin(req) {
   const origin = req.headers.origin
@@ -259,7 +273,7 @@ function deliverTaskResult(entry) {
   return addTaskResult(db, entry)
 }
 
-createServer(async (req, res) => {
+const apiServer = createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost')
   if (!url.pathname.startsWith('/api/')) return send(res, 404, { error: 'not found' })
   // 跨域（Android WebView / 独立部署）：仅当显式配置 AI_HOME_ALLOWED_ORIGIN 且请求 Origin 与之相等时，
@@ -273,13 +287,13 @@ createServer(async (req, res) => {
   }
   if (req.method === 'OPTIONS') {
     return send(res, 204, {}, res.corsHeaders
-      ? { ...res.corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': req.headers['access-control-request-headers'] || 'Content-Type, Authorization', 'Access-Control-Max-Age': '600' }
+      ? { ...res.corsHeaders, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': req.headers['access-control-request-headers'] || 'Content-Type, Authorization', 'Access-Control-Max-Age': '600', 'Access-Control-Allow-Private-Network': 'true' }
       : {})
   }
   if (['POST', 'PUT', 'DELETE'].includes(req.method) && !sameOrigin(req)) return send(res, 403, { error: '跨站请求已拒绝' })
 
   if (url.pathname === '/api/session' && req.method === 'GET') {
-    const token = getSession(req)
+    const token = getSession(req, url)
     return send(res, 200, { authenticated: !!token })
   }
 
@@ -299,17 +313,19 @@ createServer(async (req, res) => {
       failures.delete(key)
       const token = randomBytes(32).toString('hex')
       sessions.set(token, { expires: Date.now() + SESSION_TTL })
-      return send(res, 200, { authenticated: true }, { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=${COOKIE_SAMESITE}; Secure; Max-Age=${SESSION_TTL / 1000}` })
+      // token 同时写进响应体：Android WebView 跨源（http://局域网地址）收不到 Secure Cookie，
+      // 客户端改用 Authorization: Bearer / ?token= 携带同一凭证；Web 端 Cookie 路径不受影响。
+      return send(res, 200, { authenticated: true, token }, { 'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=${COOKIE_SAMESITE}; Secure; Max-Age=${SESSION_TTL / 1000}` })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '请求无效' }) }
   }
 
   if (url.pathname === '/api/logout' && req.method === 'POST') {
-    const token = cookieValue(req)
+    const token = authToken(req, url)
     sessions.delete(token)
     return send(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; SameSite=${COOKIE_SAMESITE}; Secure; Max-Age=0` })
   }
 
-  if (!getSession(req)) return send(res, 401, { error: '请先登录' })
+  if (!getSession(req, url)) return send(res, 401, { error: '请先登录' })
 
   // API Key 加密存储：跨设备同步，登录后带回。
   if (url.pathname === '/api/keys' && req.method === 'GET') {
@@ -837,6 +853,8 @@ createServer(async (req, res) => {
       'Cache-Control': 'no-cache, no-store',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
+      // 跨源 EventSource（Android WebView）：实际响应也要带 CORS 头，浏览器才收流。
+      ...(res.corsHeaders || {}),
     })
     const write = (event) => { try { res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`) } catch { /* client gone */ } }
     for (const event of agentEvents.recent()) write(event)
@@ -903,7 +921,12 @@ createServer(async (req, res) => {
   }
 
   return send(res, 404, { error: 'not found' })
-}).listen(4180, '127.0.0.1', () => console.log('AI Home private data API listening on 127.0.0.1:4180'))
+})
+// 监听地址可用环境变量覆盖：AI_HOME_BIND=0.0.0.0 让同一 Wi-Fi 的手机能访问（配合启动脚本），
+// 默认仍是 127.0.0.1:4180，历史行为不变。
+const API_PORT = Number(process.env.AI_HOME_PORT) || 4180
+const API_BIND = process.env.AI_HOME_BIND || '127.0.0.1'
+apiServer.listen(API_PORT, API_BIND, () => console.log(`AI Home private data API listening on ${API_BIND}:${API_PORT}`))
 
 // Durable scheduler: due tasks are claimed atomically and executed through the
 // shared AgentRunner (bounded loop, tool logging, SSE) instead of the old

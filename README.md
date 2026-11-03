@@ -40,4 +40,17 @@ npm test
 
 后端需要设置 `AI_HOME_PASSWORD`（至少 16 字符）与 `AI_HOME_SECRET_KEY`（32 字节十六进制密钥）。可选设置 `AI_HOME_DB` 和 `AI_HOME_ALLOWED_ORIGIN`。服务默认监听 `127.0.0.1:4180`，应通过 HTTPS 反向代理对外提供访问。
 
+### Android 局域网一键启动（npm start）
+```bash
+npm start    # scripts/start-server.mjs
+```
+脚本自动完成：读取 `.ai-home.env`（缺 `AI_HOME_PASSWORD` 则生成 24 位密码并保存）→ 以
+`AI_HOME_BIND=0.0.0.0` + `AI_HOME_ALLOWED_ORIGIN=https://localhost` 启动服务 →
+探测局域网 IP（排除 Clash fake-IP/链路本地等不可达地址）→ 打印手机端要粘贴的 API 地址与登录密码。
+
+手机装好 APK 后，在「设置 → 开发者 → API 服务器地址」填入打印的 `http://<局域网IP>:4180`，
+输入打印的密码登录即可（7 天免登）。登录凭证由服务端以 token 返回，客户端自动附加
+（JSON 走 `Authorization: Bearer`，图片与 SSE 走 `?token=`），跨源 http 不依赖 Cookie，
+无需 HTTPS 反向代理。多网卡时可在 `.ai-home.env` 加 `AI_HOME_LAN_IP=<你的局域网IP>` 强制指定。
+
 不修改 Kelivo，不占用现有 PocketBase 服务。
