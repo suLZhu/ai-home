@@ -7,7 +7,7 @@
 // REST response is the state — so a dropped connection degrades to the
 // existing polling instead of freezing cards.
 import { useEffect, useState } from 'react'
-import { apiFetch, apiUrl, getSessionToken } from './apiBase.mjs'
+import { apiFetch, apiUrl, getSessionToken, isLocalMode } from './apiBase.mjs'
 
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 
@@ -71,7 +71,9 @@ function dispatch(raw: string) {
 export function subscribeAgentEvents(listener: (event: AgentEvent) => void): () => void {
   listeners.add(listener)
   refCount++
-  if (!source) {
+  // 本地模式没有后台执行器，事件流恒空：不建 EventSource，避免对不存在的
+  // /api/agent/events 无限重连（看板运行列表本地同样返回空数组）。
+  if (!source && !isLocalMode()) {
     try {
       // EventSource 无法设置 Authorization 头：跨源（Android 局域网）时凭证走 ?token= 查询参数，
       // 同源（Web）时 token 留空、继续走 Cookie。

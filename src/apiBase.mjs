@@ -5,6 +5,10 @@
 //   必须补一个 base；优先级：运行时覆盖（本机开发者填的） > 构建时 VITE_API_BASE_URL > ''；
 // - 只做「地址前缀」拼接，绝不改变任何 /api/* 的路径、参数与业务语义。
 
+// 本地模式后端垫片：未配置服务器地址时，/api/* 全部由浏览器内 LocalBackend 应答。
+// 只依赖 timeContext.mjs，不会与本模块形成循环引用。
+import { localHandle, localAttachmentUrl } from './localBackend.mjs'
+
 export const API_BASE_STORAGE_KEY = 'ai-home.apiBaseOverride'
 // 登录凭证（服务端 /api/login 返回的 token）。Web 同源主要靠 Cookie，
 // Android 跨源（局域网 http 地址）收不到 Secure Cookie，改由本 token 承载会话：
@@ -54,8 +58,14 @@ export function apiUrl(path, base) {
 export function assetUrl(preview, base) {
   const p = String(preview == null ? '' : preview)
   if (!p.startsWith('/api/')) return p
-  const resolved = apiUrl(p, base)
-  if (!base) return resolved
+  // 未显式传 base 时回退到模块级当前 base：跨源（Android 服务器模式）下
+  // <img> 也能拿到完整地址与 ?token=（历史上这里漏传 base，图片必失效）。
+  const effectiveBase = base === undefined ? currentBase : base
+  // 本地模式：附件字节在 IndexedDB，注册表里换成本会话有效的 objectURL。
+  // 显式传了 base（测试/服务器语义）则不拦截，保持云端行为。
+  if (!effectiveBase && isLocalMode() && p.startsWith('/api/attachments/')) return localAttachmentUrl(p)
+  const resolved = apiUrl(p, effectiveBase)
+  if (!effectiveBase) return resolved
   const token = getSessionToken()
   if (!token) return resolved
   return resolved + (resolved.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token)
@@ -66,12 +76,22 @@ let currentBase = ''
 export function setApiBase(base) { currentBase = normalizeApiBase(base) }
 export function getApiBase() { return currentBase }
 
+// 数据模式：没有配置任何服务器地址 = 本地模式（开箱即用，数据存本机）；
+// 配置了地址（设置页可选云同步 / 构建期 VITE_API_BASE_URL）= 云端代理模式。
+// 两者切换只看当前 base，无需额外开关。
+export function isLocalMode() { return !currentBase }
+
 // 统一 fetch 包装：默认 credentials:'include'（跨源时 Cookie 必须显式 include；
 // 同源请求下 'include' 与 'same-origin' 行为一致，故统一设置不改变既有语义）。
 // init 透传，绝不改写 body/method —— 请求业务语义零变化。
 // 本机存有登录 token 时附加 Authorization: Bearer（服务端三通道之一：Cookie/Bearer/查询参数），
 // 覆盖 Android 跨源收不到 Cookie 的场景；无 token 时请求与历史版本逐字节一致。
 export async function apiFetch(path, init, fetchImpl) {
+  // 本地模式：/api/* 直接交给浏览器内 LocalBackend（不发网络请求）。
+  // 测试传入 fetchImpl（桩）时保持旧行为，永远走桩，不受数据模式影响。
+  if (!fetchImpl && isLocalMode() && String(path == null ? '' : path).startsWith('/api/')) {
+    return localHandle(String(path), init || {})
+  }
   const doFetch = fetchImpl || (typeof fetch === 'function' ? fetch : null)
   if (!doFetch) throw new Error('fetch 不可用')
   const opts = Object.assign({}, init || {})
