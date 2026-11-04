@@ -8,7 +8,7 @@
     "start": "node scripts/start-server.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\" \"tests/time-context.test.mjs\" \"tests/deferred-send.test.mjs\" \"tests/deferred-storage.test.mjs\" \"tests/deferred-flow.test.mjs\" \"tests/message-ops.test.mjs\" \"tests/attachment-persistence.test.mjs\" \"tests/chat-search.test.mjs\" \"tests/cloud-recovery.test.mjs\" \"tests/request-diag.test.mjs\" \"tests/api-base.test.mjs\" \"tests/back-stack.test.mjs\" \"tests/android-login.test.mjs\" \"tests/start-server.test.mjs\"",
+    "test": "node --test \"tests/agent-acceptance.test.mjs\" \"tests/task-delivery.test.mjs\" \"tests/time-context.test.mjs\" \"tests/deferred-send.test.mjs\" \"tests/deferred-storage.test.mjs\" \"tests/deferred-flow.test.mjs\" \"tests/message-ops.test.mjs\" \"tests/attachment-persistence.test.mjs\" \"tests/chat-search.test.mjs\" \"tests/cloud-recovery.test.mjs\" \"tests/request-diag.test.mjs\" \"tests/api-base.test.mjs\" \"tests/back-stack.test.mjs\" \"tests/android-login.test.mjs\" \"tests/start-server.test.mjs\" \"tests/asset-store.test.mjs\"",
     "preview": "vite preview",
     "android:sync": "npm run build && cap sync android",
     "android:apk": "npm run android:sync && cd android && gradlew assembleDebug",

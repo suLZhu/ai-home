@@ -3,7 +3,8 @@ import { DEFAULT_THEME, THEMES, type ThemePrefs, type CustomAssets } from './the
 import './ThemeSettings.css'
 type ThemeTab='recommended'|'font'|'interface'
 const MB=1024*1024
-function warnBig(file:File){ if(file.size>2.5*MB) alert('这个文件有 '+(file.size/MB).toFixed(1)+' MB。浏览器本地存储大约只能装下 3MB 以内，太大可能保存失败。') }
+// 素材存 IndexedDB（无 5MB 配额）：只对超大文件做加载性能提醒，不拦不吓。
+function warnBig(file:File){ if(file.size>32*MB) alert('这个文件有 '+(file.size/MB).toFixed(1)+' MB，体积很大，保存和加载可能变慢。') }
 function readFile(file:File,cb:(data:string)=>void){ const r=new FileReader(); r.onload=()=>cb(String(r.result||'')); r.readAsDataURL(file) }
 export function ThemeSettings({value,onChange,assets,onAssetsChange}:{value:ThemePrefs;onChange:(v:ThemePrefs)=>void;assets:CustomAssets;onAssetsChange:(v:CustomAssets)=>void}){
  const [tab,setTab]=useState<ThemeTab>('recommended')
@@ -13,7 +14,7 @@ export function ThemeSettings({value,onChange,assets,onAssetsChange}:{value:Them
  {tab==='recommended'&&<><p className="theme-tab-intro">挑一套适合小家的整体氛围。</p><div className="theme-gallery">{THEMES.map(t=><button type="button" key={t.id} className={'theme-tile '+(value.theme===t.id?'selected':'')} onClick={()=>update({theme:t.id})} aria-pressed={value.theme===t.id}><div className="theme-swatches">{t.swatches.map((c,i)=><span key={i} style={{background:c}}/>)}</div><b>{t.name}</b><small>{t.description}</small></button>)}</div></>}
  {tab==='font'&&<div className="theme-tab-panel">
    <label>字体<select value={value.font||'serif'} onChange={e=>update({font:e.target.value as ThemePrefs['font']})}><option value="serif">书页宋体</option><option value="sans">简洁无衬线</option><option value="custom" disabled={!assets.fontData}>自定义字体{assets.fontName?'（'+assets.fontName+'）':''}</option></select></label>
-   <div className="theme-upload-row"><label className="theme-upload">{assets.fontData?'重新上传字体':'上传字体'}<input type="file" accept=".ttf,.otf,.woff,.woff2" onChange={e=>{const f=e.target.files?.[0]; if(!f)return; warnBig(f); readFile(f,d=>onAssetsChange({...assets,fontName:f.name,fontData:d}))}}/></label><small className="theme-upload-note">{assets.fontData?'已上传 '+assets.fontName+'，在上方字体里选「自定义字体」即可使用':'支持 .ttf / .otf / .woff，仅保存在本机浏览器'}</small></div>
+   <div className="theme-upload-row"><label className="theme-upload">{assets.fontData?'重新上传字体':'上传字体'}<input type="file" accept=".ttf,.otf,.woff,.woff2" onChange={e=>{const f=e.target.files?.[0]; if(!f)return; warnBig(f); readFile(f,d=>onAssetsChange({...assets,fontName:f.name,fontData:d}))}}/></label><small className="theme-upload-note">{assets.fontData?'已上传 '+assets.fontName+'，在上方字体里选「自定义字体」即可使用':'支持 .ttf / .otf / .woff，保存在本机浏览器，大文件也没问题'}</small></div>
    <label>全局字号 <strong>{value.scale}%</strong><input type="range" min="85" max="125" step="5" value={value.scale} onChange={e=>update({scale:Number(e.target.value)})}/></label>
    <label>圆角大小 <strong>{value.radius}px</strong><input type="range" min="4" max="28" step="2" value={value.radius} onChange={e=>update({radius:Number(e.target.value)})}/></label>
  </div>}
