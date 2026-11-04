@@ -33,6 +33,7 @@ import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFe
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
 import { pushBackHandler, handleBack as runBackStack } from './backStack.mjs'
 import { App as CapApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -177,6 +178,11 @@ export default function App() {
   },[sidebarOpen])
   const [funShortcut,setFunShortcut]=useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
+  // Android 首启动：还没填过 API 地址时先走「连接服务器」向导（填完立即探测会话，
+  // 通了直接进、未登录转登录页、连不上留在向导重试），避免用户在离线壳里迷路。
+  const [apiSetupActive, setApiSetupActive] = useState(() => {
+    try { return Capacitor.isNativePlatform() && !getApiBase() } catch { return false }
+  })
   const [time, setTime] = useState('')
   const [inbox,setInbox] = useState<InboxMessage[]>([])
   const [toast,setToast] = useState<InboxMessage|null>(null)
@@ -381,8 +387,52 @@ export default function App() {
     setCloudStatus('loading')
   }, [])
 
+  // 首启动向导提交：存地址 → 立刻探测 /api/session → 三种结局：
+  // 已登录（直接进）/ 未登录（转登录页）/ 连不上（返回错误留在向导，附排查提示）。
+  const applyApiAddress = useCallback(async (raw: string): Promise<string> => {
+    const norm = normalizeApiBase(raw)
+    if (!norm) return '地址需以 http:// 或 https:// 开头，例如 http://192.168.8.4:4180'
+    try { localStorage.setItem(API_BASE_STORAGE_KEY, norm) } catch { /* 存储不可用则仅本次会话生效 */ }
+    setApiBase(resolveApiBase({ override: norm, buildBase: (import.meta as any).env?.VITE_API_BASE_URL ?? '' }))
+    try {
+      const response = await apiFetch('/api/session', { credentials: 'include' })
+      const result = await response.json()
+      setApiSetupActive(false)
+      if (result.authenticated) {
+        try { await loadCloudState(); setAuthStatus('signedIn') }
+        catch (error) { enterOfflineMode(error) }
+      } else {
+        setAuthError('')
+        setAuthStatus('signedOut')
+      }
+      return ''
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return `连不上 ${norm}（${detail}）。请确认电脑上已运行 npm start，且手机与电脑在同一 Wi-Fi。`
+    }
+  }, [loadCloudState, enterOfflineMode])
+
+  // 开发者设置里改完地址后立刻重查登录态：Android 跨源换地址不用重启 App 才生效。
+  const recheckAfterApiChange = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) return
+    if (!getApiBase()) { setApiSetupActive(true); return }
+    try {
+      const response = await apiFetch('/api/session', { credentials: 'include' })
+      const result = await response.json()
+      if (result.authenticated) {
+        try { await loadCloudState(); setAuthStatus('signedIn') }
+        catch (error) { enterOfflineMode(error) }
+      } else {
+        setAuthError('')
+        setAuthStatus('signedOut')
+      }
+    } catch { /* 连不上新地址：保持现状（离线可用），不踢人 */ }
+  }, [loadCloudState, enterOfflineMode])
+
   useEffect(() => {
     let cancelled = false
+    // 首启动向导激活时不发同源探测（地址还没填，请求必然打空）；由 applyApiAddress 负责。
+    if (Capacitor.isNativePlatform() && !getApiBase()) return
     apiFetch('/api/session', {credentials:'include'}).then(r=>r.json()).then(async result=>{
       if(cancelled)return
       if(!result.authenticated){setAuthStatus('signedOut');return}
@@ -1028,6 +1078,7 @@ export default function App() {
     setDraft('')
   }
 
+  if (apiSetupActive) return <ApiSetupScreen onSubmit={applyApiAddress}/>
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login}/>
 
   const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
@@ -1063,7 +1114,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
     {cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?'云端保存中…':cloudStatus==='error'?'云端暂不可用，本地数据已保留':'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>重连云端</button>}</div>}
     {!chatOpen && <nav className="bottom-nav">
@@ -1082,6 +1133,35 @@ function LoginScreen({status,password,setPassword,error,onSubmit}:{status:'check
       <button className="login-submit" type="submit" disabled={!password}>进入房间</button>
       <small>这是私人预览版。请勿把房间密码分享给别人。</small>
     </>}
+  </form></main>
+}
+
+// Android 首启动「连接服务器」向导：填一次 API 地址，保存即探测会话并推进到
+// 登录页或直接进入（见 applyApiAddress）。样式复用 login-shell/login-card，
+// 与登录页形成同一条视觉动线：连接 → 登录 → 进入房间。
+function ApiSetupScreen({ onSubmit }: { onSubmit: (raw: string) => Promise<string> }) {
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      const failure = await onSubmit(draft)
+      if (failure) setError(failure)
+    } finally { setBusy(false) }
+  }
+  return <main className="login-shell"><form className="login-card" onSubmit={submit}>
+    <div className="login-mark">居</div><p className="login-eyebrow">A SMALL PRIVATE SPACE</p><h1>连接你的服务器</h1>
+    <p className="login-copy">第一次使用，先填写后端 API 地址。保存后会立即连接：已登录直接进入，否则输入房间密码。</p>
+    <label>API 服务器地址
+      <input value={draft} onChange={e=>setDraft(e.target.value)} inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+        placeholder="http://192.168.1.5:4180" autoFocus/>
+    </label>
+    {error&&<p className="login-error">{error}</p>}
+    <button className="login-submit" type="submit" disabled={busy||!draft.trim()}>{busy?'正在连接……':'保存并继续'}</button>
+    <small>地址来自电脑运行 npm start 后打印的卡片；手机需与电脑在同一 Wi-Fi。之后可在 设置 → 开发者 中修改。</small>
   </form></main>
 }
 
@@ -1854,7 +1934,7 @@ function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];setProj
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void}) {
+function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：设置子页先退回「全部设置」列表；已在列表时不消费，交给上层。
   useEffect(()=>{
@@ -1873,13 +1953,13 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   const tzPreview=buildTimeContext(new Date(timeTick),timeZone)
   const tzError=(()=>{const raw=tzInput.trim();if(!raw)return '';try{new Intl.DateTimeFormat('en-US',{timeZone:raw});return ''}catch{return '无法识别的时区名称，请输入 IANA 时区（如 Asia/Shanghai）'}})()
   const cards=[{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
-  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}{section==='dev'&&<><ApiBaseSettings/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map(a=><label key={a.id} style={{display:'block',marginTop:12}}><small>{a.id}</small><input aria-label={a.id+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>云端数据</b><p>{cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div><button className="settings-logout" onClick={onLogout}>退出登录</button></>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── API 服务器地址（开发者）──
 // 运行时覆盖优先级高于构建期 VITE_API_BASE_URL；留空 = 回退到构建期值或同源直连。
 // 只影响请求地址拼接，不改任何 /api/* 的业务语义；保存后立即 setApiBase 生效。
-function ApiBaseSettings() {
+function ApiBaseSettings({ onApplied }: { onApplied?: () => void } = {}) {
   const buildBase = (import.meta as any).env?.VITE_API_BASE_URL ?? ''
   const [draft, setDraft] = useState(() => { try { return localStorage.getItem(API_BASE_STORAGE_KEY) || '' } catch { return '' } })
   const [note, setNote] = useState('')
@@ -1892,6 +1972,8 @@ function ApiBaseSettings() {
       setApiBase(resolveApiBase({ override: normalized, buildBase }))
       setNote(normalized ? '已生效：后续请求将发往 ' + normalized : '已清除覆盖，回退到同源/构建期地址')
     } catch { setNote('保存失败：浏览器存储不可用') }
+    // 通知宿主重查登录态（Android 跨源换地址即时生效，无需重启 App）。
+    onApplied?.()
   }
   const reset = () => {
     try { localStorage.removeItem(API_BASE_STORAGE_KEY) } catch { /* 忽略 */ }
