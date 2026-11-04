@@ -152,6 +152,16 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .cloud-status button{pointer-events:auto}
 .cloud-status.saved{animation:cloud-status-dismiss 1.8s ease forwards}
 @keyframes cloud-status-dismiss{0%,65%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-5px);visibility:hidden}}
+/* 启动门控中性加载页：复用 login 卡片骨架，只加居中与旋转指示，不出现任何登录字样。 */
+.boot-card{display:flex;flex-direction:column;align-items:center;text-align:center}
+.boot-card h1{font-weight:400}
+.boot-spinner{width:22px;height:22px;margin:16px auto 10px;border:2.5px solid #cfc4b3;border-top-color:#8b593b;border-radius:50%;animation:boot-spin .8s linear infinite}
+@keyframes boot-spin{to{transform:rotate(360deg)}}
+/* 云端凭证失效自动降级横幅：文案较长且带两个按钮，允许换行、限制宽度，避免右锚定溢出屏幕。 */
+.cloud-status.fallback-notice{flex-wrap:wrap;justify-content:flex-end;max-width:min(92vw,420px);padding:7px 9px 7px 11px;line-height:1.5}
+.cloud-status.fallback-notice>span{flex:1 1 100%;text-align:right}
+.cloud-status.fallback-notice>button{flex:0 0 auto}
+.cloud-status.fallback-notice>button:last-child{background:#8b593b;color:#fff8ee}
 .settings-logout{margin-top:18px;border:1px solid #d0c4b4;border-radius:10px;background:#eee5d8;color:#705d49;padding:10px 14px}
 .conversation-delete{flex-shrink:0;width:36px;height:36px;display:grid;place-items:center;padding:0;border:1px solid #ddc8bd;background:#f6e8e1;color:#965743;border-radius:50%;font-size:14px;line-height:1}
 .conversation-new:disabled{opacity:.55;cursor:wait}

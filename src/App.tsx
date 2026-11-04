@@ -63,6 +63,8 @@ function readMessages(): Record<Person,ChatMessage[]> {
 }
 
 const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', '自主生活', 'MCP', '模型设置', '角色外观', '工具调用看板']
+// 云端凭证失效 → 已自动切回本地模式的一次性提示语（三处降级点共用同一句文案）。
+const FALLBACK_LOCAL_NOTICE = '云端登录已过期，已切换为本地模式（数据只存本机）'
 // 系统默认名 → 当前默认名（仅迁移「从未改过名」的助手，用户改过的名字保留）。
 // 历史默认名含旧中文名与「默认助手/默认助手2号」，统一视为未自定义并换成编号名。
 function applyDefaultDisplayNames(list: AssistantRecord[]): AssistantRecord[] {
@@ -181,6 +183,8 @@ export default function App() {
   },[sidebarOpen])
   const [funShortcut,setFunShortcut]=useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
+  // 云端凭证失效后自动切回本地模式的一次性横幅文案（非空即显示，可手动关闭）。
+  const [fallbackNotice, setFallbackNotice] = useState('')
   // 首启动不再弹「连接服务器」向导：没有配置地址时默认进入本地模式
   // （LocalBackend 应答全部 /api/*，开箱即用）。云同步地址是设置页里的可选项。
   const [apiSetupActive, setApiSetupActive] = useState(false)
@@ -345,18 +349,34 @@ export default function App() {
       })
     }).catch(() => { /* 非关键路径，失败则仅用本机缓存 */ })
   }, [applySnapshot])
+  // 云端凭证失效的统一降级（根治「一直弹云端登录页」）：清掉残留的服务器地址
+  // 切回完整本地模式——LocalBackend 接管 /api/*、loadCloudState 读本机快照，
+  // cloudReady 恢复 true，保存链路照常工作；同时用一次性横幅告知，给「去设置
+  // 重新连接」的入口。与登录页的「改用本地模式」按钮走同一条路径，只是由系统
+  // 在凭证失效时自动触发，不再把用户挡在登录页外。主动场景（设置页填地址、
+  // 首启动向导）仍进登录页——只有「被动探测到失效」才自动降级。
+  const fallBackToLocal = useCallback(async (reason: string) => {
+    try { localStorage.removeItem(API_BASE_STORAGE_KEY) } catch { /* 忽略 */ }
+    setApiBase('')
+    setAuthError('')
+    setFallbackNotice(reason)
+    // loadCloudState 此时已路由到 LocalBackend：本机有快照则应用，没有则把
+    // 当前内存状态首次迁移进去（upload-local），两条路都以 signedIn 收尾。
+    try { await loadCloudState(); setAuthStatus('signedIn') }
+    catch { setAuthStatus('signedIn'); setCloudStatus('error') }
+  }, [loadCloudState])
   // 云端加载失败的统一处理（任务书场景 D）：凭证失效才回登录页；其余一律
   // 「云端暂不可用」——允许带本地数据进入（cloudReady 保持 false，所有云写入
   // 路径被门控关闭，本地数据原样保留），底部横幅非侵入提示并提供重连。
   const enterOfflineMode = useCallback((error: unknown) => {
     if (classifyCloudLoadError((error as { status?: number } | null)?.status) === 'auth') {
-      setAuthError(error instanceof Error ? error.message : String(error))
-      setAuthStatus('signedOut')
+      // 凭证失效不再踢登录页（用户反馈「一直会有登录云端」）：自动清地址回本地。
+      void fallBackToLocal(FALLBACK_LOCAL_NOTICE)
       return
     }
     setAuthStatus('signedIn')
     setCloudStatus('error')
-  }, [])
+  }, [fallBackToLocal])
   // 重连云端：成功后 loadCloudState 内部会 setCloudReady(true)+saved，同步自然恢复。
   const retryCloudConnection = useCallback(async () => {
     setCloudStatus('loading')
@@ -377,7 +397,7 @@ export default function App() {
       return
     }
     // 密码已验证成功；云端读取失败不再阻拦进入（离线模式，本地数据保留）。
-    try { await loadCloudState(); setAuthStatus('signedIn') }
+    try { await loadCloudState(); setFallbackNotice(''); setAuthStatus('signedIn') }
     catch (error) { enterOfflineMode(error) }
   }, [loginPassword, loadCloudState, enterOfflineMode])
   const logout = useCallback(async () => {
@@ -400,7 +420,7 @@ export default function App() {
       const result = await response.json()
       setApiSetupActive(false)
       if (result.authenticated) {
-        try { await loadCloudState(); setAuthStatus('signedIn') }
+        try { await loadCloudState(); setFallbackNotice(''); setAuthStatus('signedIn') }
         catch (error) { enterOfflineMode(error) }
       } else {
         setAuthError('')
@@ -419,6 +439,7 @@ export default function App() {
       // 清空地址 = 切回本地模式：关掉向导、直接以本地快照进入，不需要密码门。
       setApiSetupActive(false)
       setAuthError('')
+      setFallbackNotice('')
       try { await loadCloudState(); setAuthStatus('signedIn') }
       catch (error) { enterOfflineMode(error) }
       return
@@ -427,7 +448,7 @@ export default function App() {
       const response = await apiFetch('/api/session', { credentials: 'include' })
       const result = await response.json()
       if (result.authenticated) {
-        try { await loadCloudState(); setAuthStatus('signedIn') }
+        try { await loadCloudState(); setFallbackNotice(''); setAuthStatus('signedIn') }
         catch (error) { enterOfflineMode(error) }
       } else {
         setAuthError('')
@@ -442,7 +463,9 @@ export default function App() {
     // 进入 → 读本地快照 → signedIn；配置了地址则按云端语义探测（同历史行为）。
     apiFetch('/api/session', {credentials:'include'}).then(r=>r.json()).then(async result=>{
       if(cancelled)return
-      if(!result.authenticated){setAuthStatus('signedOut');return}
+      // 凭证失效（典型：手机上残留旧服务器地址、token 已过期）→ 不再踢登录页，
+      // 自动清地址切回本地模式，横幅告知可随时去设置重新连接。
+      if(!result.authenticated){void fallBackToLocal(FALLBACK_LOCAL_NOTICE);return}
       try { await loadCloudState(); if(!cancelled)setAuthStatus('signedIn') }
       catch(error){ if(!cancelled)enterOfflineMode(error) }
     }).catch(()=>{
@@ -451,7 +474,7 @@ export default function App() {
       if(!cancelled){setAuthStatus('signedIn');setCloudStatus('error')}
     })
     return ()=>{cancelled=true}
-  }, [loadCloudState, enterOfflineMode])
+  }, [loadCloudState, enterOfflineMode, fallBackToLocal])
 
   useEffect(() => {
     if (!cloudReady || authStatus !== 'signedIn') return
@@ -475,7 +498,7 @@ export default function App() {
         while (nextSnapshot) {
           queuedCloudSnapshot.current = null
           const response = await apiFetch('/api/state', {method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:nextSnapshot})})
-          if (response.status === 401) { setCloudReady(false); setAuthStatus('signedOut'); setAuthError('登录已过期，请重新登录。'); return }
+          if (response.status === 401) { setCloudReady(false); void fallBackToLocal(FALLBACK_LOCAL_NOTICE); return }
           if (!response.ok) throw new Error('HTTP '+response.status)
           lastSaved = nextSnapshot
           nextSnapshot = queuedCloudSnapshot.current
@@ -503,7 +526,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -1090,6 +1113,9 @@ export default function App() {
   }
 
   if (apiSetupActive) return <ApiSetupScreen onSubmit={applyApiAddress}/>
+  // 启动探测期（checking）用中性加载页：不再渲染 LoginScreen，避免真机上
+  // 网络慢时闪现/停留「云端登录」页（用户反馈「一直会有登录云端」的一半来源）。
+  if (authStatus === 'checking') return <main className="login-shell"><div className="login-card boot-card"><div className="login-mark">居</div><p className="login-eyebrow">A SMALL PRIVATE SPACE</p><h1>正在进入小家</h1><div className="boot-spinner" aria-hidden="true"/><p className="login-copy">正在准备房间……</p></div></main>
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login} onUseLocal={() => { try { localStorage.removeItem(API_BASE_STORAGE_KEY) } catch { /* 忽略 */ } setApiBase(''); void recheckAfterApiChange() }}/>
 
   const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
@@ -1127,7 +1153,7 @@ export default function App() {
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
-    {(!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>}
+    {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
       {(['home','room','settings'] as Page[]).map((p, i) => <button key={p} className={page === p ? 'active' : ''} onClick={() => navigate(p)}>{['主页','房间','设置'][i]}</button>)}
     </nav>}
