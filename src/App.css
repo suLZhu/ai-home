@@ -755,3 +755,55 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .chat-header-title{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px}
 .chat-header-title>b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:420px){.chat-header-actions button{width:30px;height:30px;font-size:13px}.chat-header-actions button:last-child{min-width:48px;padding:0 8px}.chat-header-actions .chat-config-toggle{min-width:40px;padding:0 7px;font-size:11px}.chat-header-actions button.select-toggle{display:none}}
+
+/* ── Kelivo 风格设置首页：iOS 分组列表（作用域独立，不受像素风美化包覆盖） ── */
+.kelivo-settings{padding:0 2px 12px}
+.kelivo-search{display:flex;align-items:center;gap:8px;height:42px;padding:0 12px;border:1px solid #d9d4cc!important;border-radius:12px!important;background:var(--card,#fff)!important}
+.kelivo-search>span{font-size:13px;opacity:.55}
+.kelivo-search input{flex:1;min-width:0;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:none;font-size:14px;color:var(--ink,#3a3630)}
+.kelivo-search button{border:0!important;background:transparent!important;box-shadow:none!important;padding:2px 4px;font-size:18px;line-height:1;color:#8a8378}
+/* 像素风美化包对 input 用了高特异性 + !important 的 2px 墨线；这里用 ID 选择器压过去，保持 iOS 风。*/
+#kelivo-search-input{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:var(--ink,#3a3630)!important;padding:0!important}
+#kelivo-ws-person{border:1px solid #d9d4cc!important;border-radius:8px!important;box-shadow:none!important;background:var(--card,#fff)!important;color:var(--ink,#3a3630)!important}
+.settings-heading.kelivo-heading{margin-bottom:8px}
+.settings-heading.kelivo-heading>span,.settings-heading.kelivo-heading p{display:none}
+.settings-heading.kelivo-heading h2{margin:4px 0 2px;font-size:26px;letter-spacing:0}
+.kelivo-status{display:flex;justify-content:space-between;gap:10px;margin:12px 2px 4px;font-size:11px;color:var(--muted,#8a8378)}
+.kelivo-group{margin-top:18px}
+.kelivo-group>h3{margin:0 0 7px 6px;font-size:11px;font-weight:500;letter-spacing:.04em;color:var(--muted,#8a8378)}
+.kelivo-person{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 7px;font-size:12px;color:var(--muted,#8a8378)}
+.kelivo-person select{max-width:150px;padding:5px 8px;border:1px solid #d9d4cc!important;border-radius:8px!important;background:var(--card,#fff)!important;font-size:12px;color:var(--ink,#3a3630)}
+.kelivo-list{overflow:hidden;border:1px solid #e5e0d8!important;border-radius:12px!important;background:var(--card,#fff)!important;box-shadow:none!important}
+.kelivo-row{display:flex!important;align-items:center;gap:12px;width:100%;min-height:46px;padding:0 13px!important;border:0!important;border-bottom:.6px solid #e8e4dd!important;border-radius:0!important;background:var(--card,#fff)!important;box-shadow:none!important;text-align:left;font-size:15px;color:var(--ink,#3a3630)}
+.kelivo-row:last-child{border-bottom:0!important}
+.kelivo-row:active{background:#f2efe9!important}
+.kelivo-row-icon{display:grid;place-items:center;flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:#f0ece4;color:#6f6558;font-size:14px}
+.kelivo-row-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kelivo-row-chevron{flex:0 0 auto;color:#bcb5aa;font-size:19px;line-height:1}
+.kelivo-empty{padding:24px 6px;text-align:center;font-size:13px;color:var(--muted,#8a8378)}
+.kelivo-switch-back{display:block;width:100%;margin-bottom:12px;padding:10px!important;border:1px dashed #cfc7bb!important;border-radius:10px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#7d7367}
+
+/* ── 聊天顶栏配置摘要 + 输入栏快捷开关（Kelivo / RikkaHub 式） ── */
+.chat-header-subline{padding:4px 12px 5px;border-bottom:1px solid var(--line,#e3ddd3);text-align:center;font-size:10px;letter-spacing:.02em;color:var(--muted,#8a8378);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composer-quick{display:flex;gap:6px;overflow-x:auto;padding:0 2px 8px;scrollbar-width:none}
+.composer-quick::-webkit-scrollbar{display:none}
+.composer-quick-chip{display:inline-flex!important;align-items:center;gap:4px;flex:0 0 auto;max-width:150px;padding:6px 10px!important;border:1px solid var(--line,#d8d0c5)!important;border-radius:999px!important;background:var(--card,#fff)!important;box-shadow:none!important;font-size:11px;line-height:1.2;color:var(--ink,#403b35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composer-quick-chip.active{border-color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 12%,var(--card,#fff))!important}
+.composer-quick-all{margin-left:auto}
+.composer-quick-panel{margin-bottom:8px;overflow:hidden;border:1px solid var(--line,#d8d0c5);border-radius:14px;background:var(--card,#fff)}
+.composer-quick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line,#e3ddd3)}
+.composer-quick-head b{font-size:12px;font-weight:500}
+.composer-quick-head button{width:26px;height:26px;border:0!important;background:transparent!important;box-shadow:none!important;font-size:17px;line-height:1}
+.composer-quick-options{max-height:190px;overflow:auto;padding:6px 10px 10px}
+.composer-quick-options .chat-config-option{margin:5px 0;padding:7px 9px;font-size:12px}
+.composer-quick-options .chat-config-option small{font-size:10px}
+.composer-quick-options p.muted{padding:6px 2px;font-size:11px}
+/* 像素风美化包的 `.beautify-pixel *{border-radius:0!important}` 与单类选择器同权重、
+   但加载更晚；这里用更高权重把新组件的圆角拿回来（只作用于 Kelivo 风格组件）。*/
+.shell .kelivo-settings .kelivo-search,
+.shell .kelivo-settings .kelivo-list{border-radius:12px!important}
+.shell .kelivo-settings .kelivo-row-icon{border-radius:7px!important}
+.shell .kelivo-settings .kelivo-person select{border-radius:8px!important}
+.shell .settings-screen .kelivo-switch-back{border-radius:10px!important}
+.shell .fullscreen-chat .composer-quick-chip{border-radius:999px!important}
+.shell .fullscreen-chat .composer-quick-panel{border-radius:14px!important}
