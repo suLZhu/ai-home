@@ -711,3 +711,47 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 /* 底部输入区：给手势条让位，避免发送按钮被遮住 */
 .shell.shell-chat-lock .compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
 .lounge-compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+
+/* ── 资源库（设置区）：三类资源一次添加完 ── */
+.resource-library{display:flex;flex-direction:column;gap:10px}
+.resource-tabs{flex-wrap:wrap}
+.resource-hint{margin:0;font-size:12px;line-height:1.7;color:var(--muted)}
+.resource-list{display:flex;flex-direction:column;gap:8px}
+.resource-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff)}
+.resource-row>div:first-child{flex:1;min-width:0}
+.resource-row b{display:block;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.resource-row small{display:block;margin-top:3px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.resource-row-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.resource-row-actions button,.resource-form button{min-height:32px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--field,#faf6ef);color:var(--ink);font-size:12px;cursor:pointer}
+.resource-row-actions .resource-remove,.resource-form button[type=submit]{background:var(--accent);border-color:var(--accent);color:#fff}
+.resource-row-actions .resource-remove{background:transparent;border-color:var(--line);color:#a14336}
+.resource-owner{font-size:11px;color:var(--muted)}
+.resource-form{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.resource-form h4{margin:0;font-size:13px;font-weight:500}
+.resource-form label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.resource-form input,.resource-form select{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field,#fff);color:var(--ink);font-size:13px}
+.resource-price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.resource-form-actions{display:flex;gap:8px;flex-wrap:wrap}
+.resource-form>small{font-size:11px;line-height:1.6;color:var(--muted)}
+.resource-world>.tool-panel{width:100%}
+
+/* ── 聊天窗口配置抽屉：按当前助手选择模型 / 世界书 / MCP ── */
+.chat-header-actions .chat-config-toggle{width:auto;min-width:46px;border-radius:999px;padding:0 9px;font-size:12px}
+.chat-config-backdrop{position:fixed;inset:0;z-index:120;display:flex;align-items:flex-end;background:rgba(30,27,24,.38)}
+.chat-config-panel{display:flex;flex-direction:column;width:100%;max-height:78dvh;border-top:1px solid var(--line);border-radius:18px 18px 0 0;background:var(--surface,#f5f1f7);color:var(--ink);overflow:hidden}
+.chat-config-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.chat-config-head b{font-size:14px;font-weight:500}
+.chat-config-head small{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
+.chat-config-head button{width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:50%;background:var(--card,#fff);color:var(--ink);font-size:20px;line-height:1}
+.chat-config-body{overflow:auto;padding:4px 16px max(18px,env(safe-area-inset-bottom,0px))}
+.chat-config-section{padding:10px 0;border-bottom:1px solid var(--line)}
+.chat-config-section:last-child{border-bottom:0}
+.chat-config-section h4{margin:0 0 8px;font-size:13px;font-weight:500}
+.chat-config-section>small{display:block;margin-top:8px;font-size:11px;line-height:1.6;color:var(--muted)}
+.chat-config-option{display:flex;align-items:flex-start;gap:10px;margin:6px 0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff);font-size:13px;cursor:pointer}
+.chat-config-option>input{flex:0 0 auto;margin-top:2px;accent-color:var(--accent)}
+.chat-config-option>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.chat-config-option small{display:block;margin-top:3px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.chat-header-title{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px}
+.chat-header-title>b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:420px){.chat-header-actions button{width:30px;height:30px;font-size:13px}.chat-header-actions button:last-child{min-width:48px;padding:0 8px}.chat-header-actions .chat-config-toggle{min-width:40px;padding:0 7px;font-size:11px}.chat-header-actions button.select-toggle{display:none}}

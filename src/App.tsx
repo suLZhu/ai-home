@@ -28,6 +28,8 @@ import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSea
 import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
 // 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
 import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiagLogs, formatDiagSummary } from './requestDiag.mjs'
+// 资源库绑定层：设置区一次性添加模型/MCP/世界书，聊天窗口按助手选择由哪个使用。
+import { emptyBinding, normalizeProfiles, normalizeBindings, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding } from './resourceBindings.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -53,6 +55,10 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string; id?: string; c
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
+// 资源库：全局模型预设池 + 每位助手的绑定。旧快照缺这两个字段时完全沿用旧行为。
+// API Key 仍按助手单独存放（走 /api/keys，不进快照），预设里只放地址/模型/计价。
+const MODEL_PROFILES_KEY = 'ai-home.modelProfiles'
+const BINDINGS_KEY = 'ai-home.bindings'
 type ProjectTask={id:string;text:string;done:boolean}
 type ProjectRecord={id:string;title:string;description:string;status:'进行中'|'已归档';category:string;updatedAt:string;nextStep?:string;tasks?:ProjectTask[]}
 type MemoryEntry = { id:string; title:string; content:string; keywords:string; category:'人物关系'|'经历事件'|'偏好习惯'|'项目进度'|'其他'; pinned:boolean; updatedAt:string }
@@ -133,6 +139,9 @@ export default function App() {
   const [worldEntries, setWorldEntries] = useState<WorldEntry[]>(() => { const raw:any=read('ai-home.worldEntries', []); if(Array.isArray(raw)) return raw.map((e:any)=>({...e,boundCharacters:(Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:[])).map((x:string)=>toAssistantId(String(x)))})); return ASSISTANT_PEOPLE.flatMap((id:any)=>Array.isArray(raw?.[id])?raw[id].map((e:any)=>({...e,boundCharacters:[id]})):[]) })
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.worldbook',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => { const saved=read<Record<string,MCPConnection[]>>('ai-home.mcpConnections',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MCPConnection[]> })
+  // 设置区「资源库」统一维护：模型预设是全局池，bindings 记录每位助手用哪套。
+  const [modelProfiles, setModelProfiles] = useState<ModelProfile[]>(() => normalizeProfiles(read<unknown>(MODEL_PROFILES_KEY, [])))
+  const [bindings, setBindings] = useState<Record<Person,PersonBinding>>(() => normalizeBindings(read<unknown>(BINDINGS_KEY, null), ASSISTANT_PEOPLE))
   const [projects,setProjects]=useState<ProjectRecord[]>(()=>read('ai-home.projects',[]))
   // 用户配置的 IANA 时区：只影响服务端生成的时间上下文（日期/星期/时间/时段），
   // 不发起任何网络请求。非法或空值由 normalizeTimeZone 回退到 Asia/Shanghai。
@@ -271,7 +280,7 @@ export default function App() {
   }
   const clearDiagLogs = () => { try { setDiagLogs([]); persistDiagLogs([]) } catch { /* 诊断失败不影响聊天 */ } }
 
-  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone])
+  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
@@ -314,6 +323,9 @@ export default function App() {
     if (Array.isArray(data.projects)) setProjects(data.projects)
     // 未知/非法时区回退默认值；旧快照没有 timeZone 字段时保持本机配置不变。
     if (typeof data.timeZone === 'string' && data.timeZone.trim()) setTimeZone(normalizeTimeZone(data.timeZone))
+    // 资源库字段是附加的：旧快照没有时不动本机值，行为与改造前一致。
+    if (Array.isArray(data.modelProfiles)) setModelProfiles(normalizeProfiles(data.modelProfiles))
+    if (data.bindings && typeof data.bindings === 'object') setBindings(normalizeBindings(data.bindings, ASSISTANT_PEOPLE))
   }, [])
   const loadCloudState = useCallback(async () => {
     const response = await apiFetch('/api/state', { credentials: 'include' })
@@ -526,7 +538,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal, modelProfiles, bindings])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -586,6 +598,8 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
   useEffect(() => localStorage.setItem('ai-home.mcpConnections', JSON.stringify(mcpConnections)), [mcpConnections])
+  useEffect(() => localStorage.setItem(MODEL_PROFILES_KEY, JSON.stringify(modelProfiles)), [modelProfiles])
+  useEffect(() => localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings)), [bindings])
   useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
   useEffect(() => { try{localStorage.setItem('ai-home.projects',JSON.stringify(projects))}catch{} },[projects])
@@ -646,10 +660,11 @@ export default function App() {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
-    const activeModel = modelConfig[target]
+    // 聊天窗口选的模型预设优先；未绑定时回退旧的「每助手一份」配置（老数据零影响）。
+    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
     const activeApiKey = apiKey[target] || ''
     if (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim()) {
-      setChatError('请先在当前助手的工作区 → 模型设置中填写 API 地址、模型名称和 API Key。')
+      setChatError('请先在「设置 → 资源库」添加模型并在聊天窗口「配置」里选用，然后填写 API Key。')
       return 'fail'
     }
     const sendConversationId = options.conversationId ?? activeConversationIds[target] ?? ''
@@ -660,7 +675,7 @@ export default function App() {
     const runtimeKey='ai-home.worldbookRuntime.'+target
     let runtime:Record<string,{activeUntil?:number;cooldownUntil?:number}>={};try{runtime=JSON.parse(localStorage.getItem(runtimeKey)||'{}')}catch{}
     const matched:WorldEntry[]=[]
-    for(const entry of worldEntries.filter(e=>e.enabled&&e.boundCharacters?.includes(target))){
+    for(const entry of worldEntries.filter(e=>e.enabled&&isWorldEntryBound(e,target))){
       const scanText=[text,...history.slice(-(entry.scanDepth||4)).reverse().map(m=>m.content)].join('\n')
       const state=runtime[entry.id]||{}
       const stickyActive=messageCount<=(state.activeUntil||0)
@@ -773,7 +788,8 @@ export default function App() {
         const listResponse=await apiFetch('/api/mcp?person='+encodeURIComponent(target),{credentials:'include'})
         if(listResponse.ok){
           const listData=await listResponse.json()
-          for(const connection of (listData.connections||[]).filter((c:any)=>c.enabled)){
+          // MCP 仍由服务端按 person 隔离；这里只按聊天窗口的勾选再过滤一层启用项。
+          for(const connection of resolveMcpConnections(listData.connections, bindings[target])){
             try {
               const toolResponse=await apiFetch('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})})
               if(!toolResponse.ok) continue
@@ -1140,6 +1156,7 @@ export default function App() {
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} roomName={roomName} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen}
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
+        modelProfiles={modelProfiles} bindings={bindings} setBindings={setBindings}
         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
@@ -1151,7 +1168,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} onApiBaseApplied={recheckAfterApiChange} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
@@ -1246,6 +1263,7 @@ function Room(props: {
   person: Person, setPerson: (p: Person) => void, displayName:(p:Person)=>string, roomName: string, chatOpen: boolean, setChatOpen: (v: boolean) => void,
   draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
   conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
+  modelProfiles:ModelProfile[], bindings:Record<Person,PersonBinding>, setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
@@ -1562,6 +1580,9 @@ function matchEmoji(e:string,q:string){if(!q)return true;if(e===q)return true;co
 
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
+  // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
+  const [configOpen,setConfigOpen]=useState(false)
+  const closeConfig=useCallback(()=>setConfigOpen(false),[])
   // 会话内搜索：只搜当前会话（p.messages[chatPerson]），不跨会话、不跨助手。
   const [searchQuery,setSearchQuery]=useState('')
   const [searchActiveIdx,setSearchActiveIdx]=useState(-1)  // 当前定位到的匹配下标（-1=尚未选中）
@@ -1916,7 +1937,7 @@ function Chat(p: any) {
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={'chat-config-toggle'+(configOpen?' tool-active':'')} title="配置当前助手使用的模型 / 世界书 / MCP" aria-label="配置当前助手" onClick={()=>setConfigOpen(v=>!v)}>配置</button><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
@@ -1948,6 +1969,7 @@ function Chat(p: any) {
     </form>}
     {!selectMode&&<small className="attachment-note">图片可点击放大；TXT、MD、JSON、CSV、LOG 可读取文本并下载读取出的文本副本。其他文件的原文件下载与云端上传后续接入。</small>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
+    {configOpen&&<ChatConfigPanel person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
   </div>
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
@@ -1979,7 +2001,7 @@ function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];setProj
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;onApiBaseApplied?:()=>void}) {
+function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：设置子页先退回「全部设置」列表；已在列表时不消费，交给上层。
   useEffect(()=>{
@@ -1997,8 +2019,159 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   // 时区预览：只读展示当前时区此刻的日期/星期/时间/时段。
   const tzPreview=buildTimeContext(new Date(timeTick),timeZone)
   const tzError=(()=>{const raw=tzInput.trim();if(!raw)return '';try{new Intl.DateTimeFormat('en-US',{timeZone:raw});return ''}catch{return '无法识别的时区名称，请输入 IANA 时区（如 Asia/Shanghai）'}})()
-  const cards=[{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
-  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}</>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  const cards=[{id:'resources',icon:'◈',title:'资源库',desc:'世界书 / MCP / 模型，一次添加完',meta:modelProfiles.length+' 套模型 · '+worldEntries.length+' 条世界书'},{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
+  return <div className="settings-screen"><header className="settings-heading"><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>把常用设置分成小模块，需要时再打开。</p></header>{!section?<div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div>:<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='resources'&&<ResourceLibrary worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}</>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+}
+
+// ── 资源库：设置区一次性添加模型 / 世界书 / MCP，聊天窗口按助手选用 ──────────
+type McpLibraryItem = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean }
+
+// MCP 的服务端按 person 做隔离（安全边界），所以这里逐个助手拉取后合并成一张总表；
+// 添加时可选「全部助手」，一次提交就为每位助手各建一条，不用再切换工作区反复填。
+function useMcpLibrary() {
+  const [connections, setConnections] = useState<McpLibraryItem[]>([])
+  const [error, setError] = useState('')
+  const refresh = useCallback(async () => {
+    const all: McpLibraryItem[] = []
+    for (const p of ASSISTANT_PEOPLE) {
+      try {
+        const r = await apiFetch('/api/mcp?person=' + encodeURIComponent(p), { credentials: 'include' })
+        if (!r.ok) continue
+        const d = await r.json()
+        for (const c of (d.connections || [])) all.push({ ...c, person: p })
+      } catch { /* 单个助手读取失败不影响其他助手 */ }
+    }
+    setConnections(all)
+  }, [])
+  useEffect(() => { void refresh() }, [refresh])
+  return { connections, error, setError, refresh }
+}
+
+const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
+
+function ResourceLibrary({ worldEntries, setWorldEntries, modelProfiles, setModelProfiles, bindings, setBindings, displayName }: {
+  worldEntries: WorldEntry[]; setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>
+  modelProfiles: ModelProfile[]; setModelProfiles: React.Dispatch<React.SetStateAction<ModelProfile[]>>
+  bindings: Record<Person,PersonBinding>; setBindings: React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
+  displayName: (p: Person) => string
+}) {
+  const [tab, setTab] = useState<'model'|'world'|'mcp'>('model')
+  const [draft, setDraft] = useState({ ...EMPTY_PROFILE })
+  const [mcpDraft, setMcpDraft] = useState({ name: '', url: '', token: '', owner: 'all' })
+  const [mcpBusy, setMcpBusy] = useState(false)
+  const mcp = useMcpLibrary()
+  const saveProfile = (e: FormEvent) => {
+    e.preventDefault()
+    if (!draft.name.trim() || !draft.endpoint.trim() || !draft.model.trim()) return
+    const next: ModelProfile = { ...draft, id: draft.id || crypto.randomUUID(), name: draft.name.trim(), endpoint: draft.endpoint.trim(), model: draft.model.trim() }
+    setModelProfiles(old => draft.id ? old.map(p => p.id === draft.id ? next : p) : [next, ...old])
+    setDraft({ ...EMPTY_PROFILE })
+  }
+  const removeProfile = (id: string) => {
+    if (!window.confirm('删除这套模型预设？已选用它的助手会回退到工作区里的旧模型配置。')) return
+    setModelProfiles(old => old.filter(p => p.id !== id))
+    setBindings(old => Object.fromEntries(ASSISTANT_PEOPLE.map(p => [p, old[p]?.modelProfileId === id ? { ...(old[p] || emptyBinding()), modelProfileId: '' } : (old[p] || emptyBinding())])) as Record<Person,PersonBinding>)
+  }
+  const addMcp = async (e: FormEvent) => {
+    e.preventDefault(); setMcpBusy(true); mcp.setError('')
+    const owners = mcpDraft.owner === 'all' ? ASSISTANT_PEOPLE : [mcpDraft.owner]
+    try {
+      for (const person of owners) {
+        const r = await apiFetch('/api/mcp', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, name: mcpDraft.name, url: mcpDraft.url, transport: 'httpStream', token: mcpDraft.token }) })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d.error || '保存 MCP 失败')
+      }
+      setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
+      await mcp.refresh()
+    } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
+    finally { setMcpBusy(false) }
+  }
+  const removeMcp = async (c: McpLibraryItem) => {
+    if (!window.confirm('移除「' + c.name + '」（' + displayName(c.person) + '）？')) return
+    mcp.setError('')
+    try {
+      const r = await apiFetch('/api/mcp/' + c.id, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '移除失败') }
+      await mcp.refresh()
+    } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
+  }
+  return <div className="resource-library">
+    <div className="library-filter-tabs resource-tabs">
+      {([['model','模型预设'],['world','世界书'],['mcp','MCP 服务']] as const).map(([key,label]) => <button type="button" key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}<small>{key==='model'?modelProfiles.length:key==='world'?worldEntries.length:mcp.connections.length}</small></button>)}
+    </div>
+    <p className="resource-hint">在这里一次性把资源都添加好；到聊天窗口点顶栏「配置」，再决定当前助手用哪几项。</p>
+    {tab==='model' && <>
+      <div className="resource-list">
+        {modelProfiles.length===0 && <p className="muted">还没有模型预设。添加一套后，聊天窗口里所有助手都能直接选用。</p>}
+        {modelProfiles.map(p => <article className="resource-row" key={p.id}><div><b>{p.name}</b><small>{p.model} · {p.endpoint}</small><small>使用者：{ASSISTANT_PEOPLE.filter(x=>bindings[x]?.modelProfileId===p.id).map(displayName).join('、')||'暂未分配（聊天窗口可选用）'}</small></div><div className="resource-row-actions"><button type="button" onClick={()=>setDraft({...p})}>编辑</button><button type="button" className="resource-remove" onClick={()=>removeProfile(p.id)}>删除</button></div></article>)}
+      </div>
+      <form className="resource-form" onSubmit={saveProfile}><h4>{draft.id?'编辑模型预设':'新增模型预设'}</h4>
+        <label>预设名称<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="例如：日常聊天 · 便宜档" required/></label>
+        <label>API 地址<input value={draft.endpoint} onChange={e=>setDraft({...draft,endpoint:e.target.value})} placeholder="https://你的中转站/v1" required/></label>
+        <label>模型名称<input value={draft.model} onChange={e=>setDraft({...draft,model:e.target.value})} placeholder="例如 gpt-4o-mini" required/></label>
+        <div className="resource-price-grid"><label>输入价<input value={draft.inputPrice} onChange={e=>setDraft({...draft,inputPrice:e.target.value})}/></label><label>输出价<input value={draft.outputPrice} onChange={e=>setDraft({...draft,outputPrice:e.target.value})}/></label><label>缓存价<input value={draft.cachedInputPrice} onChange={e=>setDraft({...draft,cachedInputPrice:e.target.value})}/></label><label>汇率<input value={draft.usdToCny} onChange={e=>setDraft({...draft,usdToCny:e.target.value})}/></label></div>
+        <div className="resource-form-actions"><button type="submit">{draft.id?'保存修改':'添加预设'}</button>{draft.id&&<button type="button" onClick={()=>setDraft({...EMPTY_PROFILE})}>取消编辑</button>}</div>
+        <small>API Key 不放在预设里，仍按助手单独填写（聊天窗口的「模型设置」或设置区「助手与工作区」），也不会上传云端快照。</small>
+      </form>
+    </>}
+    {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
+    {tab==='mcp' && <>
+      <div className="resource-list">
+        {mcp.error && <p className="mcp-error">{mcp.error}</p>}
+        {mcp.connections.length===0 && <p className="muted">还没有 MCP 服务。添加时可选「全部助手」，一次就为每位助手都配上。</p>}
+        {mcp.connections.map(c => <article className="resource-row" key={c.person+':'+c.id}><div><b>{c.name}</b><small>{displayName(c.person)} · {c.url}</small></div><div className="resource-row-actions"><span className="resource-owner">{displayName(c.person)}</span><button type="button" className="resource-remove" onClick={()=>removeMcp(c)}>移除</button></div></article>)}
+      </div>
+      <form className="resource-form" onSubmit={addMcp}><h4>添加 MCP 服务</h4>
+        <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
+        <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
+        <label>Bearer Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password"/></label>
+        <label>归属助手<select value={mcpDraft.owner} onChange={e=>setMcpDraft({...mcpDraft,owner:e.target.value})}><option value="all">全部助手（一次添加）</option>{ASSISTANT_PEOPLE.map(p=><option key={p} value={p}>{displayName(p)}</option>)}</select></label>
+        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在添加…':'添加服务'}</button></div>
+        <small>服务端按助手隔离 MCP 调用（安全边界保留）。「全部助手」会为每位助手各建一条连接；聊天窗口里仍可单独勾选某个助手是否启用。</small>
+      </form>
+    </>}
+  </div>
+}
+
+// 聊天窗口的配置抽屉：只决定「当前助手」用哪套模型、哪几条世界书、哪几个 MCP。
+function ChatConfigPanel({ person, displayName, modelProfiles, bindings, setBindings, worldEntries, setWorldEntries, onClose }: {
+  person: Person; displayName: (p: Person) => string
+  modelProfiles: ModelProfile[]; bindings: Record<Person,PersonBinding>; setBindings: React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
+  worldEntries: WorldEntry[]; setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>
+  onClose: () => void
+}) {
+  const mcp = useMcpLibrary()
+  const binding = bindings[person] || emptyBinding()
+  const mine = mcp.connections.filter(c => c.person === person)
+  const allIds = mine.map(c => c.id)
+  const mcpIds = binding.mcpIds === null ? allIds : binding.mcpIds
+  const patch = (next: PersonBinding) => setBindings(old => ({ ...old, [person]: next }))
+  useEffect(() => {
+    const un = pushBackHandler(() => { onClose(); return true })
+    return un
+  }, [onClose])
+  return <div className="chat-config-backdrop" onClick={onClose}>
+    <section className="chat-config-panel" role="dialog" aria-label="当前助手配置" onClick={e=>e.stopPropagation()}>
+      <header className="chat-config-head"><div><b>{displayName(person)} · 配置</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭配置">×</button></header>
+      <div className="chat-config-body">
+        <section className="chat-config-section"><h4>使用的模型</h4>
+          <label className="chat-config-option"><input type="radio" name="model-profile" checked={!binding.modelProfileId} onChange={()=>patch({...binding,modelProfileId:''})}/><span>工作区原有配置<small>不选用预设时沿用旧设置</small></span></label>
+          {modelProfiles.map(p=><label className="chat-config-option" key={p.id}><input type="radio" name="model-profile" checked={binding.modelProfileId===p.id} onChange={()=>patch({...binding,modelProfileId:p.id})}/><span>{p.name}<small>{p.model} · {p.endpoint}</small></span></label>)}
+          {modelProfiles.length===0&&<p className="muted">设置 → 资源库里还没有模型预设。</p>}
+        </section>
+        <section className="chat-config-section"><h4>世界书条目</h4>
+          {worldEntries.length===0&&<p className="muted">资源库里还没有世界书条目。</p>}
+          {worldEntries.map(e=><label className="chat-config-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,person)} onChange={v=>setWorldEntries(old=>toggleWorldEntryBinding(old,person,e.id,v.target.checked))}/><span>{e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · {e.always?'常驻':'关键词触发'} · {e.boundCharacters?.map(displayName).join('、')||'未绑定'}</small></span></label>)}
+        </section>
+        <section className="chat-config-section"><h4>MCP 服务</h4>
+          {mcp.error&&<p className="mcp-error">{mcp.error}</p>}
+          {mine.length===0&&<p className="muted">这位助手名下还没有 MCP 服务，去「设置 → 资源库」添加。</p>}
+          {mine.map(c=><label className="chat-config-option" key={c.id}><input type="checkbox" checked={mcpIds.includes(c.id)} onChange={v=>patch(toggleMcpId(binding,c.id,v.target.checked,allIds))}/><span>{c.name}<small>{c.url}</small></span></label>)}
+          <small>勾选只控制是否在这位助手的对话里调用；连接与凭证仍由服务端按助手隔离保存。</small>
+        </section>
+      </div>
+    </section>
+  </div>
 }
 
 // ── API 服务器地址（开发者）──
