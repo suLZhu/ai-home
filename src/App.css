@@ -1034,3 +1034,59 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .shell .fullscreen-chat .tray-option,
 .shell .settings-screen .vendor-model-row,
 .shell .settings-screen .chat-pool-picker .pool-row{border-radius:10px!important}
+
+/* ── 供应商：一排两个小图标，点开一家才展开详情（不再平铺长卡片） ── */
+.vendor-icon-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-width:0;margin:2px 0 10px}
+.shell .settings-screen button.vendor-icon-tile{display:flex;align-items:center;gap:9px;min-width:0;width:100%;min-height:52px;padding:8px 9px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:12px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;text-align:left;color:var(--ink,#403b35)}
+.shell .settings-screen button.vendor-icon-tile.active{border-color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 9%,var(--card,#fffdf9))!important}
+.vit-icon{flex:0 0 30px;width:30px;height:30px;display:grid;place-items:center;border-radius:9px!important;background:var(--accent-soft,#f0e8da);color:var(--accent,#8b593b);font-size:11px;font-weight:700;letter-spacing:-.02em}
+.vit-text{min-width:0;display:flex;flex-direction:column;gap:2px}
+.vit-text b,.vit-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vit-text b{font-size:11.5px;font-weight:600}
+.vit-text small{font-size:9.5px;color:var(--muted,#8a7d6d)}
+.vendor-detail-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line,#e6ded2);background:var(--surface,#fbf8f2)}
+.vendor-detail-head b{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .settings-screen .vendor-detail-head button{padding:3px 8px!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a7d6d);font-size:11px}
+.vendor-key-row{grid-template-columns:auto 54px minmax(0,.7fr) minmax(0,1.3fr) 24px!important}
+.shell .settings-screen .vendor-key-row select.vendor-key-role{width:100%;min-width:0;padding:6px 2px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:10.5px}
+.tray-key-hint{margin:0 0 8px;font-size:10px;line-height:1.5;color:var(--muted,#8a7d6d)}
+
+/* ── 世界书：收进设置详情容器，去掉像素风的外扩墨线与内部横向撑宽 ── */
+.shell .settings-screen .resource-world{width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden}
+.shell .settings-screen .resource-world>.worldbook-panel{width:100%;max-width:100%;min-width:0;box-sizing:border-box;margin:0;padding:13px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:14px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;overflow:hidden}
+.shell .settings-screen .resource-world .worldbook-panel *{box-sizing:border-box;min-width:0;max-width:100%}
+.shell .settings-screen .resource-world input,
+.shell .settings-screen .resource-world select,
+.shell .settings-screen .resource-world textarea{width:100%;padding:8px 10px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:12px}
+.shell .settings-screen .resource-world input[type=checkbox],
+.shell .settings-screen .resource-world input[type=radio]{width:auto;padding:0!important}
+.shell .settings-screen .resource-world .library-filter-tabs{width:100%;max-width:100%;min-width:0;overflow-x:auto;box-sizing:border-box}
+.shell .settings-screen .resource-world .world-editor-grid{grid-template-columns:minmax(0,1fr)}
+.shell .settings-screen .resource-world .world-editor,
+.shell .settings-screen .resource-world .world-entry{margin:10px 0;padding:11px;border:1px solid var(--line,#e6ded2)!important;border-radius:12px!important;background:var(--surface,#fbf8f2)!important;box-shadow:none!important}
+
+/* ── MCP：已添加的工具收进一行下拉，选中才展开详情 ── */
+.mcp-tool-picker{display:flex;flex-direction:column;gap:7px;min-width:0;width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--line,#e2d9cc);border-radius:14px!important;background:var(--card,#fffdf9)}
+.mcp-tool-picker>label{display:flex;flex-direction:column;gap:6px;font-size:11.5px;color:var(--muted,#8a7d6d)}
+.shell .settings-screen .mcp-tool-picker select{width:100%;box-sizing:border-box;padding:8px 10px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:12px}
+.mcp-tool-picker .resource-row{margin:0}
+
+/* ── 顶栏会话下拉 / 助手档案名称 / 我的房间头像设置 ── */
+.shell .fullscreen-chat .chat-conversation-select{flex:0 1 88px;min-width:0;max-width:88px;padding:4px 6px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#faf6ef)!important;color:var(--muted,#8a7d6d)!important;box-shadow:none!important;font-size:10.5px}
+@media(max-width:420px){.shell .fullscreen-chat .chat-conversation-select{flex:0 1 72px;max-width:72px}}
+.ap-head-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.shell .room-screen .ap-name-input{width:100%;max-width:180px;box-sizing:border-box;padding:5px 8px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:9px!important;background:var(--field,#faf6ef)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:14px;font-weight:600}
+.my-room-settings{display:flex;flex-direction:column;gap:6px;margin:10px 2px 14px;padding:12px;border:1px solid var(--line,#e2d9cc);border-radius:14px!important;background:var(--card,#fffdf9)}
+.my-room-settings>label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--muted,#8a7d6d)}
+.my-room-settings p{margin:0;font-size:10.5px;line-height:1.5}
+.shell .room-screen .my-room-settings input{width:100%;box-sizing:border-box;padding:8px 10px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:12px}
+.shell .room-screen .room-name-avatar span{display:grid;place-items:center;width:100%;height:100%;font-size:16px;font-weight:700}
+.shell .room-screen .room-name-avatar.editing{outline:2px solid var(--accent,#8b593b)}
+
+/* 新组件的圆角：像素风 `.beautify-pixel *{border-radius:0!important}` 加载更晚，用高权重拿回来 */
+.shell .settings-screen .vendor-icon-grid button.vendor-icon-tile,
+.shell .settings-screen .vendor-icon-grid .vit-icon,
+.shell .settings-screen .resource-world>.worldbook-panel,
+.shell .settings-screen .mcp-tool-picker,
+.shell .fullscreen-chat .chat-conversation-select,
+.shell .room-screen .my-room-settings{border-radius:12px!important}

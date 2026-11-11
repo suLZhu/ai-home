@@ -15,6 +15,7 @@
 //
 // 纯 ESM、无框架依赖；apiBase.mjs 在 local 模式下把 apiFetch 路由到这里。
 import { injectTimeContext } from './timeContext.mjs'
+import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 
 // ── localStorage 存储层 ─────────────────────────────────────────────────────
 const K = {
@@ -236,33 +237,39 @@ async function handleChat(init) {
   const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
   if (!raw) return json(400, { error: '请先填写 API 地址' })
   if (!/^https?:\/\//i.test(raw)) return json(400, { error: 'API 地址需以 http:// 或 https:// 开头' })
-  const apiKey = String(b.apiKey || '').trim()
-  if (!apiKey) return json(400, { error: '请先填写 API Key' })
+  // 多 KEY：候选队列（备用优先、主号兜底）由前端排好；遇到额度 / 鉴权 / 限流自动换下一把。
+  const apiKeys = readKeyCandidates(b)
+  if (!apiKeys.length) return json(400, { error: '请先填写 API Key' })
   const chatBody = b.body
   if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return json(400, { error: '缺少请求体' })
   // 动态时间上下文：与服务端 /api/chat 完全同源（共享纯函数），每轮实时生成。
   chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
   const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
-  let upstream
-  try {
-    upstream = await fetch(target, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
-      body: JSON.stringify(chatBody),
-      redirect: 'error',
-      signal: init && init.signal,
-    })
-  } catch (error) {
-    if (init && init.signal && init.signal.aborted) throw error
-    const msg = error && (error.name === 'TimeoutError' || error.name === 'AbortError') ? '请求被中断或超时' : (error && error.cause && error.cause.code) || (error && error.message) || '请求失败'
-    return json(502, { error: '无法连接该接口：' + msg })
+  for (let i = 0; i < apiKeys.length; i++) {
+    let upstream
+    try {
+      upstream = await fetch(target, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKeys[i] },
+        body: JSON.stringify(chatBody),
+        redirect: 'error',
+        signal: init && init.signal,
+      })
+    } catch (error) {
+      if (init && init.signal && init.signal.aborted) throw error
+      if (i + 1 < apiKeys.length) continue
+      const msg = error && (error.name === 'TimeoutError' || error.name === 'AbortError') ? '请求被中断或超时' : (error && error.cause && error.cause.code) || (error && error.message) || '请求失败'
+      return json(502, { error: '无法连接该接口：' + msg })
+    }
+    if (!upstream.ok) {
+      const text = await upstream.text().catch(() => '')
+      if (isRetryableKeyStatus(upstream.status) && i + 1 < apiKeys.length) continue
+      return json(upstream.status, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 400) : ''}` })
+    }
+    // SSE / 流式响应原样透传给前端 reader（不缓冲）。
+    return upstream
   }
-  if (!upstream.ok) {
-    const text = await upstream.text().catch(() => '')
-    return json(upstream.status, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 400) : ''}` })
-  }
-  // SSE / 流式响应原样透传给前端 reader（不缓冲）。
-  return upstream
+  return json(502, { error: '所有 API Key 均未能完成请求' })
 }
 
 // ── /api/models：直连上游模型列表 ──────────────────────────────────────────

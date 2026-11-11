@@ -16,11 +16,40 @@ export const BUILTIN_VENDORS = [
 
 const str = (v) => String(v ?? '').trim()
 
+// 多 KEY 的角色：备用优先于主号（用户要「先用备用再用主号」）。
+// 旧数据没有 role 时按备注名推断，再按位置兜底：第一把主号、其余备用。
+function normalizeRole(raw, label, index) {
+  const r = str(raw).toLowerCase()
+  if (r === 'primary' || r === 'backup') return r
+  const l = str(label).toLowerCase()
+  if (/备用|备号|backup|spare|secondary/.test(l)) return 'backup'
+  if (/主号|主力|主|primary|main/.test(l)) return 'primary'
+  return index === 0 ? 'primary' : 'backup'
+}
+
+export function keyRoleLabel(role) {
+  return role === 'primary' ? '主号' : '备用'
+}
+
+// 稳定排序：备用(0) → 未分类(1) → 主号(2)，同角色保持填写顺序。
+export function orderedKeys(keys) {
+  const rank = (role) => role === 'backup' ? 0 : role === 'primary' ? 2 : 1
+  return (Array.isArray(keys) ? keys : [])
+    .map((k, i) => ({ k, i }))
+    .sort((a, b) => rank(a.k?.role) - rank(b.k?.role) || a.i - b.i)
+    .map((x) => x.k)
+}
+
 function normalizeKeys(raw) {
   if (!Array.isArray(raw)) return []
   return raw
     .filter((k) => k && typeof k === 'object' && typeof k.id === 'string' && k.id)
-    .map((k) => ({ id: k.id, label: str(k.label) || 'Key', value: str(k.value) }))
+    .map((k, index) => ({
+      id: k.id,
+      label: str(k.label) || 'Key',
+      value: str(k.value),
+      role: normalizeRole(k.role, k.label, index),
+    }))
 }
 
 function normalizeModels(raw, fallback) {
@@ -97,13 +126,14 @@ export function syncVendorProfiles(vendors, profiles) {
   return [...picked, ...manual]
 }
 
-// 多 KEY：把所有供应商的 Key 展平成「按供应商分组」的可选列表。
+// 多 KEY：把所有供应商的 Key 展平成「按供应商分组」的可选列表；
+// 组内按备用 → 主号排序，聊天窗口下拉看到的顺序就是实际尝试顺序。
 export function allVendorKeys(vendors) {
   const out = []
   for (const v of Array.isArray(vendors) ? vendors : []) {
-    for (const k of Array.isArray(v.keys) ? v.keys : []) {
+    for (const k of orderedKeys(normalizeKeys(v.keys))) {
       if (!k || !k.value) continue
-      out.push({ id: k.id, label: k.label, vendorId: v.id, vendorName: v.name, value: k.value })
+      out.push({ id: k.id, label: k.label, role: k.role, vendorId: v.id, vendorName: v.name, value: k.value })
     }
   }
   return out
@@ -114,6 +144,42 @@ export function resolveVendorKey(vendors, keyId) {
   if (!keyId) return ''
   const found = allVendorKeys(vendors).find((k) => k.id === keyId)
   return found ? found.value : ''
+}
+
+// 一次请求的 Key 候选队列：默认「备用优先、主号兜底」，服务端按顺序自动换下一把。
+// vendorId 限定在模型所属供应商内（不同供应商的 Key 不能混用）；显式选中的 Key 提到最前。
+// 旧的「按助手一份」Key 永远排在最后，保证老配置零影响。
+export function resolveKeyCandidates(vendors, keyId, fallbackKey = '', vendorId = '') {
+  const all = allVendorKeys(vendors)
+  const scoped = vendorId ? all.filter((k) => k.vendorId === vendorId) : all.slice()
+  if (keyId) {
+    const i = scoped.findIndex((k) => k.id === keyId)
+    if (i > 0) scoped.unshift(scoped.splice(i, 1)[0])
+    else if (i < 0) {
+      const found = all.find((k) => k.id === keyId)
+      if (found) scoped.unshift(found)
+    }
+  }
+  const out = []
+  for (const k of scoped) if (k.value && !out.includes(k.value)) out.push(k.value)
+  const fb = str(fallbackKey)
+  if (fb && !out.includes(fb)) out.push(fb)
+  return out.slice(0, 6)
+}
+
+// 可重试的上游状态：这些基本都是额度 / 鉴权 / 限流问题，换一把 Key 有意义。
+export function isRetryableKeyStatus(status) {
+  return [401, 402, 403, 408, 429, 500, 502, 503, 504].includes(Number(status))
+}
+
+// 服务端读候选队列：兼容只带单个 apiKey 的旧客户端。最多 6 把，避免无限重试。
+export function readKeyCandidates(body) {
+  const list = body && Array.isArray(body.apiKeys)
+    ? body.apiKeys.map((k) => str(k)).filter(Boolean).slice(0, 6)
+    : []
+  if (list.length) return list
+  const single = str(body?.apiKey)
+  return single ? [single] : []
 }
 
 // 自定义供应商 / 自定义模型的空白模板。

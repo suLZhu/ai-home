@@ -31,7 +31,7 @@ import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiag
 // 资源库绑定层：设置区一次性添加模型/MCP/世界书，聊天窗口按助手选择由哪个使用。
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
-import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, type Vendor } from './vendors.mjs'
+import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, type Vendor } from './vendors.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -676,8 +676,10 @@ export default function App() {
     const target = person
     // 聊天窗口选的模型预设优先；未绑定时回退旧的「每助手一份」配置（老数据零影响）。
     const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
-    // 多 KEY：助手在聊天窗口选了供应商里的某把 Key 就用它，否则回退旧的「每助手一份」Key。
-    const activeApiKey = resolveVendorKey(vendors, bindings[target]?.keyId || '') || apiKey[target] || ''
+    // 多 KEY：默认「备用优先、主号兜底」，服务端按顺序自动换下一把；
+    // 聊天窗口显式选了某把 Key 就把它提到队首。旧的「每助手一份」Key 永远排在最后。
+    const apiKeyCandidates = resolveKeyCandidates(vendors, bindings[target]?.keyId || '', apiKey[target] || '', activeModel.vendorId || '')
+    const activeApiKey = apiKeyCandidates[0] || resolveVendorKey(vendors, bindings[target]?.keyId || '') || apiKey[target] || ''
     if (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim()) {
       setChatError('请先在「设置 → 资源库」添加模型并在聊天窗口「配置」里选用，然后填写 API Key。')
       return 'fail'
@@ -835,7 +837,7 @@ export default function App() {
           // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
           requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
         }))
-        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),timeZone,body:requestBody})})
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody})})
         let response=await chatProxy()
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
@@ -1169,7 +1171,7 @@ export default function App() {
     {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {displayName(toast.person)} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} roomName={roomName} />}
-      {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen}
+      {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen} assistants={assistants} setAssistants={setAssistants}
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
          modelProfiles={modelProfiles} bindings={bindings} setBindings={setBindings}
          vendors={vendors} chatPool={chatPool} setChatPool={setChatPool}
@@ -1182,9 +1184,9 @@ export default function App() {
         enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>flushDeferred(key,true)} cancelDeferred={cancelDeferred}
         editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage}
         tasks={tasks} addTask={addTask} />}
-      {page === 'me' && <MyRoom roomName={roomName} />}
+      {page === 'me' && <MyRoom roomName={roomName} setRoomName={setRoomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
@@ -1261,15 +1263,18 @@ function Home({ onPerson, onMe, time, displayName, characters, roomName }: { onP
   </div>
 }
 
-function MyRoom({roomName}:{roomName:string}) {
+// 主页进来的「我的」工作区：点头像直接展开个人设置，昵称就在这里改。
+// 设置页不再单列「房间与助手名称」，避免同一个名字有三处入口。
+function MyRoom({roomName,setRoomName}:{roomName:string;setRoomName:(v:string)=>void}) {
+  const [editing,setEditing]=useState(false)
   return <div className="room-screen">
-    <header className="room-header"><div className="room-name"><span>Y</span><div><b>{roomName}</b><small>自己的工作区</small></div></div></header>
+    <header className="room-header"><div className="room-name"><button type="button" className={'room-name-avatar'+(editing?' editing':'')} title="点击设置我的昵称" aria-label="点击设置我的昵称" onClick={()=>setEditing(v=>!v)}><span>Y</span></button><div><b>{roomName||'我的房间'}</b><small>自己的工作区 · 点头像设置</small></div></div></header>
+    {editing&&<div className="my-room-settings"><label>我的昵称<input aria-label="我的昵称" maxLength={12} value={roomName} onChange={e=>setRoomName(e.target.value)} placeholder="给自己起个名字"/></label><p className="muted">这里改的名字会同步显示在主页入口。助手的名称在各自房间的头像里改。</p></div>}
     <div className="workspace-title">我的空间</div>
     <div className="tool-grid">
       <button><b>日历与日程</b><span>安排今天与之后的事情</span></button>
       <button><b>我的备忘</b><span>只属于自己的记录</span></button>
       <button><b>共同记忆</b><span>与两个角色共同留下的事</span></button>
-      <button><b>个人设置</b><span>头像、昵称与偏好</span></button>
     </div>
     <p className="home-note">这里以后就是你的房间。AI 房间和你的空间分开。</p>
   </div>
@@ -1277,6 +1282,7 @@ function MyRoom({roomName}:{roomName:string}) {
 
 function Room(props: {
   person: Person, setPerson: (p: Person) => void, displayName:(p:Person)=>string, roomName: string, chatOpen: boolean, setChatOpen: (v: boolean) => void,
+  assistants: AssistantRecord[], setAssistants: React.Dispatch<React.SetStateAction<AssistantRecord[]>>,
   draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
   conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
   modelProfiles:ModelProfile[], bindings:Record<Person,PersonBinding>, setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>,
@@ -1371,20 +1377,23 @@ function WorkspaceApplets({onOpen}:{ onOpen:(t:Tool)=>void }) {
   </div>
 }
 
-// 助手档案：房间里点助手头像后唯一的设置面板，四个分段不新开窗口。
+// 助手档案：房间里点助手头像后唯一的设置面板。名称直接在这里改，
+// 主动任务已移到工作区小程序，这里只留人物设置与长 / 短期记忆三段。
 function AssistantProfile(p: any) {
   const person=p.person as Person
-  const [tab,setTab]=useState<'人物'|'长期'|'短期'|'任务'>('人物')
+  const [tab,setTab]=useState<'人物'|'长期'|'短期'>('人物')
   const recent:ChatMessage[]=(p.messages[person]||[]).slice(-12)
-  const tabs=[['人物','人物设置'],['长期','长期记忆'],['短期','短期记忆'],['任务','主动任务']] as const
+  const tabs=[['人物','人物设置'],['长期','长期记忆'],['短期','短期记忆']] as const
+  const rename=(name:string)=>p.setAssistants((old:AssistantRecord[])=>old.some(a=>a.id===person)?old.map(a=>a.id===person?{...a,name}:a):[...old,{id:person,name}])
+  // 失焦时把新名字同步进角色卡，避免「显示叫小禾、提示词里还叫 assistant-001」。
+  const syncCardName=(name:string)=>p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||{} as CharacterCard),name:name.trim()||p.displayName(person)}}))
   return <div className="assistant-profile">
-    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div><b>{p.displayName(person)}</b><small>人物 · 记忆 · 主动任务</small></div></div>
+    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={p.displayName(person)} onChange={e=>rename(e.target.value)} onBlur={e=>syncCardName(e.target.value)}/><small>人物 · 长期记忆 · 短期记忆（名称可直接改）</small></div></div>
     <div className="ap-tabs" role="tablist" aria-label="助手档案">{tabs.map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} className={'ap-tab'+(tab===key?' active':'')} key={key} onClick={()=>setTab(key)}>{label}</button>)}</div>
     <div className="ap-body">
       {tab==='人物'&&<CharacterSettings key={person} value={p.characters[person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))}/>}
       {tab==='长期'&&<><MemoryWorkbench person={person} personLabel={p.displayName} entries={p.memoryEntries[person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>}
       {tab==='短期'&&<div className="ap-short"><p className="muted">短期记忆就是当前会话最近的聊天：换一条会话就会变，不会长期保存。想一直留着的事，请加到「长期记忆」。</p><div className="ap-recent">{recent.length?recent.map((m,i)=><div className={'ap-recent-row '+m.role} key={m.id||i}><b>{m.role==='user'?'我':p.displayName(person)}</b><span>{(m.content||'（图片 / 附件）').slice(0,90)||'（空消息）'}</span></div>):<p className="muted">这个会话还没有消息。</p>}</div></div>}
-      {tab==='任务'&&<TaskManager person={person} personLabel={p.displayName}/>}
     </div>
   </div>
 }
@@ -1667,14 +1676,11 @@ function ComposeGlyph({id}:{id:ComposeToolId}) {
     {id==='tools'&&<g {...s}><circle cx="6" cy="17.5" r="2.6"/><circle cx="6" cy="6.5" r="2.6"/><path d="M8.3 8.2 18 19M8.3 15.8 18 5"/></g>}
   </svg>
 }
-// 「工具」图标里的小程序：后续做了小程序 / 单独可视化网页，往这里加一项即可。
+// 「工具」图标里的小程序：附件统一走输入框右下角的 ＋，这里暂时只放主动任务。
+// 后续做了小程序 / 单独可视化网页，往这个数组加一项即可（其余位置留空）。
 type ChatQuickTool = { id:string; label:string; desc:string; icon:string }
 const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
-  { id:'attach', label:'图片 / 文件', desc:'发送附件', icon:'▤' },
   { id:'task', label:'主动任务', desc:'定时任务与工作流', icon:'◷' },
-  { id:'proactive', label:'自主行动', desc:'自主生活面板', icon:'☀' },
-  { id:'board', label:'工具看板', desc:'工具调用记录', icon:'▦' },
-  { id:'history', label:'历史会话', desc:'回到房间切换对话', icon:'☰' },
 ]
 
 function Chat(p: any) {
@@ -1688,10 +1694,8 @@ function Chat(p: any) {
   const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{setTray(t=>t===id?'':id);setEmojiOpen(false);setMoreOpen(false)}
   const runQuickTool=(id:string)=>{
     setTray('')
-    if(id==='attach'){imageInput.current?.click();return}
-    if(id==='history'){p.setChatOpen(false);return}
-    const tool=id==='task'?'工作流':id==='proactive'?'自主生活':'工具调用看板'
-    p.setChatOpen(false);p.setActiveTool(tool)
+    if(id==='task'){p.setChatOpen(false);p.setActiveTool('工作流');return}
+    // 未来新增的小程序在这里按 id 分支即可，默认不动聊天窗口。
   }
   // 绑定条点哪一段，配置抽屉就定位到哪一段；seq 保证重复点同一段也会重新定位。
   const [configFocus,setConfigFocus]=useState<''|'model'|'world'|'mcp'>('')
@@ -2036,6 +2040,15 @@ function Chat(p: any) {
     p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===id?{...x,title:name,updatedAt:new Date().toISOString()}:x)}))
   }
   function startRename(id:string,title:string,from:'header'|'list'){setRenameId(id);setRenameVal(title||'');setRenameFrom(from)}
+  // 会话切换收进顶栏一个紧凑下拉：原来的大头像卡片删掉，功能不丢。
+  function switchConversation(id:string){
+    const current=p.activeConversationIds[chatPerson]
+    if(id===current)return
+    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===current?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x)}))
+    p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:id}))
+    p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===id)?.messages||[]}))
+    p.setChatError('')
+  }
   const activeConv=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson])
   const activeTitle=activeConv?.title||p.displayName(p.person)
   // 单条消息 = [复选框(多选时)] + [头像] + message-stack 列容器（气泡/修改框 + 操作栏 + 元信息）。
@@ -2079,7 +2092,7 @@ function Chat(p: any) {
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}<select className="chat-conversation-select" aria-label="切换会话" value={p.activeConversationIds[chatPerson]||''} onChange={e=>switchConversation(e.target.value)}>{(p.conversations[chatPerson]||[]).map((c:Conversation)=><option key={c.id} value={c.id}>{c.title||'新对话'}</option>)}</select></span><span className="chat-header-actions"><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {/* 状态只读一行：所有「选哪个 / 开哪个」都交给输入框底部的图标面板，避免第二套入口。 */}
     <div className="chat-header-subline chat-binding-bar" role="status" aria-label="当前助手的绑定状态">
       <span className="chat-bind-person">{p.displayName(chatPerson)}</span>
@@ -2090,7 +2103,7 @@ function Chat(p: any) {
     </div>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
-    <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
+    {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>{p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}</div>
@@ -2109,7 +2122,8 @@ function Chat(p: any) {
       <div className="compose-tray-head"><b>{tray==='model'?'模型':tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次选择</small><button type="button" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
       <div className="compose-tray-body">
         {tray==='model'&&<>
-          <label className="tray-key-row"><span>使用哪把 Key</span><select aria-label="选择 API Key" value={quickBinding.keyId||''} onChange={e=>patchBinding({...quickBinding,keyId:e.target.value})}><option value="">按助手原有 Key</option>{vendorKeyOptions.map(k=><option key={k.id} value={k.id}>{k.vendorName} · {k.label}</option>)}</select></label>
+          <label className="tray-key-row"><span>使用哪把 Key</span><select aria-label="选择 API Key" value={quickBinding.keyId||''} onChange={e=>patchBinding({...quickBinding,keyId:e.target.value})}><option value="">自动 · 先备用再主号</option>{vendorKeyOptions.map(k=><option key={k.id} value={k.id}>{k.vendorName} · {k.label}（{keyRoleLabel(k.role)}）</option>)}</select></label>
+          <p className="tray-key-hint">自动模式按「备用 → 主号」依次尝试，前一把额度或鉴权失败会换下一把；显式选中则把它排在最前。</p>
           {modelGroups.length===0&&<p className="muted">设置 → 供应商 → 添加供应商里，先在模型前面打勾。</p>}
           {modelGroups.map(([vendor,list])=><div className="tray-group" key={vendor}><b className="tray-group-title">{vendor}</b>{list.map(m=><label className="tray-option" key={m.id}><input type="radio" name="tray-model" checked={quickBinding.modelProfileId===m.id} onChange={()=>patchBinding({...quickBinding,modelProfileId:m.id})}/><span>{m.name}<small>{m.model}</small></span></label>)}</div>)}
           <label className="tray-option"><input type="radio" name="tray-model" checked={!quickBinding.modelProfileId} onChange={()=>patchBinding({...quickBinding,modelProfileId:''})}/><span>工作区原有配置<small>沿用助手旧的接口与模型</small></span></label>
@@ -2125,7 +2139,9 @@ function Chat(p: any) {
         </>}
         {tray==='tools'&&<div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>}
       </div>
-      <div className="compose-tray-foot"><span>清单在「设置 → {tray==='world'?'世界书':tray==='mcp'?'MCP':'供应商'}」里勾选</span><button type="button" onClick={()=>{setTray('');openConfig(tray==='world'?'world':tray==='mcp'?'mcp':'model')}}>完整绑定设置 ›</button></div>
+      <div className="compose-tray-foot">{tray==='tools'
+        ? <><span>后续小程序 / 可视化网页会加在这里</span><span>附件走右下角 ＋</span></>
+        : <><span>清单在「设置 → {tray==='world'?'世界书':tray==='mcp'?'MCP':'供应商'}」里勾选</span><button type="button" onClick={()=>{setTray('');openConfig(tray==='world'?'world':tray==='mcp'?'mcp':'model')}}>完整绑定设置 ›</button></>}</div>
     </div>}
     {selectMode
       ? <div className="multi-select-bar" role="toolbar" aria-label="多选删除操作">
@@ -2185,7 +2201,7 @@ export function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,chatPool,setChatPool,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;onApiBaseApplied?:()=>void}) {
+function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,chatPool,setChatPool,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：二级页先退回一级，一级页再退回设置首页。
   useEffect(()=>{
@@ -2212,8 +2228,8 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.length):section==='world'?'world':section==='mcp'?'mcp':'') as ''|'model'|'world'|'mcp'
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
-  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、名称、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{section==='vendor:add'&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='vendor')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='theme:global'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>统一设置 · 资源库</b><p>模型预设、世界书条目、MCP 服务，以及各助手的 API Key 与默认接口，都在这里一次配置；聊天窗口只负责按助手选用。</p><div className="settings-shortcuts"><div><button type="button" onClick={()=>setSection('resources:model')}>模型与 API Key</button><button type="button" onClick={()=>setSection('resources:world')}>世界书</button><button type="button" onClick={()=>setSection('resources:mcp')}>MCP 服务</button></div></div></div><div className="setting-card settings-inner-card"><b>工作区小程序</b><p>按助手快速打开记忆、工作流与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>房间与助手名称</summary><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>助手显示名称</b><p className="muted">修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='room'&&<div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{section==='vendor:add'&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='vendor')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='theme:global'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：一级只有 5 项，主题美化 / 供应商各自再分二级 ──────────
@@ -2229,7 +2245,7 @@ function KelivoSettingsHome({onSelect,onClassic,modelProfiles,worldEntries,cloud
       {id:'vendor',icon:'◈',label:'供应商',keywords:'添加供应商 订阅账号 模型 预设 接口 地址 API Key 账号 连接 资源库',section:'vendor'},
       {id:'world',icon:'▤',label:'世界书',keywords:'设定 条目 关键词 资源库 全局条目 勾选池 001 002',section:'world'},
       {id:'mcp',icon:'⌘',label:'MCP',keywords:'服务 工具 服务器 连接 资源库 工具权限 勾选池 001 002',section:'mcp'},
-      {id:'data',icon:'☁',label:'数据与管理',keywords:'云同步 本地 备份 时区 登录 退出 用量 统计 房间名称 助手名称 开发者 诊断 黑匣子 日志 关于 主动任务 自主生活 工具调用看板 技能库',section:'data'},
+      {id:'data',icon:'☁',label:'数据与管理',keywords:'云同步 本地 备份 时区 登录 退出 用量 统计 开发者 诊断 黑匣子 日志 关于 主动任务 自主生活 工具调用看板 技能库',section:'data'},
     ]},
     {title:'更多',rows:[
       {id:'classic',icon:'⟲',label:'切换回经典设置',keywords:'卡片 网格 旧界面',classic:true},
@@ -2313,16 +2329,17 @@ function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName
   </div>
 }
 
-// ── 供应商中心：预置服务商 + 模型多选打勾 + 多 KEY ─────────────────────────
+// ── 供应商中心：一排两个小图标，点开一家才展开模型清单与多 KEY ─────────────
 // 打勾的模型同步进 modelProfiles（聊天窗口按供应商名称分组选用）；Key 只留本机。
 function VendorCenter({vendors,setVendors,setModelProfiles}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
 }) {
-  const [open,setOpen]=useState<string>(vendors[0]?.id||'')
+  const [open,setOpen]=useState<string>('')
   const [modelDrafts,setModelDrafts]=useState<Record<string,string>>({})
   const [keyDrafts,setKeyDrafts]=useState<Record<string,{label:string;value:string}>>({})
   const [showKeys,setShowKeys]=useState<Record<string,boolean>>({})
+  const [showNew,setShowNew]=useState(false)
   const [newName,setNewName]=useState('')
   const [newEndpoint,setNewEndpoint]=useState('')
   // 每次改动都基于当前 vendors 算出新数组，再同步模型池；不在 setState updater 里嵌套 setState。
@@ -2335,37 +2352,40 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     if(!name)return
     const id='custom-'+Math.random().toString(36).slice(2,10)
     commit([...vendors,{id,name,endpoint,builtin:false,keys:[],models:[]}] as Vendor[])
-    setOpen(id);setNewName('');setNewEndpoint('')
+    setOpen(id);setShowNew(false);setNewName('');setNewEndpoint('')
   }
   const selectedModels=vendors.reduce((n,v)=>n+v.models.filter(m=>m.selected).length,0)
   const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
+  const active=vendors.find(v=>v.id===open)
   return <div className="vendor-center">
     <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{selectedModels} 个模型已勾选</span><span>{keyCount} 把 Key</span></div>
-    <p className="resource-hint">点开一家供应商，在模型前面打勾（可多选）；勾好的模型会按供应商名称出现在聊天窗口的「模型」小图标里。一家供应商可以填多把 Key，聊天时选一把用。</p>
-    {vendors.map((v,i)=><div className={'vendor-card'+(open===v.id?' open':'')} key={v.id}>
-      <button type="button" className="vendor-card-head" aria-expanded={open===v.id} onClick={()=>setOpen(open===v.id?'':v.id)}>
-        <span className="vendor-no">{poolLabel(i)}</span>
-        <span className="vendor-title"><b>{v.name}</b><small>{v.endpoint||'未填接口地址'}</small></span>
-        <span className="vendor-meta">{v.models.filter(m=>m.selected).length} 模型 · {v.keys.length} Key</span>
-        <span className="vendor-chevron" aria-hidden="true">›</span>
-      </button>
-      {open===v.id&&<div className="vendor-card-body">
-        <label className="vendor-endpoint">接口地址<input value={v.endpoint} onChange={e=>patch(v.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
+    <p className="resource-hint">点小图标展开一家供应商：在模型前打勾（可多选），一家可填多把 Key。聊天窗口按供应商名称分组选用，Key 默认「先用备用、再用主号」，前一把失败自动换下一把。</p>
+    <div className="vendor-icon-grid">
+      {vendors.map(v=><button type="button" className={'vendor-icon-tile'+(open===v.id?' active':'')} key={v.id} aria-expanded={open===v.id} onClick={()=>setOpen(open===v.id?'':v.id)}>
+        <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
+        <span className="vit-text"><b>{v.name}</b><small>{v.models.filter(m=>m.selected).length} 模型 · {v.keys.length} Key</small></span>
+      </button>)}
+      <button type="button" className={'vendor-icon-tile add'+(showNew?' active':'')} aria-expanded={showNew} onClick={()=>setShowNew(v=>!v)}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
+    </div>
+    {showNew&&<form className="vendor-new" onSubmit={addVendor}><b>添加自定义供应商</b><div className="vendor-add-row"><input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/><input aria-label="接口地址" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/><button type="submit">添加</button></div><small>加好后点它的小图标，照样追加模型与 Key。</small></form>}
+    {active&&<div className="vendor-card open" key={active.id}>
+      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b><button type="button" aria-label="收起供应商详情" onClick={()=>setOpen('')}>收起 ×</button></div>
+      <div className="vendor-card-body">
+        <label className="vendor-endpoint">接口地址<input value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
         <div className="vendor-section"><b>模型清单 <small>打勾 = 加入聊天可选</small></b>
-          {v.models.length===0&&<p className="muted">这家供应商还没有模型，下面追加一个。</p>}
-          {v.models.map(m=><label className="vendor-model-row" key={m.id}><input type="checkbox" checked={m.selected} onChange={e=>patch(v.id,x=>({...x,models:x.models.map(y=>y.id===m.id?{...y,selected:e.target.checked}:y)}))}/><span>{m.name}</span>{m.name!==m.id&&<small>{m.id}</small>}</label>)}
-          <div className="vendor-add-row"><input aria-label="追加模型名称" value={modelDrafts[v.id]||''} onChange={e=>setModelDrafts(d=>({...d,[v.id]:e.target.value}))} placeholder="追加模型，如 deepseek-chat" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();const name=(modelDrafts[v.id]||'').trim();if(name){patch(v.id,x=>({...x,models:[...x.models,{id:name,name,selected:true}]}));setModelDrafts(d=>({...d,[v.id]:''}))}}}}/><button type="button" onClick={()=>{const name=(modelDrafts[v.id]||'').trim();if(!name)return;patch(v.id,x=>({...x,models:[...x.models,{id:name,name,selected:true}]}));setModelDrafts(d=>({...d,[v.id]:''}))}}>添加模型</button></div>
+          {active.models.length===0&&<p className="muted">这家供应商还没有模型，下面追加一个。</p>}
+          {active.models.map(m=><label className="vendor-model-row" key={m.id}><input type="checkbox" checked={m.selected} onChange={e=>patch(active.id,x=>({...x,models:x.models.map(y=>y.id===m.id?{...y,selected:e.target.checked}:y)}))}/><span>{m.name}</span>{m.name!==m.id&&<small>{m.id}</small>}</label>)}
+          <div className="vendor-add-row"><input aria-label="追加模型名称" value={modelDrafts[active.id]||''} onChange={e=>setModelDrafts(d=>({...d,[active.id]:e.target.value}))} placeholder="追加模型，如 deepseek-chat" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();const name=(modelDrafts[active.id]||'').trim();if(name){patch(active.id,x=>({...x,models:[...x.models,{id:name,name,selected:true}]}));setModelDrafts(d=>({...d,[active.id]:''}))}}}}/><button type="button" onClick={()=>{const name=(modelDrafts[active.id]||'').trim();if(!name)return;patch(active.id,x=>({...x,models:[...x.models,{id:name,name,selected:true}]}));setModelDrafts(d=>({...d,[active.id]:''}))}}>添加模型</button></div>
         </div>
-        <div className="vendor-section"><b>多 KEY 模式 <small>聊天窗口里按名称选一把用</small></b>
-          {v.keys.length===0&&<p className="muted">还没填 Key；填好才能在聊天里发消息。</p>}
-          {v.keys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(v.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="API Key" type={showKeys[v.id]?'text':'password'} value={k.value} onChange={e=>patch(v.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="sk-…"/><button type="button" aria-label="删除这把 Key" onClick={()=>patch(v.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
-          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft(v.id).label} onChange={e=>setKeyDrafts(d=>({...d,[v.id]:{...keyDraft(v.id),label:e.target.value}}))} placeholder="备注名（主号 / 备用）"/><input aria-label="新 Key 值" type="password" value={keyDraft(v.id).value} onChange={e=>setKeyDrafts(d=>({...d,[v.id]:{...keyDraft(v.id),value:e.target.value}}))} placeholder="API Key"/><button type="button" onClick={()=>{const d=keyDraft(v.id);if(!d.value.trim())return;patch(v.id,x=>({...x,keys:[...x.keys,{id:crypto.randomUUID(),label:d.label.trim()||('Key '+(x.keys.length+1)),value:d.value.trim()}]}));setKeyDrafts(d=>({...d,[v.id]:{label:'',value:''}}))}}>添加 Key</button></div>
-          <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKeys(s=>({...s,[v.id]:!s[v.id]}))}>{showKeys[v.id]?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
+        <div className="vendor-section"><b>多 KEY 模式 <small>备用优先 · 主号兜底 · 失败自动换</small></b>
+          {active.keys.length===0&&<p className="muted">还没填 Key；填好才能在聊天里发消息。</p>}
+          {active.keys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><select className="vendor-key-role" aria-label="Key 角色" value={k.role||'backup'} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:e.target.value as 'primary'|'backup'}:y)}))}><option value="backup">备用</option><option value="primary">主号</option></select><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="API Key" type={showKeys[active.id]?'text':'password'} value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="sk-…"/><button type="button" aria-label="删除这把 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
+          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft(active.id).label} onChange={e=>setKeyDrafts(d=>({...d,[active.id]:{...keyDraft(active.id),label:e.target.value}}))} placeholder="备注名（主号 / 备用）"/><input aria-label="新 Key 值" type="password" value={keyDraft(active.id).value} onChange={e=>setKeyDrafts(d=>({...d,[active.id]:{...keyDraft(active.id),value:e.target.value}}))} placeholder="API Key"/><button type="button" onClick={()=>{const d=keyDraft(active.id);if(!d.value.trim())return;patch(active.id,x=>({...x,keys:[...x.keys,{id:crypto.randomUUID(),label:d.label.trim()||('Key '+(x.keys.length+1)),value:d.value.trim(),role:x.keys.length===0?'primary':'backup'}]}));setKeyDrafts(d=>({...d,[active.id]:{label:'',value:''}}))}}>添加 Key</button></div>
+          <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKeys(s=>({...s,[active.id]:!s[active.id]}))}>{showKeys[active.id]?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
         </div>
-        {!v.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+v.name+'」及其 '+v.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==v.id));setOpen('')}}>删除这家供应商</button>}
-      </div>}
-    </div>)}
-    <form className="vendor-new" onSubmit={addVendor}><b>添加自定义供应商</b><div className="vendor-add-row"><input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/><input aria-label="接口地址" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/><button type="submit">添加</button></div><small>加好后点开卡片，照样追加模型与 Key。</small></form>
+        {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==active.id));setOpen('')}}>删除这家供应商</button>}
+      </div>
+    </div>}
   </div>
 }
 
@@ -2400,6 +2420,8 @@ function ResourceLibrary({ initialTab, only, worldEntries, setWorldEntries, mode
   const [draft, setDraft] = useState({ ...EMPTY_PROFILE })
   const [mcpDraft, setMcpDraft] = useState({ name: '', url: '', token: '', owner: 'all' })
   const [mcpBusy, setMcpBusy] = useState(false)
+  // 已添加的服务收进一个下拉：默认只占一行，选中才展开详情与移除按钮。
+  const [mcpSelected, setMcpSelected] = useState('')
   const mcp = useMcpLibrary()
   const saveProfile = (e: FormEvent) => {
     e.preventDefault()
@@ -2456,11 +2478,6 @@ function ResourceLibrary({ initialTab, only, worldEntries, setWorldEntries, mode
     </>}
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
     {tab==='mcp' && <>
-      <div className="resource-list">
-        {mcp.error && <p className="mcp-error">{mcp.error}</p>}
-        {mcp.connections.length===0 && <p className="muted">还没有 MCP 服务。添加时可选「全部助手」，一次就为每位助手都配上。</p>}
-        {mcp.connections.map(c => <article className="resource-row" key={c.person+':'+c.id}><div><b>{c.name}</b><small>{displayName(c.person)} · {c.url}</small></div><div className="resource-row-actions"><span className="resource-owner">{displayName(c.person)}</span><button type="button" className="resource-remove" onClick={()=>removeMcp(c)}>移除</button></div></article>)}
-      </div>
       <form className="resource-form" onSubmit={addMcp}><h4>添加 MCP 服务</h4>
         <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
         <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
@@ -2469,6 +2486,17 @@ function ResourceLibrary({ initialTab, only, worldEntries, setWorldEntries, mode
         <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在添加…':'添加服务'}</button></div>
         <small>服务端按助手隔离 MCP 调用（安全边界保留）。「全部助手」会为每位助手各建一条连接；聊天窗口里仍可单独勾选某个助手是否启用。</small>
       </form>
+      {/* 已添加的工具收进下拉选框：默认只有一行，选中才展开详情与移除按钮。 */}
+      <div className="mcp-tool-picker">
+        {mcp.error && <p className="mcp-error">{mcp.error}</p>}
+        <label>已添加的工具 · {mcp.connections.length} 个
+          <select aria-label="选择已添加的 MCP 工具" value={mcpSelected} onChange={e=>setMcpSelected(e.target.value)}>
+            <option value="">{mcp.connections.length?'（选择查看或移除）':'还没有服务，先在上面添加'}</option>
+            {mcp.connections.map((c,i)=><option key={c.person+':'+c.id} value={c.person+':'+c.id}>{poolLabel(i)} {c.name} · {displayName(c.person)}</option>)}
+          </select>
+        </label>
+        {mcpSelected&&(()=>{const c=mcp.connections.find(x=>x.person+':'+x.id===mcpSelected);return c?<article className="resource-row"><div><b>{c.name}</b><small>{displayName(c.person)} · {c.url}</small></div><div className="resource-row-actions"><button type="button" className="resource-remove" onClick={()=>{removeMcp(c);setMcpSelected('')}}>移除</button></div></article>:null})()}
+      </div>
     </>}
   </div>
 }

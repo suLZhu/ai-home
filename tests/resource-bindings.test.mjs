@@ -7,7 +7,8 @@ import {
 } from '../src/resourceBindings.mjs'
 import {
   BUILTIN_VENDORS, normalizeVendors, vendorModelProfileId, syncVendorProfiles,
-  allVendorKeys, resolveVendorKey,
+  allVendorKeys, resolveVendorKey, resolveKeyCandidates, readKeyCandidates,
+  isRetryableKeyStatus, orderedKeys, keyRoleLabel,
 } from '../src/vendors.mjs'
 
 const A = 'assistant-yanweixi'
@@ -168,4 +169,48 @@ test('多 KEY：按 id 取到对应 Key，未选或失效时回退空串', () =>
   assert.equal(resolveVendorKey(vendors, 'k2'), 'sk-b')
   assert.equal(resolveVendorKey(vendors, ''), '')
   assert.equal(resolveVendorKey(vendors, 'ghost'), '')
+})
+
+// ── 多 KEY：备用优先、主号兜底、失败自动换 ──
+test('旧数据按备注名推断主号/备用，排序时备用在前', () => {
+  const vendors = normalizeVendors([{
+    id: 'deepseek', name: 'DeepSeek', endpoint: 'https://x/v1', builtin: true,
+    keys: [
+      { id: 'k1', label: '主号', value: 'sk-main' },
+      { id: 'k2', label: '备用', value: 'sk-back' },
+      { id: 'k3', label: '临时', value: 'sk-tmp' },
+    ], models: [],
+  }])
+  assert.deepEqual(vendors[0].keys.map(k => k.role), ['primary', 'backup', 'backup'])
+  assert.deepEqual(orderedKeys(vendors[0].keys).map(k => k.id), ['k2', 'k3', 'k1'])
+  assert.equal(keyRoleLabel('primary'), '主号')
+  assert.equal(keyRoleLabel('backup'), '备用')
+  // 下拉里看到的顺序同样备用优先
+  assert.deepEqual(allVendorKeys(vendors).map(k => k.id), ['k2', 'k3', 'k1'])
+})
+
+test('候选队列：默认备用 → 主号 → 旧的按助手 Key，显式选中的提到最前', () => {
+  const vendors = normalizeVendors([{
+    id: 'deepseek', name: 'DeepSeek', endpoint: 'https://x/v1', builtin: true,
+    keys: [
+      { id: 'k1', label: '主号', value: 'sk-main', role: 'primary' },
+      { id: 'k2', label: '备用', value: 'sk-back', role: 'backup' },
+    ], models: [],
+  }])
+  assert.deepEqual(resolveKeyCandidates(vendors, '', 'sk-old', 'deepseek'), ['sk-back', 'sk-main', 'sk-old'])
+  assert.deepEqual(resolveKeyCandidates(vendors, 'k1', 'sk-old', 'deepseek'), ['sk-main', 'sk-back', 'sk-old'])
+  assert.deepEqual(resolveKeyCandidates(vendors, 'ghost', 'sk-old', 'deepseek'), ['sk-back', 'sk-main', 'sk-old'])
+  // 不同供应商的 Key 不混用；没配 Key 时仍回退旧 Key
+  assert.deepEqual(resolveKeyCandidates(vendors, '', 'sk-old', 'siliconflow'), ['sk-old'])
+  assert.deepEqual(resolveKeyCandidates(vendors, '', '', 'deepseek'), ['sk-back', 'sk-main'])
+})
+
+test('服务端读候选队列兼容旧客户端，并限制最多 6 把', () => {
+  assert.deepEqual(readKeyCandidates({ apiKey: 'sk-one' }), ['sk-one'])
+  assert.deepEqual(readKeyCandidates({ apiKey: 'sk-one', apiKeys: ['sk-a', '', ' sk-b '] }), ['sk-a', 'sk-b'])
+  assert.deepEqual(readKeyCandidates({ apiKeys: ['1', '2', '3', '4', '5', '6', '7'] }).length, 6)
+  assert.deepEqual(readKeyCandidates({}), [])
+  assert.equal(isRetryableKeyStatus(401), true)
+  assert.equal(isRetryableKeyStatus(429), true)
+  assert.equal(isRetryableKeyStatus(400), false)
 })

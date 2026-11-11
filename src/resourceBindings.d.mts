@@ -25,6 +25,8 @@ export type ChatPool = {
 export type ModelConfigLike = {
   endpoint: string
   model: string
+  vendor?: string
+  vendorId?: string
   inputPrice?: string
   outputPrice?: string
   cachedInputPrice?: string

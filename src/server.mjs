@@ -22,6 +22,7 @@ import { createTaskScheduler, recoverInterruptedTasks } from './server/agent/Tas
 import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun } from './server/agent/ProactiveHeat.mjs'
 import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './server/agent/MemoryStore.mjs'
 import { injectTimeContext } from './timeContext.mjs'
+import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -383,8 +384,10 @@ const apiServer = createServer(async (req, res) => {
       const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
       if (!raw) return send(res, 400, { error: '请先填写 API 地址' })
       if (!/^https?:\/\//i.test(raw)) return send(res, 400, { error: 'API 地址需以 http:// 或 https:// 开头' })
-      const apiKey = String(b.apiKey || '').trim()
-      if (!apiKey) return send(res, 400, { error: '请先填写 API Key' })
+      // 多 KEY：前端按「备用 → 主号」排好候选，上游 401/额度/限流时自动换下一把。
+      // 旧客户端只带 apiKey 时长度为 1，行为与改造前完全一致。
+      const apiKeys = readKeyCandidates(b)
+      if (!apiKeys.length) return send(res, 400, { error: '请先填写 API Key' })
       const chatBody = b.body
       if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return send(res, 400, { error: '缺少请求体' })
       // 动态时间上下文：每次转发前在服务端用当前时间实时生成，
@@ -393,30 +396,45 @@ const apiServer = createServer(async (req, res) => {
       // 前端可在请求体外带 timeZone（IANA 时区名），非法或缺省回退 Asia/Shanghai。
       chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
       const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
-      const upstream = await fetch(target, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(chatBody),
-        redirect: 'error',
-        signal: controller.signal,
-      })
-      if (!upstream.ok) {
+      for (let i = 0; i < apiKeys.length; i++) {
+        let upstream
+        try {
+          upstream = await fetch(target, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKeys[i]}` },
+            body: JSON.stringify(chatBody),
+            redirect: 'error',
+            signal: controller.signal,
+          })
+        } catch (error) {
+          if (i + 1 < apiKeys.length) continue
+          finished = true
+          if (res.headersSent) { try { res.end() } catch { /* 连接已断开 */ } return }
+          const msg = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? '请求被中断或超时' : (error?.cause?.code || error?.message || '请求失败')
+          return send(res, 502, { error: '无法连接该接口：' + msg })
+        }
+        if (!upstream.ok) {
+          const text = await upstream.text().catch(() => '')
+          if (isRetryableKeyStatus(upstream.status) && i + 1 < apiKeys.length) continue
+          finished = true
+          return send(res, upstream.status, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 400) : ''}` })
+        }
+        // SSE / 流式响应原样透传给前端，不缓冲。X-Key-Used 便于诊断最终用了第几把。
+        res.writeHead(upstream.status, {
+          'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store',
+          'X-Accel-Buffering': 'no',
+          'X-Key-Used': String(i + 1),
+        })
+        if (upstream.body) {
+          for await (const chunk of upstream.body) { if (!res.write(chunk)) await new Promise(r => res.once('drain', r)) }
+        }
         finished = true
-        const text = await upstream.text().catch(() => '')
-        return send(res, upstream.status, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 400) : ''}` })
-      }
-      // SSE / 流式响应原样透传给前端，不缓冲。
-      res.writeHead(upstream.status, {
-        'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store',
-        'X-Accel-Buffering': 'no',
-      })
-      if (upstream.body) {
-        for await (const chunk of upstream.body) { if (!res.write(chunk)) await new Promise(r => res.once('drain', r)) }
+        res.end()
+        return
       }
       finished = true
-      res.end()
-      return
+      return send(res, 502, { error: '所有 API Key 均未能完成请求' })
     } catch (error) {
       finished = true
       if (res.headersSent) { try { res.end() } catch { /* 连接已断开 */ } return }
