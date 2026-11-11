@@ -8,7 +8,7 @@ import {
 import {
   BUILTIN_VENDORS, normalizeVendors, vendorModelProfileId, syncVendorProfiles,
   allVendorKeys, resolveVendorKey, resolveKeyCandidates, readKeyCandidates,
-  isRetryableKeyStatus, orderedKeys, keyRoleLabel,
+  isRetryableKeyStatus, orderedKeys, keyRoleLabel, modelCatalog,
 } from '../src/vendors.mjs'
 
 const A = 'assistant-yanweixi'
@@ -203,6 +203,17 @@ test('候选队列：默认备用 → 主号 → 旧的按助手 Key，显式选
   // 不同供应商的 Key 不混用；没配 Key 时仍回退旧 Key
   assert.deepEqual(resolveKeyCandidates(vendors, '', 'sk-old', 'siliconflow'), ['sk-old'])
   assert.deepEqual(resolveKeyCandidates(vendors, '', '', 'deepseek'), ['sk-back', 'sk-main'])
+})
+
+test('模型目录按供应商分组去重，本家排最前，自定义也能拿到全量目录', () => {
+  const own = modelCatalog('deepseek')
+  assert.equal(own[0].id, 'deepseek')
+  assert.equal(own[0].own, true)
+  assert.deepEqual(own[0].models, ['deepseek-chat', 'deepseek-reasoner'])
+  const all = modelCatalog('custom-abc').flatMap(g => g.models)
+  assert.equal(new Set(all).size, all.length)
+  assert.equal(all.length, new Set(BUILTIN_VENDORS.flatMap(v => v.models)).size)
+  assert.ok(all.includes('deepseek-chat') && all.includes('qwen-plus') && all.includes('glm-4-flash'))
 })
 
 test('服务端读候选队列兼容旧客户端，并限制最多 6 把', () => {

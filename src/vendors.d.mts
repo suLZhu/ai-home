@@ -15,6 +15,7 @@ export declare function keyRoleLabel(role: string): string
 export declare function orderedKeys(keys: unknown): VendorKey[]
 
 export declare const BUILTIN_VENDORS: { id: string; name: string; endpoint: string; models: string[] }[]
+export declare function modelCatalog(vendorId?: string): { id: string; label: string; own: boolean; models: string[] }[]
 export declare function normalizeVendors(raw: unknown): Vendor[]
 export declare function vendorModelProfileId(vendorId: string, modelId: string): string
 export declare function syncVendorProfiles(vendors: unknown, profiles: unknown): {

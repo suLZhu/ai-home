@@ -864,13 +864,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .shell .room-screen .workspace-foot{margin:4px 2px 12px;font-size:10px;line-height:1.7;color:var(--muted,#8a7d6d)}
 
 /* ── 聊天窗口绑定条：模型 / 世界书 / MCP 三段直接选，点哪段抽屉定位哪段 ── */
-.chat-header-subline.chat-binding-bar{display:flex;align-items:center;gap:4px;padding:4px 8px 5px;text-align:left;cursor:default;overflow-x:auto;scrollbar-width:none}
-.chat-header-subline.chat-binding-bar::-webkit-scrollbar{display:none}
-.chat-header-subline.chat-binding-bar:hover{background:transparent!important;color:var(--muted,#8a8378)}
-.chat-binding-bar .chat-bind-person{flex:0 0 auto;max-width:46px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--muted,#8a8378)}
-.chat-binding-bar button.chat-bind-chip{flex:0 0 auto;padding:3px 7px;border:1px solid #e6ddd0!important;border-radius:999px!important;background:rgba(255,255,255,.6)!important;box-shadow:none!important;font-size:10px;line-height:1.35;color:var(--ink,#403b35);white-space:nowrap}
-.chat-binding-bar button.chat-bind-chip:hover{background:#f4ecdf!important}
-.chat-binding-bar button.chat-config-toggle{flex:0 0 auto;margin-left:auto;padding:3px 6px;border:0!important;background:transparent!important;box-shadow:none!important;font-size:10px;line-height:1.35;color:var(--accent,#8b593b);white-space:nowrap}
+/* 顶栏绑定摘要条已删除，状态由输入栏图标角标与面板表达。 */
 .chat-config-section.chat-config-flash{box-shadow:inset 0 0 0 2px rgba(139,89,59,.35);border-radius:10px}
 
 /* ── 设置页：连接与 API Key 统一放在资源库下方 ── */
@@ -917,6 +911,11 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .subnav-text b{font-size:13px;font-weight:600;color:var(--ink,#403b35)}
 .subnav-text small{font-size:10.5px;color:var(--muted,#8a7d6d)}
 .subnav-go{flex:0 0 auto;font-size:17px;color:#8b6c4a}
+/* 二级分组：横排两个小标签，选中哪个才显示哪个内容 */
+.settings-subnav.settings-tabs{display:flex;flex-direction:row;gap:8px;margin:2px 0 12px}
+.shell .settings-screen .settings-tabs button.subnav-row{flex:1 1 0;min-width:0;justify-content:center;gap:0;padding:8px 6px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:10px!important;background:var(--card,#fffdf9)!important;color:var(--muted,#8a7d6d);text-align:center}
+.shell .settings-screen .settings-tabs button.subnav-row b{font-size:12px;font-weight:500;color:inherit}
+.shell .settings-screen .settings-tabs button.subnav-row.active{border-color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 10%,var(--card,#fffdf9))!important;color:var(--accent,#8b593b)}
 .assistant-theme .connection-person{margin-bottom:10px}
 .data-fold{margin:10px 0;border:1px solid #e2d9cc;border-radius:12px!important;background:rgba(250,246,238,.6)}
 .data-fold>summary{list-style:none;padding:11px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink,#403b35)}
@@ -939,7 +938,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .shell .fullscreen-chat button.compose-attach:hover,.shell .fullscreen-chat button.compose-attach.active{background:var(--accent-soft,#f3e9dc)!important}
 .shell .fullscreen-chat .compose-box .send-button{height:30px;padding:0 14px!important;border:0!important;border-radius:9px!important;background:var(--accent,#8b593b)!important;color:#fff!important;box-shadow:none!important;font-size:12px;font-weight:600}
 .shell .fullscreen-chat .compose-box .send-button:disabled{opacity:.45}
-.chat-binding-bar .chat-bind-hint{flex:0 0 auto;margin-left:auto;font-size:9px;color:var(--muted,#8a8378);white-space:nowrap}
+.shell .fullscreen-chat .compose-tray-head button.compose-tray-config{font-size:13px;color:var(--muted,#8a7d6d)}
+/* 面板底部提示条已删除：没配置时 body 直接留白，完整绑定收进头部 ⚙ */
 
 /* ── 图标面板：输入框上方浮出的小面板，不遮罩 ─────────────────────── */
 .compose-tray{display:flex;flex-direction:column;max-height:36dvh;overflow:hidden;margin:6px 8px 0;border:1px solid var(--line,#e2d9cc)!important;border-radius:14px!important;background:var(--surface,#fbf8f2)!important}
@@ -948,8 +948,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .compose-tray-head small{flex:1;font-size:10px;color:var(--muted,#8a7d6d)}
 .shell .fullscreen-chat .compose-tray-head button{width:24px;height:24px;padding:0!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;font-size:17px;color:var(--muted)}
 .compose-tray-body{overflow:auto;padding:8px 12px 12px}
-.compose-tray-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;border-top:1px solid var(--line,#e6ded2);font-size:10px;color:var(--muted,#8a7d6d)}
-.shell .fullscreen-chat .compose-tray-foot button{padding:2px 0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:var(--accent,#8b593b);font-size:10px}
+.shell .fullscreen-chat .compose-tray-config:hover{color:var(--accent,#8b593b)}
 .tray-key-row{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:11px;color:var(--muted)}
 .tray-key-row select{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--card,#fff);color:var(--ink);font-size:11px}
 .tray-group{margin-bottom:8px}
@@ -1001,6 +1000,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .vendor-model-row>small{font-size:9.5px;color:var(--muted)}
 .vendor-add-row{display:flex;gap:6px;min-width:0;margin-top:7px;flex-wrap:wrap}
 .vendor-add-row input{flex:1 1 100px;min-width:0}
+.shell .settings-screen select.vendor-model-select{box-sizing:border-box;width:100%;min-width:0;margin-top:7px;padding:8px 9px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:11.5px}
+.shell .settings-screen .vendor-model-select option{color:var(--ink,#403b35)}
 .shell .settings-screen .vendor-add-row button{flex:0 0 auto}
 .shell .settings-screen .vendor-add-row button,.shell .settings-screen .vendor-key-actions button,.shell .settings-screen button.vendor-remove{padding:6px 11px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#faf6ef)!important;box-shadow:none!important;color:var(--ink,#403b35);font-size:11px;white-space:nowrap}
 .vendor-key-row{display:grid;grid-template-columns:auto minmax(0,.8fr) minmax(0,1.2fr) 24px;align-items:center;gap:5px;min-width:0;margin:5px 0}

@@ -16,6 +16,23 @@ export const BUILTIN_VENDORS = [
 
 const str = (v) => String(v ?? '').trim()
 
+// 「添加模型」下拉目录：按供应商分组、跨组去重，本家那组排到最前。
+// 自定义供应商没有预置清单，也能从这份全量目录里点选模型。
+export function modelCatalog(vendorId = '') {
+  const seen = new Set()
+  const groups = []
+  for (const v of BUILTIN_VENDORS) {
+    const models = []
+    for (const name of v.models) {
+      if (seen.has(name)) continue
+      seen.add(name)
+      models.push(name)
+    }
+    if (models.length) groups.push({ id: v.id, label: v.name, own: v.id === vendorId, models })
+  }
+  return groups.sort((a, b) => Number(b.own) - Number(a.own))
+}
+
 // 多 KEY 的角色：备用优先于主号（用户要「先用备用再用主号」）。
 // 旧数据没有 role 时按备注名推断，再按位置兜底：第一把主号、其余备用。
 function normalizeRole(raw, label, index) {
