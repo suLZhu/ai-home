@@ -9,13 +9,15 @@
 //   - 模型列表 /api/models       → 直连上游 /models
 //   - 记忆检索 /api/memory/search → 本机会话关键词检索（镜像服务端 FTS 语义）
 //   - 附件 /api/attachments      → IndexedDB 存字节 + objectURL 注册表（<img> 直接可用）
-//   - 记账/日记/工具日志/收件箱/记忆治理/MCP 配置 → localStorage CRUD
-//   - 服务端专属能力（MCP 执行、定时任务、后台 Agent、自主唤醒）→ 明确的降级错误，
+//   - 记账/日记/工具日志/收件箱/记忆治理/MCP 配置/定时任务 → localStorage CRUD
+//   - 定时任务由 App 前台调度器结算（/api/tasks/run），不依赖云端常驻进程
+//   - 服务端专属能力（MCP 执行、后台 Agent 运行）→ 明确的降级错误，
 //     绝不伪装成功；提示用户配置云服务器后使用。
 //
 // 纯 ESM、无框架依赖；apiBase.mjs 在 local 模式下把 apiFetch 路由到这里。
 import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
+import { normalizeLocalTask, makeLocalTask, dueLocalTasks, advanceLocalTask } from './localTasks.mjs'
 
 // ── localStorage 存储层 ─────────────────────────────────────────────────────
 const K = {
@@ -28,6 +30,7 @@ const K = {
   memoryRecords: 'ai-home.local.memoryRecords',
   mcp: 'ai-home.local.mcp',
   inbox: 'ai-home.local.inbox',
+  tasks: 'ai-home.local.tasks',
   proactive: 'ai-home.local.proactive',
   policies: 'ai-home.local.policies',
 }
@@ -305,7 +308,6 @@ async function handleModels(init) {
 // ── 服务端专属能力的统一降级错误 ───────────────────────────────────────────
 const DEGRADED = {
   mcp: '本地模式暂不支持连接/执行 MCP 工具（需要后端执行器）。在设置里配置云服务器地址后可用。',
-  schedule: '本地模式暂不支持定时任务与工作流（需要后台服务常驻执行）。配置云服务器后可用。',
   agent: '本地模式暂不支持后台 Agent 运行（需要后端执行器）。配置云服务器后可用。',
 }
 
@@ -641,10 +643,109 @@ export async function localHandle(path, init) {
       return json(502, { error: DEGRADED.mcp })
     }
 
-    // ── 定时任务 / 工作流：本地无常驻调度器 → 明确降级 ──
-    if (p === '/api/tasks' && method === 'GET') return json(200, { tasks: [] })
-    if (p === '/api/tasks' && method === 'POST') return json(400, { error: DEGRADED.schedule })
-    if (p === '/api/workflows/manage' && method === 'POST') return json(400, { error: DEGRADED.schedule })
+    // ── 定时任务 / 工作流：纯本机调度，不需要云端常驻服务 ──
+    // 存储形状与 server.mjs 的 scheduled_tasks 同构（snake_case），前端零感知。
+    if (p === '/api/tasks' && method === 'GET') {
+      const person = q.get('person') || ''
+      const all = readJSON(K.tasks, [])
+      const tasks = (Array.isArray(all) ? all : [])
+        .filter(t => t && (!person || t.person === person))
+        .sort((a, b) => Date.parse(a.run_at) - Date.parse(b.run_at))
+      return json(200, { tasks })
+    }
+    if (p === '/api/tasks' && method === 'POST') {
+      const b = await readBody(init)
+      const task = makeLocalTask({
+        person: b.person, title: b.title, prompt: b.prompt, runAt: b.runAt,
+        recurrence: b.recurrence, conversationId: b.conversationId,
+      }, uuid())
+      if (!task) return json(400, { error: '请填写任务名称、执行内容和有效执行时间' })
+      const all = readJSON(K.tasks, [])
+      try { writeJSON(K.tasks, [...(Array.isArray(all) ? all : []), task]) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(201, { task })
+    }
+    // App 前台调度器每 15 秒打一次；切回前台时也会打，顺便补跑错过的任务。
+    if (p === '/api/tasks/run' && method === 'POST') {
+      const b = await readBody(init).catch(() => ({}))
+      const parsed = Date.parse(String(b.now || ''))
+      const nowMs = Number.isFinite(parsed) ? parsed : Date.now()
+      const all = readJSON(K.tasks, [])
+      const list = (Array.isArray(all) ? all : []).map(normalizeLocalTask).filter(Boolean)
+      const due = dueLocalTasks(list, nowMs)
+      if (!due.length) return json(200, { fired: [], tasks: list })
+      const fired = [], notices = [], advanced = new Map()
+      for (const t of due) {
+        const answer = '⏰ ' + t.title + (t.prompt ? '\n' + t.prompt : '')
+        fired.push({
+          runId: 'local-' + t.id + '-' + Date.parse(t.run_at), taskId: t.id, person: t.person,
+          title: t.title, prompt: t.prompt, answer, conversationId: t.conversation_id || '', runAt: t.run_at,
+        })
+        notices.push({ id: uuid(), person: t.person, content: answer, kind: 'task_notice', created_at: new Date(nowMs).toISOString(), read_at: null })
+        advanced.set(t.id, advanceLocalTask(t, nowMs))
+      }
+      const inboxAll = readJSON(K.inbox, [])
+      try {
+        writeJSON(K.inbox, [...notices].reverse().concat(Array.isArray(inboxAll) ? inboxAll : []).slice(0, 200))
+        writeJSON(K.tasks, list.map(t => advanced.get(t.id) || t))
+      } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { fired, tasks: list.map(t => advanced.get(t.id) || t) })
+    }
+    const taskMatch = p.match(/^\/api\/tasks\/([^/]+)$/)
+    if (taskMatch && method === 'PUT') {
+      const b = await readBody(init)
+      const all = readJSON(K.tasks, [])
+      const list = Array.isArray(all) ? all : []
+      const i = list.findIndex(t => t && t.id === taskMatch[1] && t.person === String(b.person || ''))
+      if (i < 0) return json(404, { error: '找不到该人物的任务' })
+      const row = list[i]
+      let runAt = row.run_at
+      if (b.runAt !== undefined) {
+        if (!Number.isFinite(Date.parse(String(b.runAt)))) return json(400, { error: '执行时间无效' })
+        runAt = new Date(b.runAt).toISOString()
+      }
+      const task = { ...row, status: ['scheduled', 'paused', 'completed'].includes(b.status) ? b.status : row.status, run_at: runAt, updated_at: nowISO() }
+      list[i] = task
+      try { writeJSON(K.tasks, list) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { task })
+    }
+    if (taskMatch && method === 'DELETE') {
+      const b = await readBody(init).catch(() => ({}))
+      const all = readJSON(K.tasks, [])
+      const list = Array.isArray(all) ? all : []
+      const next = list.filter(t => !(t && t.id === taskMatch[1] && t.person === String(b.person || '')))
+      if (next.length === list.length) return json(404, { error: '找不到该人物的任务' })
+      try { writeJSON(K.tasks, next) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { ok: true })
+    }
+    if (p === '/api/workflows/manage' && method === 'POST') {
+      const b = await readBody(init)
+      const person = String(b.person || '')
+      if (!person) return json(400, { error: '人物身份无效' })
+      const all = readJSON(K.tasks, [])
+      const list = Array.isArray(all) ? all : []
+      if (b.action === 'create') {
+        const task = makeLocalTask({
+          person, title: b.title, prompt: b.prompt, runAt: b.runAt, recurrence: b.recurrence,
+          createdBy: person, temporary: b.temporary === true, conversationId: b.conversationId,
+        }, uuid())
+        if (!task) return json(400, { error: '工作流内容或时间无效' })
+        try { writeJSON(K.tasks, [...list, task]) } catch { return json(500, { error: '本地存储写入失败' }) }
+        return json(201, { task })
+      }
+      if (!['pause', 'resume', 'delete'].includes(String(b.action))) return json(400, { error: '不支持的操作' })
+      const row = list.find(t => t && t.id === String(b.id || '') && t.person === person)
+      if (!row) return json(404, { error: '工作流不存在或不属于当前助手' })
+      if (row.created_by && row.created_by !== person) return json(403, { error: '不能自动管理用户创建的工作流' })
+      let next
+      if (b.action === 'delete') {
+        if (!row.temporary) return json(403, { error: '长期工作流禁止自动永久删除，请手动处理' })
+        next = list.filter(t => t.id !== row.id)
+      } else {
+        next = list.map(t => t.id === row.id ? { ...t, status: b.action === 'pause' ? 'paused' : 'scheduled', updated_at: nowISO() } : t)
+      }
+      try { writeJSON(K.tasks, next) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { ok: true, ...(b.action === 'delete' ? {} : { task: next.find(t => t.id === row.id) }) })
+    }
 
     // ── 收件箱（本地轮询可用；主动推送来源只有手动测试） ──
     if (p === '/api/inbox' && method === 'GET') {

@@ -631,6 +631,37 @@ export default function App() {
     apiFetch('/api/inbox/read', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {})
     setInbox(old => old.map(m => m.id === id ? { ...m, read_at: new Date().toISOString() } : m))
   }
+  // ── 本地模式主动任务调度器 ────────────────────────────────────────────────
+  // 不依赖云端常驻服务：App 前台每 15 秒结算一次到期任务；从后台切回时立即补跑。
+  // 到点把提醒直接写进该助手的当前会话，LocalBackend 同时写一条收件箱消息，
+  // 由现有收件箱轮询弹出前台横幅。runId 与消息里的 taskRunId 做幂等去重。
+  useEffect(()=>{
+    if(authStatus!=='signedIn')return
+    let alive=true
+    const tick=async()=>{
+      if(!alive||document.hidden||!isLocalMode())return
+      try{
+        const r=await apiFetch('/api/tasks/run',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({now:new Date().toISOString()})})
+        if(!r.ok)return
+        const d=await r.json()
+        const fired:any[]=Array.isArray(d.fired)?d.fired:[]
+        if(!alive||!fired.length)return
+        for(const f of fired){
+          const who=String(f.person||''),runId=String(f.runId||''),content=String(f.answer||'')
+          if(!ASSISTANT_PEOPLE.includes(who)||!runId||!content)continue
+          updateActiveConversationMessages(who,prev=>prev.some(x=>x&&x.taskRunId===runId)?prev:[...prev,{role:'assistant' as const,content,id:'local-task-'+runId,taskRunId:runId,contextNote:'本地主动任务'}])
+        }
+        // 提醒要尽快落到本机快照，别等防抖窗口。
+        firstDirtyAtRef.current=Date.now()-CLOUD_FLUSH_MAX_MS
+      }catch{/* 调度失败不影响聊天，下一个 tick 自动重试 */}
+    }
+    void tick()
+    const timer=window.setInterval(()=>void tick(),15000)
+    const onVisible=()=>{if(!document.hidden)void tick()}
+    document.addEventListener('visibilitychange',onVisible)
+    window.addEventListener('focus',onVisible)
+    return()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onVisible)}
+  },[authStatus])
   // 定时任务结果消费：kind='task_result' 的收件箱行凭信封里的 conversationId
   // 精确写回原会话——不建新会话、不污染用户当前正看的聊天视图。幂等判定读的是
   // conversations 持久化状态里是否已含该 runId（decideTaskConsumption），不是
@@ -710,7 +741,7 @@ export default function App() {
     const system = [
       '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
       '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
-      '定时/提醒能力说明：你无法在对话中直接定闹钟，但用户可以在「工具 → 工作流」创建定时或延时任务——到点系统会自动把消息发给你并触发你的回复，也可以用输入框的「延期发送」。当用户想让你定时做事时，引导他去工作流创建，不要简单回答「我做不到」。',
+      '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
       card.description && '【角色描述】\n'+card.description,
       card.definition && '【角色设定】\n'+card.definition,
       card.language && '【语言与表达要求】\n'+card.language,
@@ -1479,12 +1510,12 @@ function TaskManager({person,personLabel}:{person:Person;personLabel?:(p:Person)
   useEffect(()=>{refresh().catch(e=>setError(e.message))},[refresh])
   // 任务状态由服务端调度器推进；有未完成任务时轻量轮询，避免看到过期状态。
   useEffect(()=>{if(!tasks.some(t=>t.status==='scheduled'||t.status==='ready'))return;const timer=window.setInterval(()=>{if(!document.hidden)refresh().catch(()=>{})},10000);return()=>window.clearInterval(timer)},[tasks,refresh])
-  async function create(e:FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const r=await apiFetch('/api/tasks',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,title,prompt,runAt:new Date(runAt).toISOString(),recurrence})});const d=await r.json();if(!r.ok)throw new Error(d.error||'创建任务失败');setTitle('');setPrompt('');setNotice('任务已保存到云端调度队列。');await refresh()}catch(e){setError(e instanceof Error?e.message:'创建任务失败')}finally{setBusy(false)}}
+  async function create(e:FormEvent){e.preventDefault();setBusy(true);setError('');setNotice('');try{const r=await apiFetch('/api/tasks',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,title,prompt,runAt:new Date(runAt).toISOString(),recurrence})});const d=await r.json();if(!r.ok)throw new Error(d.error||'创建任务失败');setTitle('');setPrompt('');setNotice(isLocalMode()?'任务已保存到本机，到点会自动提醒。':'任务已保存到云端调度队列。');await refresh()}catch(e){setError(e instanceof Error?e.message:'创建任务失败')}finally{setBusy(false)}}
   async function update(task:ScheduledTask,patch:Record<string,unknown>){setError('');setNotice('');try{const r=await apiFetch('/api/tasks/'+task.id,{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person,...patch})});const d=await r.json();if(!r.ok)throw new Error(d.error||'更新任务失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'更新任务失败')}}
   async function remove(task:ScheduledTask){if(!window.confirm('删除任务“'+task.title+'”？'))return;try{const r=await apiFetch('/api/tasks/'+task.id,{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person})});const d=await r.json();if(!r.ok)throw new Error(d.error||'删除失败');await refresh()}catch(e){setError(e instanceof Error?e.message:'删除失败')}}
   const localDate=(iso:string)=>{const d=new Date(iso);return Number.isNaN(d.getTime())?'时间无效':d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})}
   const statusLabel=(s:ScheduledTask['status'])=>({scheduled:'等待执行',ready:'执行中 · 助手正在跑',completed:'已完成',paused:'已暂停'}[s])
-  return <div className="tool-panel task-manager"><h3>{who} · 工作流</h3><p className="muted">工作流和定时触发合并管理。到期任务会由服务端 Agent Runner 真实执行（最多 5 轮工具循环），执行记录见「工具调用看板 · Agent 运行」。</p>{error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
+  return <div className="tool-panel task-manager"><h3>{who} · 工作流</h3><p className="muted">{isLocalMode()?'任务只存在这台设备，由 App 内的本地调度器到点把提醒发进聊天，不需要云端或后台常驻服务。App 在前台时执行，切回前台会补跑错过的任务（重复任务只补最近一次）。':'到期任务会由服务端 Agent Runner 真实执行（最多 5 轮工具循环），执行记录见「工具调用看板 · Agent 运行」。'}</p>{error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
     <form className="task-create" onSubmit={create}><label>工作流名称<input required maxLength={160} value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：早上检查雾潮群岛进度"/></label><label>执行时间<input required type="datetime-local" value={runAt} onChange={e=>setRunAt(e.target.value)}/></label><label>重复规则<select value={recurrence} onChange={e=>setRecurrence(e.target.value as typeof recurrence)}><option value="once">仅一次</option><option value="daily">每天</option><option value="weekly">每周</option></select></label><label>执行步骤（每行一步）<textarea required rows={5} value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="第一步：检查状态\n第二步：判断条件\n第三步：执行操作\n第四步：保存结果"/></label><button type="submit" disabled={busy||!title.trim()||!prompt.trim()||!runAt}>{busy?'保存中…':'保存任务'}</button></form>
     <div className="task-list-heading"><b>任务列表</b><button type="button" onClick={()=>refresh().catch(e=>setError(e.message))}>刷新</button></div>{tasks.length===0?<p className="muted">这里还没有任务。</p>:tasks.map(task=><article className="scheduled-task" key={task.id}><div className="scheduled-task-top"><b>{task.title}</b><span className={'task-status '+task.status}>{statusLabel(task.status)}</span></div><ol className="workflow-steps">{task.prompt.split('\n').filter(line=>line.trim()).map((step,i)=><li key={i}>{step.replace(/^(?:第[一二三四五六七八九十]+步[：:]?|[0-9]+[.、：:]|[-•]\s*)/,'').trim()}</li>)}</ol><small>执行时间：{localDate(task.run_at)} · {task.recurrence==='once'?'仅一次':task.recurrence==='daily'?'每天':'每周'}{task.last_run_at?' · 上次触发：'+localDate(task.last_run_at):''}</small><div className="scheduled-task-actions">{task.status==='scheduled'&&<button type="button" onClick={()=>update(task,{status:'paused'})}>暂停</button>}{task.status==='paused'&&<button type="button" onClick={()=>update(task,{status:'scheduled'})}>恢复</button>}{task.status==='ready'&&<button type="button" onClick={()=>update(task,{status:'completed'})}>标记完成</button>}<button type="button" onClick={()=>remove(task)}>删除</button></div></article>)}</div>
 }
@@ -2341,7 +2372,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
   // 每次改动都基于当前 vendors 算出新数组，再同步模型池；不在 setState updater 里嵌套 setState。
   const commit=(next:Vendor[])=>{setVendors(next);setModelProfiles(old=>syncVendorProfiles(next,old))}
   const patch=(id:string,fn:(v:Vendor)=>Vendor)=>commit(vendors.map(v=>v.id===id?fn(v):v))
-  const selectedModels=vendors.reduce((n,v)=>n+v.models.filter(m=>m.selected).length,0)
   const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
   const showNew=editing==='new'
   const active=vendors.find(v=>v.id===editing)
@@ -2355,6 +2385,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     return {...v,models:[...map.values()]}
   })
   const pickModel=(vendorId:string,modelId:string)=>pickModels(vendorId,[modelId])
+  // 取消选择 = 直接从清单移除。未选中的模型不再占位，下拉里会重新出现 ＋。
+  const unpickModel=(vendorId:string,modelId:string)=>patch(vendorId,v=>({...v,models:v.models.filter(m=>m.id!==modelId)}))
+  const toggleModel=(vendorId:string,modelId:string,picked:boolean)=>picked?unpickModel(vendorId,modelId):pickModel(vendorId,modelId)
   const setPrimary=(value:string)=>{if(!active)return;patch(active.id,v=>{
     const i=v.keys.findIndex(k=>k.role==='primary')
     if(i>=0)return {...v,keys:v.keys.map((k,j)=>j===i?{...k,value}:k)}
@@ -2397,6 +2430,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     }catch(e){setListState({loading:false,error:e instanceof Error?e.message:'获取模型失败'})}
   }
   const remoteIds=active?(remoteModels[active.id]||[]):[]
+  const pickedModels=active?active.models.filter(m=>m.selected):[]
   const query=modelQuery.trim().toLowerCase()
   const visibleGroups=groupModels(remoteIds)
     .map(g=>({...g,models:g.models.filter(id=>!query||id.toLowerCase().includes(query))}))
@@ -2404,12 +2438,12 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
   return <div className="vendor-center">
-    <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{selectedModels} 个模型已勾选</span><span>{keyCount} 把 Key</span></div>
+    <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
     <p className="resource-hint">点小图标展开一家：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
     <div className="vendor-icon-grid">
       {vendors.map(v=><button type="button" className={'vendor-icon-tile'+(editing===v.id?' active':'')} key={v.id} aria-expanded={editing===v.id} onClick={()=>openVendor(v.id)}>
         <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
-        <span className="vit-text"><b>{v.name}</b><small>{v.models.filter(m=>m.selected).length} 模型 · {v.keys.length} Key</small></span>
+        <span className="vit-text"><b>{v.name}</b><small>{v.keys.length} Key</small></span>
       </button>)}
       <button type="button" className={'vendor-icon-tile add'+(showNew?' active':'')} aria-expanded={showNew} onClick={()=>{if(showNew){setEditing('');resetEditUI()}else{setEditing('new');resetEditUI()}}}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
     </div>
@@ -2429,7 +2463,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
       <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b><button type="button" aria-label="收起供应商详情" onClick={()=>{setEditing('');resetEditUI()}}>收起 ×</button></div>
       <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
         <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
-        <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型 <small>{active.models.filter(m=>m.selected).length}</small></button>
+        <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
       </div>
 
       {tab==='config'&&<div className="vendor-card-body">
@@ -2450,9 +2484,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
       </div>}
 
       {tab==='model'&&<div className="vendor-card-body">
-        <div className="vendor-section"><b>已选模型 <small>打勾 = 聊天窗口可选</small></b>
-          {active.models.length===0&&<p className="muted">还没有选模型，从下面的网址里点选。</p>}
-          {active.models.map(m=><label className="vendor-model-row" key={m.id}><input type="checkbox" checked={m.selected} onChange={e=>patch(active.id,x=>({...x,models:x.models.map(y=>y.id===m.id?{...y,selected:e.target.checked}:y)}))}/><span>{m.name}</span>{m.name!==m.id&&<small>{m.id}</small>}</label>)}
+        <div className="vendor-section"><b>已选模型 <small>取消后从聊天可选里移除</small></b>
+          {pickedModels.length===0&&<p className="muted">还没有选模型，从下面的网址里点选。</p>}
+          {pickedModels.map(m=><div className="vendor-model-row selected" key={m.id}><i className="vendor-model-check" aria-hidden="true">✓</i><span>{m.name}</span><button type="button" className="vendor-model-remove" aria-label={'取消选择 '+m.name} onClick={()=>unpickModel(active.id,m.id)}>取消 ×</button></div>)}
         </div>
         <button type="button" className={'vendor-model-toggle'+(pickerOpen?' open':'')} aria-label="从这个网址选择模型" aria-expanded={pickerOpen} onClick={()=>{const next=!pickerOpen;setPickerOpen(next);if(next&&!remoteModels[active.id]?.length)void fetchRemote(active)}}>＋ 从这个网址选择模型 <span aria-hidden="true">▾</span></button>
         {pickerOpen&&<div className="vendor-model-picker">
@@ -2466,10 +2500,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
           {listState.error&&<p className="mcp-error">{listState.error}</p>}
           {!listState.loading&&visibleGroups.length===0&&<p className="muted">{remoteIds.length?'没有匹配的模型，换个关键词试试。':'点右上角 ⟳ 从这个网址拉取它自己的模型；拉取失败也可以手动输入模型名。'}</p>}
           {visibleGroups.map(g=><div className="vendor-model-group" key={g.id}>
-            <button type="button" className="vendor-model-group-head" aria-expanded={!collapsed[g.id]} onClick={()=>setCollapsed(c=>({...c,[g.id]:!c[g.id]}))}><span aria-hidden="true">{collapsed[g.id]?'▸':'▾'}</span> {g.label} <small>{g.models.length}</small></button>
+            <button type="button" className="vendor-model-group-head" aria-expanded={!collapsed[g.id]} onClick={()=>setCollapsed(c=>({...c,[g.id]:!c[g.id]}))}><span aria-hidden="true">{collapsed[g.id]?'▸':'▾'}</span> {g.label}</button>
             {!collapsed[g.id]&&g.models.map(id=>{
-              const found=active.models.find(m=>m.id===id)
-              return <div className="vendor-model-item" key={id}><span>{id}</span><button type="button" aria-label={'添加模型 '+id} disabled={!!found?.selected} onClick={()=>pickModel(active.id,id)}>{found?.selected?'✓':'＋'}</button></div>
+              const picked=!!active.models.find(m=>m.id===id)?.selected
+              return <div className={'vendor-model-item'+(picked?' picked':'')} key={id}><span>{id}</span><button type="button" aria-label={(picked?'取消选择模型 ':'添加模型 ')+id} onClick={()=>toggleModel(active.id,id,picked)}>{picked?'✓':'＋'}</button></div>
             })}
           </div>)}
           {!customModelOpen?<button type="button" className="vendor-model-manual" onClick={()=>setCustomModelOpen(true)}>✎ 手动输入模型名</button>:<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDraft} onChange={e=>setModelDraft(e.target.value)} placeholder="模型名，如 my-model" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
