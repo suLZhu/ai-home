@@ -108,7 +108,33 @@ function initialConversations():Record<Person,Conversation[]> {
 // 真实工具调用事件统一由 src/toolCalls.ts 的事件层上报（见 send() 内调用点）；
 // 模型文字永远不会产生调用记录。
 
+// 软键盘弹起时，Android WebView 的 100dvh 不一定跟着缩小，布局可能整体被上推：
+// 消息列表滚到屏幕外，只剩一片空白。用 visualViewport 量真实可视高度，
+// 键盘打开时把高度与键盘高度写成 CSS 变量，聊天锁按可视高度布局、输入区贴键盘上沿。
+function useKeyboardViewport(){
+  useEffect(()=>{
+    const vv=window.visualViewport
+    if(!vv)return
+    const root=document.documentElement
+    const clear=()=>{root.style.removeProperty('--app-visual-height');root.style.removeProperty('--app-keyboard-height');delete root.dataset.keyboard}
+    const apply=()=>{
+      const overlap=Math.max(0,window.innerHeight-vv.height-Math.max(0,vv.offsetTop))
+      if(overlap>90&&window.innerWidth<=700){
+        root.style.setProperty('--app-visual-height',Math.round(vv.height)+'px')
+        root.style.setProperty('--app-keyboard-height',Math.round(overlap)+'px')
+        root.dataset.keyboard='open'
+      }else clear()
+    }
+    apply()
+    vv.addEventListener('resize',apply)
+    vv.addEventListener('scroll',apply)
+    window.addEventListener('resize',apply)
+    return ()=>{vv.removeEventListener('resize',apply);vv.removeEventListener('scroll',apply);window.removeEventListener('resize',apply);clear()}
+  },[])
+}
+
 export default function App() {
+  useKeyboardViewport()
   const [page, setPage] = useState<Page>('home')
   const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>({...DEFAULT_THEME,...read<Partial<ThemePrefs>>('ai-home.themePrefs',DEFAULT_THEME)}))
   const [beautifyPack,setBeautifyPack]=useState<string>(()=>read('ai-home.beautifyPack',DEFAULT_BEAUTIFY_PACK))
@@ -1826,6 +1852,68 @@ const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
   { id:'task', label:'主动任务', desc:'定时任务与工作流', icon:'◷' },
 ]
 
+// ── 模型选择：半屏 bottom sheet ──────────────────────────────────────────
+// 简洁版模型面板：一个搜索框 + 按供应商分组的模型行 + 底部供应商筛选。
+// 名称 / 模型 ID / 供应商都是真实数据；「聊天 / 工具 / 世界书」反映这位助手当前绑定，
+// 不虚构上下文长度或参数量。♡ 收藏会把常用模型置顶并存在本机。
+type ModelSheetKey = { id:string; vendorName?:string; label?:string; role?:string }
+function vendorInitial(name:string){const s=(name||'').trim();return s?s.slice(0,1).toUpperCase():'AI'}
+function vendorHue(name:string){let h=0;for(let i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))%360;return h}
+function ModelPickerSheet({profiles,activeId,vendorKeys,binding,onPatchBinding,onPick,onClose,onOpenConfig,hasMcp}:{
+  profiles:ModelProfile[];activeId:string;vendorKeys:ModelSheetKey[];binding:PersonBinding;
+  onPatchBinding:(b:PersonBinding)=>void;onPick:(id:string)=>void;onClose:()=>void;onOpenConfig:()=>void;
+  hasMcp:boolean
+}){
+  const [query,setQuery]=useState('')
+  const [vendor,setVendor]=useState('')
+  const [favorites,setFavorites]=useState<string[]>(()=>read<string[]>('ai-home.favoriteModels',[]))
+  useEffect(()=>{try{localStorage.setItem('ai-home.favoriteModels',JSON.stringify(favorites))}catch{ /* private mode */ }},[favorites])
+  useEffect(()=>pushBackHandler(()=>{onClose();return true}),[onClose])
+  const vendors=useMemo(()=>[...new Set(profiles.map(m=>m.vendor||'手动添加的模型'))],[profiles])
+  const groups=useMemo(()=>{
+    const q=query.trim().toLowerCase()
+    const picked=profiles.filter(m=>{
+      if(vendor&&(m.vendor||'手动添加的模型')!==vendor)return false
+      return !q||[m.name,m.model,m.vendor||''].some(x=>x.toLowerCase().includes(q))
+    })
+    const map=new Map<string,ModelProfile[]>()
+    for(const m of picked){const g=m.vendor||'手动添加的模型';if(!map.has(g))map.set(g,[]);map.get(g)!.push(m)}
+    for(const list of map.values())list.sort((a,b)=>Number(favorites.includes(b.id))-Number(favorites.includes(a.id)))
+    return [...map.entries()]
+  },[profiles,query,vendor,favorites])
+  const toggleFav=(id:string)=>setFavorites(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id])
+  return <div className="model-sheet-backdrop" onClick={onClose}>
+    <section className="model-sheet" role="dialog" aria-label="选择模型" onClick={e=>e.stopPropagation()}>
+      <button type="button" className="model-sheet-grabber" aria-label="收起模型面板" onClick={onClose}><i/></button>
+      <div className="model-sheet-search">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.5 15.5 4.3 4.3"/></g></svg>
+        <input id="model-sheet-search-input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索模型或服务商" aria-label="搜索模型或服务商"/>
+        {query&&<button type="button" className="model-sheet-clear" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}
+        <button type="button" className="model-sheet-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={onOpenConfig}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3.6v2.1M12 18.3v2.1M3.6 12h2.1M18.3 12h2.1M6.1 6.1l1.5 1.5M16.4 16.4l1.5 1.5M17.9 6.1l-1.5 1.5M7.6 16.4l-1.5 1.5"/></g></svg></button>
+      </div>
+      {vendorKeys.length>0&&<label className="model-sheet-key"><span>Key</span><select aria-label="选择 API Key" value={binding.keyId||''} onChange={e=>onPatchBinding({...binding,keyId:e.target.value})}><option value="">自动 · 先备用再主号</option>{vendorKeys.map(k=><option key={k.id} value={k.id}>{k.vendorName} · {k.label}（{keyRoleLabel(String(k.role||''))}）</option>)}</select></label>}
+      <div className="model-sheet-list">
+        {groups.length===0&&<p className="model-sheet-empty">{profiles.length?'没有匹配的模型，换个关键词，或点下面的供应商重新筛选。':'还没有可用模型。到「设置 → 供应商」填 Key 后从网址拉取，再回来这里选。'}</p>}
+        {groups.map(([group,list])=><section className="model-sheet-group" key={group}>
+          <h4>{group}</h4>
+          {list.map(m=><div className={'model-sheet-row'+(activeId===m.id?' selected':'')} key={m.id}>
+            <button type="button" className="model-sheet-pick" aria-pressed={activeId===m.id} onClick={()=>onPick(m.id)}>
+              <span className="model-sheet-vendor" style={{background:`hsl(${vendorHue(group)} 32% 90%)`,color:`hsl(${vendorHue(group)} 38% 36%)`}}>{vendorInitial(group)}</span>
+              <span className="model-sheet-main"><b>{m.name}</b><span className="model-sheet-tags"><i>聊天</i>{hasMcp&&<i>工具</i>}<em>{m.model}</em></span></span>
+              {activeId===m.id&&<span className="model-sheet-check" aria-hidden="true">✓</span>}
+            </button>
+            <button type="button" className={'model-sheet-fav'+(favorites.includes(m.id)?' on':'')} aria-label={favorites.includes(m.id)?'取消收藏':'收藏这个模型'} title="收藏后置顶" onClick={()=>toggleFav(m.id)}>{favorites.includes(m.id)?'♥':'♡'}</button>
+          </div>)}
+        </section>)}
+      </div>
+      <div className="model-sheet-filter" aria-label="按供应商筛选">
+        <button type="button" className={!vendor?'active':''} onClick={()=>setVendor('')}>全部</button>
+        {vendors.map(v=><button type="button" key={v} className={vendor===v?'active':''} onClick={()=>setVendor(vendor===v?'':v)}>{v}</button>)}
+      </div>
+    </section>
+  </div>
+}
+
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
@@ -1834,7 +1922,12 @@ function Chat(p: any) {
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
   const [tray,setTray]=useState<''|'model'|'world'|'mcp'|'tools'>('')
   const formRef=useRef<HTMLFormElement>(null)
-  const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{setTray(t=>t===id?'':id);setEmojiOpen(false);setMoreOpen(false)}
+  const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{
+    // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
+    if(id==='model'){const active=document.activeElement;if(active instanceof HTMLElement)active.blur()}
+    setTray(t=>t===id?'':id);setEmojiOpen(false);setMoreOpen(false)
+  }
+  const closeModelSheet=useCallback(()=>setTray(''),[])
   const runQuickTool=(id:string)=>{
     setTray('')
     if(id==='task'){p.setChatOpen(false);p.setActiveTool('工作流');return}
@@ -1857,15 +1950,6 @@ function Chat(p: any) {
   const trayMcp=quickMine.filter(c=>isInPool(pool,'mcpIds',c.id,mcpAll))
   const mcpNo=(id:string)=>poolLabel(mcpAll.indexOf(id))
   const vendorKeyOptions=allVendorKeys(p.vendors||[])
-  const modelGroups=(()=>{
-    const groups=new Map<string,ModelProfile[]>()
-    for(const m of ((p.modelProfiles||[]) as ModelProfile[])){
-      const key=m.vendor||'手动添加的模型'
-      if(!groups.has(key))groups.set(key,[])
-      groups.get(key)!.push(m)
-    }
-    return [...groups.entries()]
-  })()
   const patchBinding=(next:PersonBinding)=>p.setBindings((old:Record<Person,PersonBinding>)=>({...old,[chatPerson]:next}))
   // 输入栏图标只作为「打开对应面板去修改」的入口，不显示任何数量角标。
   // 会话内搜索：只搜当前会话（p.messages[chatPerson]），不跨会话、不跨助手。
@@ -2049,6 +2133,24 @@ function Chat(p: any) {
     const el=chatBodyRef.current
     if(el)el.scrollTop=el.scrollHeight
   },[chatPerson,activeChatConversationId,p.person])
+  // 打字时键盘把可视高度压小，容器 resize 后滚动位置会被浏览器重算；
+  // 只要焦点还在输入框，就补滚到最新一条，保证「边打字边看得见聊天记录」。
+  const pinToLatest=useCallback(()=>{
+    const el=chatBodyRef.current
+    if(!el)return
+    scrollPinned.current=true
+    el.scrollTop=el.scrollHeight
+  },[])
+  useEffect(()=>{
+    const vv=window.visualViewport
+    if(!vv)return
+    const onResize=()=>{
+      const active=document.activeElement
+      if(active instanceof HTMLElement&&active.classList.contains('compose-text'))requestAnimationFrame(pinToLatest)
+    }
+    vv.addEventListener('resize',onResize)
+    return ()=>vv.removeEventListener('resize',onResize)
+  },[pinToLatest])
   // 图片上传换稳定引用：字节存后端（见 server/attachments.mjs），preview 持久化为
   // /api/attachments/<id>，聊天记录只带 assetId+URL，Base64 永不进 localStorage/云端快照。
   // 时机选在「选择图片」而非「发送」：loadFiles 本就是 async，这样立即发送与缓发两条
@@ -2230,16 +2332,9 @@ function Chat(p: any) {
       </span>
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
-    {tray&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='model'?'模型':tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次选择</small>{tray!=='tools'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');openConfig(tray==='world'?'world':tray==='mcp'?'mcp':'model')}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
+    {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
+      <div className="compose-tray-head"><b>{tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次选择</small>{tray!=='tools'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');openConfig(tray==='world'?'world':'mcp')}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
       <div className="compose-tray-body">
-        {tray==='model'&&<>
-          {vendorKeyOptions.length>0&&<>
-            <label className="tray-key-row"><span>使用哪把 Key</span><select aria-label="选择 API Key" value={quickBinding.keyId||''} onChange={e=>patchBinding({...quickBinding,keyId:e.target.value})}><option value="">自动 · 先备用再主号</option>{vendorKeyOptions.map(k=><option key={k.id} value={k.id}>{k.vendorName} · {k.label}（{keyRoleLabel(k.role)}）</option>)}</select></label>
-            <p className="tray-key-hint">自动模式按「备用 → 主号」依次尝试，前一把额度或鉴权失败会换下一把；显式选中则把它排在最前。</p>
-          </>}
-          {modelGroups.map(([vendor,list])=><div className="tray-group" key={vendor}><b className="tray-group-title">{vendor}</b>{list.map(m=><label className="tray-option" key={m.id}><input type="radio" name="tray-model" checked={quickBinding.modelProfileId===m.id} onChange={()=>patchBinding({...quickBinding,modelProfileId:m.id})}/><span>{m.name}<small>{m.model}</small></span></label>)}</div>)}
-        </>}
         {tray==='world'&&<>
           {trayWorld.map(e=><label className="tray-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span></label>)}
         </>}
@@ -2257,7 +2352,7 @@ function Chat(p: any) {
           <button type="button" className={'ms-delete'+(armedSelKey===selectKey&&selectedIds.length?' armed':'')} disabled={!selectedIds.length} title={armedSelKey===selectKey&&selectedIds.length?'再点一次确认删除':'删除选中的消息'} onClick={batchDelete}>{armedSelKey===selectKey&&selectedIds.length?`确认删除 ${selectedIds.length} 条`:'删除'}</button>
         </div>
       : <form className="compose compose-box" ref={formRef} onSubmit={submit}>
-      <textarea className="compose-text" rows={2} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
+      <textarea className="compose-text" rows={2} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
       <div className="compose-toolbar"><div className="compose-icons" role="toolbar" aria-label="聊天输入工具">
         {COMPOSE_TOOLS.map(t=>{
           const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||t.id===tray
@@ -2274,6 +2369,7 @@ function Chat(p: any) {
       {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
     </form>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
+    {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} hasMcp={trayMcp.length>0}/>}
     {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
   </div>
 }

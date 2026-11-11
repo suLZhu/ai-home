@@ -1213,3 +1213,58 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .shell .character-head.compact{margin:0 0 10px;padding:0 0 9px;border-bottom:1px solid var(--line,#e2d9cc)}
 .shell .character-head.compact .avatar-upload{display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-size:11.5px;color:var(--muted,#8a7d6d)}
 .shell .character-head.compact .avatar-upload input{width:auto;max-width:190px;margin:0;font-size:10px}
+
+/* ═══════════ 模型选择：简洁半屏面板 ═══════════
+   拖动把手 + 搜索框 + 按供应商分组的模型行 + 底部供应商筛选。
+   名称 / 模型 ID / 供应商都来自真实预设，不虚构能力或上下文长度。 */
+.model-sheet-backdrop{position:fixed;inset:0;z-index:130;display:flex;align-items:flex-end;justify-content:center;background:rgba(30,27,24,.42)}
+/* 只做位移不做透明度：淡入期间整块半透明会把下面的输入栏透出来，看着像重叠。 */
+.shell .model-sheet{display:flex;flex-direction:column;width:100%;max-width:480px;height:min(76dvh,640px);padding-bottom:max(10px,var(--app-safe-bottom));border:1px solid var(--line,#e6ded2)!important;border-bottom:0!important;border-radius:24px 24px 0 0!important;background:var(--surface,#fbf8f4)!important;box-shadow:0 -14px 40px rgba(40,30,24,.16)!important;overflow:hidden;color:var(--ink,#403b35);animation:modelSheetUp .18s ease-out}
+@keyframes modelSheetUp{from{transform:translateY(18px)}to{transform:translateY(0)}}
+/* 面板打开时贴边把手不再从遮罩里透出来 */
+html:has(.model-sheet-backdrop) .shell .mobile-menu-toggle.sidebar-edge-handle{opacity:0!important;pointer-events:none!important}
+.shell .model-sheet-grabber{flex:0 0 auto;display:grid;place-items:center;width:100%;height:26px;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+.shell .model-sheet-grabber i{display:block;width:38px;height:4px;border-radius:999px;background:var(--line,#dcd3c7)}
+.shell .model-sheet-search{flex:0 0 auto;display:flex;align-items:center;gap:9px;height:46px;margin:2px 16px 8px;padding:0 12px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:16px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;color:var(--muted,#8a8378)}
+.shell .model-sheet-search>svg{flex:0 0 auto}
+#model-sheet-search-input{flex:1;min-width:0;height:100%;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:none!important;font-size:14px;color:var(--ink,#403b35)!important}
+#model-sheet-search-input::placeholder{color:var(--muted,#a39a8c)}
+.shell .model-sheet-search button{flex:0 0 auto;display:grid;place-items:center;padding:4px 5px!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a8378);font-size:15px;line-height:1}
+.shell .model-sheet-search button svg{display:block}
+.shell .model-sheet-key{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:5px;margin:0 18px 2px;font-size:10px;color:var(--muted,#8a7d6d)}
+.shell .model-sheet-key>span{flex:0 0 auto;opacity:.75}
+.shell .model-sheet-key select{flex:0 1 auto;min-width:0;max-width:72%;padding:2px 4px!important;border:0!important;border-radius:6px!important;background:transparent!important;box-shadow:none!important;font-size:10px;color:var(--muted,#8a7d6d)!important}
+.shell .model-sheet-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 16px 8px}
+.shell .model-sheet-group>h4{margin:14px 2px 6px;font-size:11.5px;font-weight:500;letter-spacing:.02em;color:var(--muted,#8a8378)}
+.shell .model-sheet-row{display:flex;align-items:center;gap:2px;padding:0 4px;border-radius:16px;border:1px solid transparent!important;transition:background .15s}
+.shell .model-sheet-row.selected{background:rgba(168,105,80,.13)!important}
+.shell .model-sheet-pick{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:10px 6px!important;border:0!important;border-radius:16px!important;background:transparent!important;box-shadow:none!important;text-align:left;color:var(--ink,#403b35)!important}
+.shell .model-sheet-vendor{flex:0 0 auto;display:grid;place-items:center;width:32px;height:32px;border:0!important;border-radius:50%!important;font-size:12px;font-weight:600}
+.shell .model-sheet-main{flex:1;min-width:0;display:block}
+.shell .model-sheet-main>b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:500}
+.shell .model-sheet-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:6px}
+.shell .model-sheet-tags i{font-style:normal;font-size:10px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--field,#efe9df);color:var(--muted,#7a7164)}
+.shell .model-sheet-tags em{font-style:normal;font-size:10px;color:var(--muted,#a39a8c);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.shell .model-sheet-check{flex:0 0 auto;font-size:13px;color:var(--accent,#8b593b)}
+.shell .model-sheet-fav{flex:0 0 auto;width:34px;height:34px;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#a39a8c);font-size:19px;line-height:1}
+.shell .model-sheet-fav.on{color:#b4644d}
+.shell .model-sheet-filter{flex:0 0 auto;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px 16px 4px;border-top:1px solid var(--line,#e9e2d8)}
+.shell .model-sheet-filter button{padding:7px 13px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:999px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;font-size:11.5px;color:var(--muted,#7a7164)}
+.shell .model-sheet-filter button.active{border-color:transparent!important;background:var(--accent-soft,#f7ece5)!important;color:var(--accent,#8b593b)!important}
+.shell .model-sheet-empty{margin:36px 4px;text-align:center;font-size:12.5px;line-height:1.8;color:var(--muted,#8a8378)}
+
+/* ═══════════ 软键盘弹起：聊天记录保持可见 ═══════════
+   Android WebView 在 edge-to-edge 下键盘可能把整页上推而不是压缩视口，
+   100dvh 不跟着变，消息区就被推出屏幕。用 visualViewport 量到的
+   --app-visual-height 重新封顶聊天锁，输入区收紧，消息区贴底显示最新一条。 */
+html[data-keyboard="open"] .shell.shell-chat-lock{height:var(--app-visual-height)!important;max-height:var(--app-visual-height)!important;min-height:0!important}
+html[data-keyboard="open"] .shell .fullscreen-chat .chat-header{padding-top:4px!important;padding-bottom:6px!important}
+html[data-keyboard="open"] .shell .fullscreen-chat .chat-body{padding-top:6px!important;padding-bottom:6px!important}
+html[data-keyboard="open"] .shell .fullscreen-chat .compose.compose-box{margin:3px 8px 4px!important;padding:6px 10px 5px!important}
+html[data-keyboard="open"] .shell .fullscreen-chat .compose-box .compose-text{min-height:34px!important;max-height:68px!important}
+html[data-keyboard="open"] .shell .fullscreen-chat .compose-tray{max-height:24dvh}
+html[data-keyboard="open"] .shell .fullscreen-chat .emoji-panel{max-height:24dvh}
+html[data-keyboard="open"] .shell .mobile-menu-toggle.sidebar-edge-handle{opacity:0!important;pointer-events:none!important}
+html[data-keyboard="open"] .model-sheet{height:min(56dvh,430px)}
+html[data-keyboard="open"] .model-sheet-backdrop,
+html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-height,0px)}

@@ -61,6 +61,9 @@ public class MainActivity extends BridgeActivity {
     private void setupEdgeToEdge() {
         Window window = getWindow();
         WindowCompat.setDecorFitsSystemWindows(window, false);
+        // 键盘用 resize 而不是 pan：pan 会把整张聊天页往上推，消息列表直接滚出屏幕；
+        // resize 让 WebView 真正变矮，前端 visualViewport 才能把输入框压到键盘上沿。
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
