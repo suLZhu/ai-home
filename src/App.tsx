@@ -32,6 +32,8 @@ import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiag
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
 import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, chatRequestUrl, modelListUrl, groupModels, orderedKeys, DEFAULT_API_PATH, type Vendor } from './vendors.mjs'
+// 订阅账号：渠道目录 / 搜索 / 凭据归一化。凭据只存本机，不进云端快照。
+import { SUBSCRIPTION_STORAGE_KEY, SUBSCRIPTION_QUICK_TERMS, channelById, searchSubscriptionChannels, normalizeSubscriptions, blankSubscription, type SubscriptionAccount } from './subscriptionChannels.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -200,6 +202,8 @@ export default function App() {
   const [bindings, setBindings] = useState<Record<Person,PersonBinding>>(() => normalizeBindings(read<unknown>(BINDINGS_KEY, null), ASSISTANT_PEOPLE))
   // 供应商与 Key 只落本机；聊天窗口「设置页勾选池」决定哪些世界书 / MCP 会出现在图标面板。
   const [vendors, setVendors] = useState<Vendor[]>(() => normalizeVendors(read<unknown>(VENDORS_KEY, null)))
+  // 订阅账号含 API Key，只存本机；云端快照里永远不含这一项。
+  const [subscriptions, setSubscriptions] = useState<SubscriptionAccount[]>(() => normalizeSubscriptions(read<unknown>(SUBSCRIPTION_STORAGE_KEY, [])))
   const [chatPool, setChatPool] = useState<ChatPool>(() => normalizePool(read<unknown>(CHAT_POOL_KEY, null)))
   const [projects,setProjects]=useState<ProjectRecord[]>(()=>read('ai-home.projects',[]))
   // 用户配置的 IANA 时区：只影响服务端生成的时间上下文（日期/星期/时间/时段），
@@ -665,6 +669,7 @@ export default function App() {
   useEffect(() => localStorage.setItem(MODEL_PROFILES_KEY, JSON.stringify(modelProfiles)), [modelProfiles])
   useEffect(() => localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings)), [bindings])
   useEffect(() => { try { localStorage.setItem(VENDORS_KEY, JSON.stringify(vendors)) } catch { /* 私密模式忽略 */ } }, [vendors])
+  useEffect(() => { try { localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(subscriptions)) } catch { /* 私密模式忽略 */ } }, [subscriptions])
   useEffect(() => localStorage.setItem(CHAT_POOL_KEY, JSON.stringify(chatPool)), [chatPool])
   useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
   useEffect(() => localStorage.setItem('ai-home.tasks', JSON.stringify(tasks)), [tasks])
@@ -1349,7 +1354,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} setRoomName={setRoomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
@@ -2403,7 +2408,7 @@ export function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,chatPool,setChatPool,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;onApiBaseApplied?:()=>void}) {
+function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,chatPool,setChatPool,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：二级页先退回一级，一级页再退回设置首页。
   useEffect(()=>{
@@ -2431,7 +2436,7 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
   const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：一级只有 5 项，主题美化 / 供应商各自再分二级 ──────────
@@ -2518,6 +2523,170 @@ const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '
 
 // 设置页统一放 API Key 与默认接口：复用原来的模型设置面板，按助手切换。
 // 工作区不再陈列「模型设置」工具，聊天窗口也不放 Key，只负责选用与绑定。
+// ── 订阅账号：搜索渠道 → 接入 → 填自己的订阅凭据验证登录 → 选模型进聊天 ────
+// 凭据只落本机，并同步进 vendors.keys，聊天侧直接复用已有的多 KEY / 模型绑定链路，
+// 不另造一套请求路径。这里「登录」的是用户自己的 API 订阅凭据，不是网页账号。
+function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions,setSubscriptions}:{
+  vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
+  setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
+  subscriptions:SubscriptionAccount[]; setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>
+}) {
+  const [query,setQuery]=useState('')
+  const [openId,setOpenId]=useState('')
+  const [showKey,setShowKey]=useState<Record<string,boolean>>({})
+  const [modelsOpen,setModelsOpen]=useState<Record<string,boolean>>({})
+  const [advanced,setAdvanced]=useState<Record<string,boolean>>({})
+  const [modelQuery,setModelQuery]=useState('')
+  const [verify,setVerify]=useState<Record<string,{loading:boolean;error:string}>>({})
+  const results=searchSubscriptionChannels(query)
+  const commit=(next:SubscriptionAccount[])=>setSubscriptions(next)
+  const patch=(id:string,fn:(a:SubscriptionAccount)=>SubscriptionAccount)=>commit(subscriptions.map(a=>a.id===id?fn(a):a))
+  const channelOf=(a:SubscriptionAccount)=>channelById(a.channelId)
+  // Key 只有一份：真实值永远以 vendors.keys 为准。订阅账号页输入时同步写回供应商，
+  // 供应商页改了同一把 Key 这里也会立刻显示新值，避免两处各改各的。
+  const readKey=(a:SubscriptionAccount)=>{
+    const v=vendors.find(x=>x.id===a.vendorId)
+    const found=v?.keys.find(k=>k.id===a.vendorKeyId)?.value
+    return typeof found==='string'?found:a.apiKey
+  }
+  const changeKey=(a:SubscriptionAccount,value:string)=>{
+    const vid=a.vendorId
+    const keyId=a.vendorKeyId||crypto.randomUUID()
+    patch(a.id,x=>({...x,apiKey:'',vendorKeyId:x.vendorKeyId||keyId}))
+    const current=vendors.find(v=>v.id===vid)
+    const label='订阅号 · '+(a.label||'我的账号')
+    if(!current){
+      setVendors([...vendors,{id:vid,name:channelOf(a)?.name||a.label,endpoint:a.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,builtin:false,keys:[{id:keyId,label,value,role:'primary' as const}],models:[]} as Vendor])
+    }else{
+      setVendors(vendors.map(v=>v.id===vid?{...v,keys:v.keys.some(k=>k.id===keyId)?v.keys.map(k=>k.id===keyId?{...k,label,value}:k):[...v.keys,{id:keyId,label,value,role:'primary' as const}]}:v))
+    }
+  }
+  // 把订阅凭据写进供应商体系：多 KEY 队列、模型分组、聊天请求都复用已有链路。
+  // dropModels 只在「移除渠道」时用，避免聊天里还留着已移除渠道的模型。
+  const writeVendor=(a:SubscriptionAccount,keyValue:string,dropModels=false)=>{
+    const vid=a.vendorId
+    const current=vendors.find(v=>v.id===vid)
+    const base=current||{id:vid,name:channelOf(a)?.name||a.label,endpoint:a.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,builtin:false,keys:[],models:[]} as Vendor
+    const keys=base.keys.filter(k=>k.id!==a.vendorKeyId)
+    let keyId=''
+    if(keyValue){keyId=a.vendorKeyId||crypto.randomUUID();keys.push({id:keyId,label:'订阅号 · '+(a.label||'我的账号'),value:keyValue,role:'primary' as const})}
+    const models=dropModels?[]:base.models
+    const next={...base,endpoint:a.endpoint||base.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,keys,models} as Vendor
+    const emptyShell=!keyValue&&!current?.builtin&&keys.length===0&&models.length===0
+    const finalVendors=emptyShell?vendors.filter(v=>v.id!==vid):(current?vendors.map(v=>v.id===vid?next:v):[...vendors,next])
+    setVendors(finalVendors)
+    setModelProfiles(old=>syncVendorProfiles(finalVendors,old))
+    return keyId
+  }
+  const writeModels=(a:SubscriptionAccount,models:Vendor['models'])=>{
+    const finalVendors=vendors.map(v=>v.id===a.vendorId?{...v,models}:v)
+    setVendors(finalVendors)
+    setModelProfiles(old=>syncVendorProfiles(finalVendors,old))
+  }
+  const addChannel=(ch:(typeof results)[number])=>{
+    const present=subscriptions.find(s=>s.channelId===ch.id)
+    if(present){setOpenId(present.id);return}
+    const a=blankSubscription(ch)
+    commit([...subscriptions,a]);setOpenId(a.id);setModelsOpen(o=>({...o,[a.id]:false}))
+  }
+  const verifyLogin=async(a:SubscriptionAccount)=>{
+    const key=readKey(a).trim()
+    if(!a.endpoint.trim()){setVerify(v=>({...v,[a.id]:{loading:false,error:'请先填写订阅地址。'}}));return}
+    if(!key){setVerify(v=>({...v,[a.id]:{loading:false,error:'请先填写 API Key / 订阅令牌。'}}));return}
+    setVerify(v=>({...v,[a.id]:{loading:true,error:''}}))
+    try{
+      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),apiKey:key,modelsUrl:modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})})})
+      const d=await r.json().catch(()=>({}))
+      if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
+      const ids:string[]=Array.isArray(d?.models)?d.models.filter((x:unknown)=>typeof x==='string'&&x.trim()).map((x:string)=>x.trim()):[]
+      if(!ids.length)throw new Error('这个地址没有返回可用模型，检查一下订阅地址或模型列表路径。')
+      const keyId=writeVendor(a,key)
+      patch(a.id,x=>({...x,vendorKeyId:keyId,loggedIn:true,modelCount:ids.length,availableModels:[...new Set(ids)],lastVerified:new Date().toISOString()}))
+      setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
+      setModelsOpen(o=>({...o,[a.id]:true}))
+    }catch(e){setVerify(v=>({...v,[a.id]:{loading:false,error:e instanceof Error?e.message:'验证失败'}}))}
+  }
+  const logout=(a:SubscriptionAccount)=>{
+    writeVendor(a,'')
+    patch(a.id,x=>({...x,vendorKeyId:'',apiKey:'',loggedIn:false,modelCount:0,availableModels:[],pickedModels:[],lastVerified:''}))
+    setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
+  }
+  const remove=(a:SubscriptionAccount)=>{
+    writeVendor(a,'',true)
+    commit(subscriptions.filter(s=>s.id!==a.id))
+    if(openId===a.id)setOpenId('')
+  }
+  const toggleModel=(a:SubscriptionAccount,id:string)=>{
+    const picked=a.pickedModels.includes(id)
+    const current=vendors.find(v=>v.id===a.vendorId)
+    if(!current)return
+    writeModels(a,picked?current.models.filter(m=>m.id!==id):[...current.models,{id,name:id,selected:true}])
+    patch(a.id,x=>({...x,pickedModels:picked?x.pickedModels.filter(m=>m!==id):[...x.pickedModels,id]}))
+  }
+  return <div id="subscription-accounts" className="subscription-accounts">
+    <div className="sub-head"><b>订阅账号</b><small>搜索渠道 → 接入 → 填自己的订阅凭据 → 聊天里就能选模型</small></div>
+    <p className="sub-policy">这里登录的是你自己的 API 订阅凭据（Key / 令牌 + 订阅地址）：验证只请求该地址的 /models 拉模型清单，不会登录 ChatGPT / Claude 等网页账号；凭据只存这台设备，不进云端快照。</p>
+    <div className="sub-search"><input aria-label="搜索订阅渠道" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索渠道：GPT / Claude / Grok …"/>{query&&<button type="button" aria-label="清空搜索" onClick={()=>setQuery('')}>×</button>}</div>
+    <div className="sub-quick">{SUBSCRIPTION_QUICK_TERMS.map(t=><button type="button" key={t} className={query.toLowerCase()===t.toLowerCase()?'active':''} onClick={()=>setQuery(q=>q.toLowerCase()===t.toLowerCase()?'':t)}>{t}</button>)}</div>
+    <div className="sub-results">
+      <div className="sub-section-head"><b>渠道</b><small>{results.length} 个可接入</small></div>
+      {results.length===0&&<p className="muted">没有匹配的渠道，换个关键词或选「自定义订阅号」。</p>}
+      {results.map(ch=>{
+        const present=subscriptions.find(s=>s.channelId===ch.id)
+        return <div className="sub-result-row" key={ch.id} data-channel-id={ch.id}>
+          <span className="sub-channel-icon" aria-hidden="true">{ch.short}</span>
+          <span className="sub-result-text"><b>{ch.name}</b><small>{ch.hint}</small></span>
+          <button type="button" className={'sub-add'+(present?' added':'')} onClick={()=>addChannel(ch)}>{present?'已接入':'＋ 接入'}</button>
+        </div>
+      })}
+    </div>
+    <div className="sub-accounts">
+      <div className="sub-section-head"><b>我的订阅账号</b><small>{subscriptions.length} 个</small></div>
+      {subscriptions.length===0&&<p className="muted">还没有接入渠道。搜一下 GPT / Claude / Grok，点「＋ 接入」后填自己的 Key 验证即可。</p>}
+      {subscriptions.map(a=>{
+        const ch=channelOf(a),open=openId===a.id,state=verify[a.id]
+        const mq=modelQuery.trim().toLowerCase()
+        const groups=groupModels(a.availableModels.filter(id=>!mq||id.toLowerCase().includes(mq)))
+        return <div className={'sub-account'+(open?' open':'')} key={a.id} data-account-id={a.id}>
+          <button type="button" className="sub-account-head" aria-expanded={open} onClick={()=>setOpenId(open?'':a.id)}>
+            <span className="sub-channel-icon" aria-hidden="true">{ch?.short||'＋'}</span>
+            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · '+a.modelCount+' 个模型':'未登录 · 填 Key 后验证'}</small></span>
+            <span className={'sub-status'+(a.loggedIn?' on':'')}>{a.loggedIn?'已登录':'未登录'}</span><span aria-hidden="true">{open?'▴':'▾'}</span>
+          </button>
+          {open&&<div className="sub-account-body">
+            {ch?.needsCompatibleUrl&&<p className="sub-warn">这个渠道需要 OpenAI 兼容地址：请填你的订阅号 / 聚合平台提供的 Base URL，官方网页版地址不能直接用。</p>}
+            <label className="sub-field">账号备注<input aria-label="订阅账号备注" value={a.label} onChange={e=>patch(a.id,x=>({...x,label:e.target.value}))} placeholder="如我的主号"/></label>
+            <label className="sub-field">订阅地址 Base URL<input aria-label="订阅地址 Base URL" value={a.endpoint} onChange={e=>patch(a.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
+            <p className="sub-url-hint">请求地址 <b>{chatRequestUrl({endpoint:a.endpoint,apiPath:a.apiPath})||'填写订阅地址后显示'}</b></p>
+            <label className="sub-field">API Key / 订阅令牌<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
+            <details className="sub-advanced" open={!!advanced[a.id]}><summary onClick={e=>{e.preventDefault();setAdvanced(s=>({...s,[a.id]:!s[a.id]}))}}>{advanced[a.id]?'▾':'▸'} 高级 · 模型列表路径</summary>
+              <label className="sub-field">模型列表路径 <small>留空自动推导</small><input aria-label="模型列表路径" value={a.modelsPath} onChange={e=>patch(a.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
+              <p className="sub-url-hint">列表地址 <b>{modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})||'填写订阅地址后显示'}</b></p>
+            </details>
+            <div className="sub-actions">
+              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'验证中…':'验证并登录'}</button>
+              {a.loggedIn&&<button type="button" onClick={()=>logout(a)}>退出登录</button>}
+              <button type="button" className="sub-remove" onClick={()=>remove(a)}>移除</button>
+            </div>
+            {state?.error&&<p className="sub-error">{state.error}</p>}
+            {a.loggedIn&&<div className="sub-models">
+              <button type="button" className={'sub-model-toggle'+(modelsOpen[a.id]?' open':'')} aria-expanded={!!modelsOpen[a.id]} onClick={()=>setModelsOpen(o=>({...o,[a.id]:!o[a.id]}))}>＋ 选模型进聊天 <span>{a.pickedModels.length} 个已选</span></button>
+              {modelsOpen[a.id]&&<div className="sub-model-picker">
+                <input aria-label="筛选可用模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)} placeholder="输入模型名称筛选"/>
+                {groups.length===0&&<p className="muted">没有匹配的模型，换个关键词试试。</p>}
+                {groups.map(g=><div className="sub-model-group" key={g.id}><b>{g.label}</b>{g.models.map(id=>{
+                  const picked=a.pickedModels.includes(id)
+                  return <div className={'sub-model-item'+(picked?' picked':'')} key={id}><span>{id}</span><button type="button" aria-label={(picked?'移出聊天模型 ':'加入聊天模型 ')+id} onClick={()=>toggleModel(a,id)}>{picked?'✓':'＋'}</button></div>
+                })}</div>)}
+              </div>}
+            </div>}
+          </div>}
+        </div>
+      })}
+    </div>
+  </div>
+}
+
 function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName}:{
   modelConfig:Record<Person,ModelConfig>; setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>
   apiKey:Record<Person,string>; setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>

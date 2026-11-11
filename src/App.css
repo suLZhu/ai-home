@@ -1268,3 +1268,73 @@ html[data-keyboard="open"] .shell .mobile-menu-toggle.sidebar-edge-handle{opacit
 html[data-keyboard="open"] .model-sheet{height:min(56dvh,430px)}
 html[data-keyboard="open"] .model-sheet-backdrop,
 html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-height,0px)}
+
+/* 订阅账号：渠道搜索 → 接入 → 填凭据登录 → 选模型进聊天。高权重压像素主题粗框。 */
+.shell .subscription-accounts{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
+.shell .sub-head{display:flex;flex-direction:column;gap:3px}
+.shell .sub-head>b{font-size:15px;color:var(--ink,#403b35)}
+.shell .sub-head>small,.shell .sub-policy{font-size:10.5px;line-height:1.55;color:var(--muted,#8a8378);margin:0}
+.shell .sub-policy{padding:8px 10px;border:1px solid var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important}
+.shell .sub-search{display:flex;align-items:center;gap:6px;padding:3px 4px 3px 12px;border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important}
+.shell .sub-search input{flex:1;min-width:0;border:0!important;box-shadow:none!important;background:transparent!important;padding:7px 0!important;font-size:12.5px;color:var(--ink,#403b35)!important}
+.shell .sub-search button{border:0!important;box-shadow:none!important;background:transparent!important;color:var(--muted,#8a8378);font-size:16px;padding:2px 8px!important}
+.shell .sub-quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.shell .sub-quick::-webkit-scrollbar{display:none}
+.shell .sub-quick button{flex:0 0 auto;padding:5px 11px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important;font-size:11px;color:var(--muted,#8a8378)!important}
+.shell .sub-quick button.active{background:var(--accent-soft,#f7ece5)!important;color:var(--ink,#403b35)!important;border-color:var(--accent,#d9b8a4)!important}
+.shell .sub-section-head{display:flex;align-items:baseline;justify-content:space-between;margin-top:4px}
+.shell .sub-section-head>b{font-size:12.5px;color:var(--ink,#403b35)}
+.shell .sub-section-head>small{font-size:10px;color:var(--muted,#8a8378)}
+.shell .sub-results,.shell .sub-accounts{display:flex;flex-direction:column;gap:6px}
+.shell .sub-result-row,.shell .sub-account{border:1px solid var(--line,#e6ded2)!important;border-radius:12px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important;overflow:hidden}
+.shell .sub-result-row{display:flex;align-items:center;gap:9px;padding:8px 10px}
+.shell .sub-channel-icon{flex:0 0 auto;width:30px;height:30px;display:grid;place-items:center;border-radius:50%!important;background:var(--accent-soft,#f2e8df)!important;color:var(--ink,#403b35)!important;font-size:10px;font-weight:700}
+.shell .sub-result-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.shell .sub-result-text>b{font-size:12px;color:var(--ink,#403b35)}
+.shell .sub-result-text>small{font-size:10px;line-height:1.4;color:var(--muted,#8a8378);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.shell .sub-add{flex:0 0 auto;padding:5px 10px!important;border:1px solid var(--accent,#d9b8a4)!important;border-radius:999px!important;background:var(--accent-soft,#f7ece5)!important;box-shadow:none!important;font-size:10.5px;color:var(--ink,#403b35)!important;white-space:nowrap}
+.shell .sub-add.added{background:transparent!important;border-color:var(--line,#e6ded2)!important;color:var(--muted,#8a8378)!important}
+.shell .sub-account-head{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left;color:var(--ink,#403b35)!important}
+.shell .sub-account-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.shell .sub-account-text>b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .sub-account-text>small{font-size:10px;color:var(--muted,#8a8378)}
+.shell .sub-status{flex:0 0 auto;padding:3px 7px;border-radius:999px!important;background:var(--field,#f1ece3)!important;color:var(--muted,#8a8378)!important;font-size:9.5px}
+.shell .sub-status.on{background:#e7f3e6!important;color:#39713a!important}
+.shell .sub-account-body{display:flex;flex-direction:column;gap:8px;padding:4px 10px 12px;border-top:1px solid var(--line,#e6ded2)}
+.shell .sub-warn{margin:2px 0 0;padding:7px 9px;border-radius:9px!important;background:#fff4e6!important;color:#8a5a20!important;font-size:10px;line-height:1.5}
+.shell .sub-field{display:flex;flex-direction:column;gap:4px;font-size:10.5px;color:var(--muted,#8a8378)}
+.shell .sub-field>small{font-size:9.5px}
+.shell .sub-field input,.shell .sub-key-row input,.shell .sub-model-picker>input{width:100%;min-width:0;padding:7px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;font-size:11.5px;color:var(--ink,#403b35)!important;box-sizing:border-box}
+.shell .sub-key-row{display:flex;gap:6px}
+.shell .sub-key-row input{flex:1}
+.shell .sub-key-row button{flex:0 0 auto;padding:0 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important;font-size:10.5px;color:var(--muted,#8a8378)!important}
+.shell .sub-url-hint{margin:0;font-size:9.5px;color:var(--muted,#8a8378);word-break:break-all}
+.shell .sub-url-hint>b{color:var(--ink,#403b35);font-weight:600}
+.shell .sub-advanced{font-size:10.5px;color:var(--muted,#8a8378)}
+.shell .sub-advanced>summary{cursor:pointer;list-style:none;padding:3px 0}
+.shell .sub-advanced>summary::-webkit-details-marker{display:none}
+.shell .sub-advanced[open]>summary{color:var(--ink,#403b35)}
+.shell .sub-advanced>.sub-field{margin-top:6px}
+.shell .sub-actions{display:flex;gap:6px;flex-wrap:wrap}
+.shell .sub-actions button{padding:7px 12px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important;font-size:11px;color:var(--muted,#8a8378)!important}
+.shell .sub-actions .sub-primary{background:var(--accent-soft,#f7ece5)!important;border-color:var(--accent,#d9b8a4)!important;color:var(--ink,#403b35)!important;font-weight:600}
+.shell .sub-actions .sub-primary:disabled{opacity:.6}
+.shell .sub-actions .sub-remove{margin-left:auto;color:#a05252!important}
+.shell .sub-error{margin:0;font-size:10.5px;color:#b04a4a}
+.shell .sub-models{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.shell .sub-model-toggle{display:flex;align-items:center;justify-content:space-between;padding:8px 10px!important;border:1px dashed var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important;font-size:11px;color:var(--ink,#403b35)!important}
+.shell .sub-model-toggle>span{font-size:10px;color:var(--muted,#8a8378)}
+.shell .sub-model-picker{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto;padding:8px;border:1px solid var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--field,#f5f1ea)!important}
+.shell .sub-model-group{display:flex;flex-direction:column;gap:3px}
+.shell .sub-model-group>b{font-size:10px;color:var(--muted,#8a8378);font-weight:600}
+.shell .sub-model-item{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:8px!important;background:var(--surface,#fbf8f4)!important;font-size:11px;color:var(--ink,#403b35)}
+.shell .sub-model-item>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .sub-model-item>button{flex:0 0 auto;width:22px;height:22px;padding:0!important;border:1px solid var(--line,#e6ded2)!important;border-radius:6px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:var(--muted,#8a8378)!important}
+.shell .sub-model-item.picked>button{background:var(--accent-soft,#f7ece5)!important;color:var(--ink,#403b35)!important}
+.shell .settings-legacy-fold{margin:8px 0;border:1px solid var(--line,#e6ded2)!important;border-radius:12px!important;background:var(--surface,#fbf8f4)!important;padding:8px 10px}
+.shell .settings-legacy-fold>summary{cursor:pointer;font-size:11.5px;color:var(--muted,#8a8378)}
+.shell .settings-legacy-fold[open]>summary{margin-bottom:8px;color:var(--ink,#403b35)}
+/* 像素主题对 input 用了 6 个 :not() 的高权重 !important 规则，容器 ID 才能稳定压住。 */
+#subscription-accounts input{border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;box-sizing:border-box}
+#subscription-accounts .sub-search{border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important}
+#subscription-accounts .sub-search input{border:0!important;border-radius:0!important;background:transparent!important;padding:7px 0!important;font-size:12.5px}
