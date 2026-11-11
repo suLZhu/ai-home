@@ -1319,10 +1319,14 @@ function Room(props: {
   function createConversation(){const id=crypto.randomUUID();const title='新对话 '+(convs.length+1);props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:[...(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:[]}));props.setChatError('')}
   return <div className="room-screen">
     {roomHeader}
-    <div className="room-session-switch"><div className="room-session-heading"><b>最近对话</b><span className="room-session-heading-side"><small>{convs.length} 条</small><button type="button" onClick={createConversation} aria-label="新建会话" title="新建会话">＋</button></span></div><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>×</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，点右上角 ＋ 新建。</p>}</div></div>
     <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">→</span></button>
+    {/* 历史会话收起：聊天窗口里已有会话切换条与「＋ 新对话」，房间页不再铺第二份列表。 */}
+    <details className="room-history">
+      <summary><b>历史会话</b><small>{convs.length} 条</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
+      <div className="room-session-switch"><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>×</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，用下面的按钮新建。</p>}</div><button type="button" className="room-history-new" onClick={createConversation}>＋ 新建对话</button></div>
+    </details>
     <details className="room-tools" ref={toolsRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomToolsExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
-      <summary><b>工作区</b><small>9 个工具 · 世界书 / MCP / 模型也可在「设置 → 资源库」</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
+      <summary><b>工作区</b><small>9 个工具 · 点开使用</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
       <div className="tool-grid">{tools.map(t => <button key={t} onClick={() => props.setActiveTool(t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
     </details>
   </div>
@@ -1592,17 +1596,14 @@ function Chat(p: any) {
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   const [configOpen,setConfigOpen]=useState(false)
   const closeConfig=useCallback(()=>setConfigOpen(false),[])
-  // Kelivo 式输入栏快捷开关：模型 / 世界书 / MCP 一点即切换，完整绑定仍走配置抽屉。
-  const [quickOpen,setQuickOpen]=useState<''|'model'|'world'|'mcp'>('')
+  // 顶栏摘要行的只读状态：模型预设 / 世界书条数 / MCP 条数。
+  // 绑定操作统一走「配置」抽屉，聊天页不再维护第二套开关与面板状态。
   const quickMcp=useMcpLibrary()
   const quickBinding:PersonBinding=p.bindings?.[chatPerson]||emptyBinding()
   const quickProfile=(p.modelProfiles||[]).find((x:ModelProfile)=>x.id===quickBinding.modelProfileId)
   const quickWorldCount=(p.worldEntries||[]).filter((e:WorldEntry)=>e.enabled&&isWorldEntryBound(e,chatPerson)).length
   const quickMine=quickMcp.connections.filter(c=>c.person===chatPerson)
-  const quickAllIds=quickMine.map(c=>c.id)
-  const quickMcpIds=quickBinding.mcpIds===null?quickAllIds:quickBinding.mcpIds
-  const quickMcpCount=quickMcpIds.filter(id=>quickMine.length?quickMine.some(c=>c.id===id):true).length
-  const patchQuick=(next:PersonBinding)=>p.setBindings((old:Record<Person,PersonBinding>)=>({...old,[chatPerson]:next}))
+  const quickMcpCount=(quickBinding.mcpIds===null?quickMine.map(c=>c.id):quickBinding.mcpIds).filter(id=>quickMine.length?quickMine.some(c=>c.id===id):true).length
   // 会话内搜索：只搜当前会话（p.messages[chatPerson]），不跨会话、不跨助手。
   const [searchQuery,setSearchQuery]=useState('')
   const [searchActiveIdx,setSearchActiveIdx]=useState(-1)  // 当前定位到的匹配下标（-1=尚未选中）
@@ -1957,8 +1958,9 @@ function Chat(p: any) {
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={'chat-config-toggle'+(configOpen?' tool-active':'')} title="配置当前助手使用的模型 / 世界书 / MCP" aria-label="配置当前助手" onClick={()=>{setQuickOpen('');setConfigOpen(v=>!v)}}>配置</button><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
-    <div className="chat-header-subline" role="status">{p.displayName(chatPerson)} · {quickProfile?.name||'工作区模型'} · 世界书 {quickWorldCount} · MCP {quickMcpCount}</div>
+    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    {/* 顶栏摘要行本身就是「配置」入口：状态只显示一次，绑定操作只留配置抽屉一处。 */}
+    <button type="button" className={'chat-header-subline chat-config-toggle'+(configOpen?' tool-active':'')} role="status" title="配置当前助手使用的模型 / 世界书 / MCP" aria-label="配置当前助手" onClick={()=>setConfigOpen(v=>!v)}>{p.displayName(chatPerson)} · {quickProfile?.name||'工作区模型'} · 世界书 {quickWorldCount} · MCP {quickMcpCount}<span aria-hidden="true"> · 配置 ›</span></button>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
@@ -1975,29 +1977,7 @@ function Chat(p: any) {
         <button type="button" title="撤回全部待发消息（会从队列移除）" onClick={()=>{for(const x of recoveryBatches)p.cancelDeferred(x.key)}}>撤回</button>
       </span>
     </div>}
-    {!selectMode&&<div className="composer-quick" role="toolbar" aria-label="对话快捷配置">
-      <button type="button" className={'composer-quick-chip'+(quickOpen==='model'?' active':'')} onClick={()=>setQuickOpen(quickOpen==='model'?'':'model')}>◈ {quickProfile?.name||'工作区模型'}</button>
-      <button type="button" className={'composer-quick-chip'+(quickOpen==='world'?' active':'')} onClick={()=>setQuickOpen(quickOpen==='world'?'':'world')}>▤ 世界书 {quickWorldCount}</button>
-      <button type="button" className={'composer-quick-chip'+(quickOpen==='mcp'?' active':'')} onClick={()=>setQuickOpen(quickOpen==='mcp'?'':'mcp')}>⌘ MCP {quickMcpCount}</button>
-      <button type="button" className="composer-quick-chip composer-quick-all" onClick={()=>{setQuickOpen('');setConfigOpen(true)}}>⋯ 全部配置</button>
-    </div>}
-    {quickOpen&&!selectMode&&<div className="composer-quick-panel" role="dialog" aria-label="快捷配置">
-      <div className="composer-quick-head"><b>{quickOpen==='model'?'选择模型预设':quickOpen==='world'?'世界书条目':'MCP 服务'}</b><button type="button" aria-label="关闭快捷配置" onClick={()=>setQuickOpen('')}>×</button></div>
-      {quickOpen==='model'&&<div className="composer-quick-options">
-        <label className="chat-config-option"><input type="radio" name="quick-model" checked={!quickBinding.modelProfileId} onChange={()=>patchQuick({...quickBinding,modelProfileId:''})}/><span>工作区原有配置<small>沿用助手原有的 API 地址与模型</small></span></label>
-        {(p.modelProfiles||[]).map((x:ModelProfile)=><label className="chat-config-option" key={x.id}><input type="radio" name="quick-model" checked={quickBinding.modelProfileId===x.id} onChange={()=>patchQuick({...quickBinding,modelProfileId:x.id})}/><span>{x.name}<small>{x.model}</small></span></label>)}
-        {!p.modelProfiles?.length&&<p className="muted">还没有模型预设，去「设置 → 资源库」添加。</p>}
-      </div>}
-      {quickOpen==='world'&&<div className="composer-quick-options">
-        {(p.worldEntries||[]).map((e:WorldEntry)=><label className="chat-config-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/><span>{e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'}</small></span></label>)}
-        {!p.worldEntries?.length&&<p className="muted">还没有世界书条目，去「设置 → 资源库」添加。</p>}
-      </div>}
-      {quickOpen==='mcp'&&<div className="composer-quick-options">
-        {quickMcp.error&&<p className="mcp-error">{quickMcp.error}</p>}
-        {quickMine.map(c=><label className="chat-config-option" key={c.id}><input type="checkbox" checked={quickMcpIds.includes(c.id)} onChange={v=>patchQuick(toggleMcpId(quickBinding,c.id,v.target.checked,quickAllIds))}/><span>{c.name}<small>{c.url}</small></span></label>)}
-        {quickMine.length===0&&<p className="muted">这位助手名下还没有 MCP 服务，去「设置 → 资源库」添加。</p>}
-      </div>}
-    </div>}
+    {/* 输入栏上方不再铺第二套配置开关：顶栏摘要行一点即开同一个配置抽屉。 */}
     {selectMode
       ? <div className="multi-select-bar" role="toolbar" aria-label="多选删除操作">
           <span className="ms-count">已选择 <b>{selectedIds.length}</b> 条</span>
@@ -2112,15 +2092,27 @@ function KelivoSettingsHome({onSelect,onClassic,onOpenTool,displayName,modelProf
     if(r.tool){onOpenTool({person:wsPerson,tool:r.tool});return}
     if(r.section)onSelect(r.section)
   }
+  const rowBtn=(r:KelivRow)=><button type="button" className="kelivo-row" key={r.id} onClick={()=>run(r)}><span className="kelivo-row-icon">{r.icon}</span><span className="kelivo-row-label">{r.label}</span><span className="kelivo-row-chevron" aria-hidden="true">›</span></button>
   return <div className="kelivo-settings">
     <div className="kelivo-search"><span aria-hidden="true">🔍</span><input id="kelivo-search-input" aria-label="搜索设置" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索设置"/>{query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}</div>
     {!q&&<div className="kelivo-status"><span>{isLocalMode()?'本机存储':'云端 · '+(cloudStatus==='saved'?'已同步':'同步中')}</span><span>{modelProfiles.length} 套模型 · {worldEntries.length} 条世界书</span></div>}
     {visible.length===0&&<p className="kelivo-empty">没有找到「{query}」相关的设置。</p>}
-    {visible.map(g=><section className="kelivo-group" key={g.title}>
-      <h3>{g.title}</h3>
-      {g.title==='模型与服务'&&!q&&<div className="kelivo-person"><span>工作区工具默认打开</span><select id="kelivo-ws-person" aria-label="选择工作区助手" value={wsPerson} onChange={e=>setWsPerson(e.target.value as Person)}>{ASSISTANT_PEOPLE.map(id=><option key={id} value={id}>{displayName(id)}</option>)}</select></div>}
-      <div className="kelivo-list">{g.rows.map(r=><button type="button" className="kelivo-row" key={r.id} onClick={()=>run(r)}><span className="kelivo-row-icon">{r.icon}</span><span className="kelivo-row-label">{r.label}</span><span className="kelivo-row-chevron" aria-hidden="true">›</span></button>)}</div>
-    </section>)}
+    {visible.map(g=>{
+      // 6 个工作区工具和「资源库」是同一批能力的两种入口，默认收成一行；
+      // 搜索时全部平铺，保证按「世界书 / MCP」这类别名仍能一步直达。
+      const fold=g.title==='模型与服务'&&!q
+      const toolRows=fold?g.rows.filter(r=>r.tool):[]
+      const mainRows=fold?g.rows.filter(r=>!r.tool):g.rows
+      return <section className="kelivo-group" key={g.title}>
+        <h3>{g.title}</h3>
+        <div className="kelivo-list">{mainRows.map(rowBtn)}</div>
+        {toolRows.length>0&&<details className="kelivo-tools-fold">
+          <summary><span>工作区工具 · {toolRows.length} 项</span><span className="kelivo-fold-chevron" aria-hidden="true">⌄</span></summary>
+          <div className="kelivo-person"><span>默认打开哪位助手</span><select id="kelivo-ws-person" aria-label="选择工作区助手" value={wsPerson} onChange={e=>setWsPerson(e.target.value as Person)}>{ASSISTANT_PEOPLE.map(id=><option key={id} value={id}>{displayName(id)}</option>)}</select></div>
+          <div className="kelivo-list">{toolRows.map(rowBtn)}</div>
+        </details>}
+      </section>
+    })}
   </div>
 }
 

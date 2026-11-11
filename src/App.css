@@ -782,22 +782,20 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .kelivo-row-chevron{flex:0 0 auto;color:#bcb5aa;font-size:19px;line-height:1}
 .kelivo-empty{padding:24px 6px;text-align:center;font-size:13px;color:var(--muted,#8a8378)}
 .kelivo-switch-back{display:block;width:100%;margin-bottom:12px;padding:10px!important;border:1px dashed #cfc7bb!important;border-radius:10px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#7d7367}
+/* 与「资源库」重复的 6 个工作区工具入口收成一行；展开后仍是原来的列表。 */
+.kelivo-tools-fold{margin-top:8px;overflow:hidden;border:1px solid #e5e0d8;border-radius:12px!important;background:var(--card,#fff)}
+.kelivo-tools-fold>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;min-height:40px;padding:0 13px;cursor:pointer;font-size:13px;color:var(--muted,#8a8378)}
+.kelivo-tools-fold>summary::-webkit-details-marker{display:none}
+.kelivo-fold-chevron{font-size:15px;transition:transform .18s}
+.kelivo-tools-fold[open]>summary{border-bottom:1px solid #e8e4dd}
+.kelivo-tools-fold[open] .kelivo-fold-chevron{transform:rotate(180deg)}
+.kelivo-tools-fold .kelivo-person{padding:9px 12px 0;margin:0}
+.kelivo-tools-fold .kelivo-list{border:0!important;border-radius:0!important;box-shadow:none!important}
 
-/* ── 聊天顶栏配置摘要 + 输入栏快捷开关（Kelivo / RikkaHub 式） ── */
-.chat-header-subline{padding:4px 12px 5px;border-bottom:1px solid var(--line,#e3ddd3);text-align:center;font-size:10px;letter-spacing:.02em;color:var(--muted,#8a8378);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.composer-quick{display:flex;gap:6px;overflow-x:auto;padding:0 2px 8px;scrollbar-width:none}
-.composer-quick::-webkit-scrollbar{display:none}
-.composer-quick-chip{display:inline-flex!important;align-items:center;gap:4px;flex:0 0 auto;max-width:150px;padding:6px 10px!important;border:1px solid var(--line,#d8d0c5)!important;border-radius:999px!important;background:var(--card,#fff)!important;box-shadow:none!important;font-size:11px;line-height:1.2;color:var(--ink,#403b35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.composer-quick-chip.active{border-color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 12%,var(--card,#fff))!important}
-.composer-quick-all{margin-left:auto}
-.composer-quick-panel{margin-bottom:8px;overflow:hidden;border:1px solid var(--line,#d8d0c5);border-radius:14px;background:var(--card,#fff)}
-.composer-quick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line,#e3ddd3)}
-.composer-quick-head b{font-size:12px;font-weight:500}
-.composer-quick-head button{width:26px;height:26px;border:0!important;background:transparent!important;box-shadow:none!important;font-size:17px;line-height:1}
-.composer-quick-options{max-height:190px;overflow:auto;padding:6px 10px 10px}
-.composer-quick-options .chat-config-option{margin:5px 0;padding:7px 9px;font-size:12px}
-.composer-quick-options .chat-config-option small{font-size:10px}
-.composer-quick-options p.muted{padding:6px 2px;font-size:11px}
+/* ── 聊天顶栏：一行状态摘要就是「配置」入口，输入栏上方不再放第二套开关 ── */
+.chat-header-subline{display:block;width:100%;padding:5px 12px 6px;border:0;border-bottom:1px solid var(--line,#e3ddd3);border-radius:0;background:transparent;box-shadow:none;text-align:center;font-size:10px;letter-spacing:.02em;color:var(--muted,#8a8378);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.chat-header-subline:hover,.chat-header-subline.tool-active{color:var(--accent,#8b593b);background:rgba(139,89,59,.05)}
+.chat-header-subline span{font-weight:600}
 /* 像素风美化包的 `.beautify-pixel *{border-radius:0!important}` 与单类选择器同权重、
    但加载更晚；这里用更高权重把新组件的圆角拿回来（只作用于 Kelivo 风格组件）。*/
 .shell .kelivo-settings .kelivo-search,
@@ -805,8 +803,8 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .shell .kelivo-settings .kelivo-row-icon{border-radius:7px!important}
 .shell .kelivo-settings .kelivo-person select{border-radius:8px!important}
 .shell .settings-screen .kelivo-switch-back{border-radius:10px!important}
-.shell .fullscreen-chat .composer-quick-chip{border-radius:999px!important}
-.shell .fullscreen-chat .composer-quick-panel{border-radius:14px!important}
+.shell .fullscreen-chat .chat-header-subline{border:0!important;border-bottom:1px solid var(--line,#e3ddd3)!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;font-size:10px!important;line-height:1.5}
+.shell .fullscreen-chat .chat-header-subline:hover,.shell .fullscreen-chat .chat-header-subline.tool-active{background:rgba(139,89,59,.05)!important}
 
 /* ── 房间模块：会话列表瘦身 + 工作区折叠，让首屏聚焦「进来就能聊天」 ── */
 .room-screen .room-session-switch{margin:12px 0 10px;padding:10px 12px;gap:7px;border:1px solid #e2d9cc;border-radius:14px;background:rgba(250,246,238,.72)}
@@ -818,15 +816,18 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .room-screen .room-session-name{padding:8px 11px;font-size:13px;line-height:1.35;border-radius:10px}
 .room-screen .room-session-delete{width:28px;height:28px;font-size:16px;border-radius:8px;background:transparent;border-color:transparent;color:#a99a84;opacity:.6}
 .room-screen .room-session-delete:hover{opacity:1;background:#f0dcd3;color:#965743}
-.room-tools{margin:6px 0 18px;padding:0 12px;border:1px solid #e2d9cc;border-radius:14px;background:rgba(250,246,238,.72)}
-.room-tools>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 2px;cursor:pointer}
-.room-tools>summary::-webkit-details-marker{display:none}
-.room-tools>summary b{font-size:13px;font-weight:600;color:var(--ink,#403b35);white-space:nowrap}
-.room-tools>summary small{margin-left:auto;font-size:10px;line-height:1.4;text-align:right;color:var(--muted,#8a7d6d)}
+.room-tools,.room-history{margin:6px 0 10px;padding:0 12px;border:1px solid #e2d9cc;border-radius:14px;background:rgba(250,246,238,.72)}
+.room-tools>summary,.room-history>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 2px;cursor:pointer}
+.room-tools>summary::-webkit-details-marker,.room-history>summary::-webkit-details-marker{display:none}
+.room-tools>summary b,.room-history>summary b{font-size:13px;font-weight:600;color:var(--ink,#403b35);white-space:nowrap}
+.room-tools>summary small,.room-history>summary small{margin-left:auto;font-size:10px;line-height:1.4;text-align:right;color:var(--muted,#8a7d6d)}
 .room-tools-chevron{flex-shrink:0;font-size:15px;color:#8a7d6d;transition:transform .18s}
-.room-tools[open] .room-tools-chevron{transform:rotate(180deg)}
-.room-tools[open]>summary{border-bottom:1px solid #e6ded2}
+.room-tools[open] .room-tools-chevron,.room-history[open] .room-tools-chevron{transform:rotate(180deg)}
+.room-tools[open]>summary,.room-history[open]>summary{border-bottom:1px solid #e6ded2}
 .room-tools .tool-grid{margin:10px 0 12px}
+/* 历史会话展开后不再套一层卡片：外层 details 已经是容器。 */
+.room-history .room-session-switch{margin:10px 0 12px;padding:0;border:0;background:transparent}
+.room-history-new{width:100%;margin-top:4px;padding:8px;border:1px dashed #d8cebf;border-radius:9px;background:transparent;font-size:12px;color:#7d6f5d}
 /* 像素风美化包在 pixel.css:157 点名给会话卡加了 2px 墨线 + 硬投影，
    这里把房间页的两块容器统一回浅框，避免一屏两套视觉语言。 */
 .beautify-pixel .room-screen .room-session-switch{border:1px solid #e2d9cc!important;box-shadow:none!important}
