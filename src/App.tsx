@@ -1287,6 +1287,12 @@ function Room(props: {
   deleteMessages: (ids:string[])=>void,
   regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>
 }) {
+  // 工作区 9 个工具默认收起，房间页聚焦「进来就能聊天」。展开偏好存本机；
+  // 用 ref 设置 details.open，避免在下面的条件 return 之后引入 Hook（会打乱 Hook 顺序）。
+  const toolsRef = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    if (toolsRef.current) toolsRef.current.open = localStorage.getItem('ai-home.roomToolsExpanded') === '1'
+  }, [])
   if (props.chatOpen) return <Chat {...props} />
   // 头部右侧是助手切换器：两个以内只放一个「切换」按钮（不铺开默认名
   // assistant-001/002 这类编号），超过两个才用下拉选框选择当前房间。
@@ -1306,16 +1312,19 @@ function Room(props: {
   const person=props.person
   const convs=props.conversations[person]||[]
   const activeId=props.activeConversationIds[person]||''
+  const lastText=(()=>{const list=props.messages[person]||[];for(let i=list.length-1;i>=0;i--){const c=list[i]?.content?.trim?.();if(c)return c.slice(0,36)}return '还没有消息，说点什么吧'})()
   function saveActiveMessages(){props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c)}))}
   function openConversation(id:string){if(id!==activeId){saveActiveMessages();const target=convs.find(c=>c.id===id);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}));props.setChatError('')}props.setChatOpen(true)}
   function deleteConversation(id:string){const target=convs.find(c=>c.id===id);if(!target||!window.confirm('删除「'+(target.title||'新对话')+'」？此操作会删除这条会话及其消息，无法撤销。'))return;const remaining=convs.filter(c=>c.id!==id);const next=remaining.length?remaining:[{id:crypto.randomUUID(),title:'新对话',messages:[],updatedAt:new Date().toISOString()}];props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:next}));if(id===activeId){const nextActive=next[Math.max(0,convs.findIndex(c=>c.id===id)-1)]||next[0];props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:nextActive.id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:nextActive.messages}))}props.setChatError('')}
   function createConversation(){const id=crypto.randomUUID();const title='新对话 '+(convs.length+1);props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:[...(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:[]}));props.setChatError('')}
   return <div className="room-screen">
     {roomHeader}
-    <div className="room-session-switch"><div className="room-session-heading"><b>独立会话</b><span className="room-session-heading-side"><small>{convs.length} 条对话</small><button type="button" onClick={createConversation}>＋ 新会话</button></span></div><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>🗑</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，点右上角「＋ 新会话」。</p>}</div><small className="room-session-hint">点击对话名进入聊天窗口，点 🗑 删除这条对话。</small></div>
-    <div className="workspace-title">工作区</div>
-    <p className="workspace-note">每位助手的工作区相互独立，这里的设置只影响当前助手。</p>
-    <div className="tool-grid">{tools.map(t => <button key={t} onClick={() => props.setActiveTool(t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
+    <div className="room-session-switch"><div className="room-session-heading"><b>最近对话</b><span className="room-session-heading-side"><small>{convs.length} 条</small><button type="button" onClick={createConversation} aria-label="新建会话" title="新建会话">＋</button></span></div><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>×</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，点右上角 ＋ 新建。</p>}</div></div>
+    <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">→</span></button>
+    <details className="room-tools" ref={toolsRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomToolsExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
+      <summary><b>工作区</b><small>9 个工具 · 世界书 / MCP / 模型也可在「设置 → 资源库」</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
+      <div className="tool-grid">{tools.map(t => <button key={t} onClick={() => props.setActiveTool(t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
+    </details>
   </div>
 }
 

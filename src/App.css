@@ -807,3 +807,33 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .shell .settings-screen .kelivo-switch-back{border-radius:10px!important}
 .shell .fullscreen-chat .composer-quick-chip{border-radius:999px!important}
 .shell .fullscreen-chat .composer-quick-panel{border-radius:14px!important}
+
+/* ── 房间模块：会话列表瘦身 + 工作区折叠，让首屏聚焦「进来就能聊天」 ── */
+.room-screen .room-session-switch{margin:12px 0 10px;padding:10px 12px;gap:7px;border:1px solid #e2d9cc;border-radius:14px;background:rgba(250,246,238,.72)}
+.room-screen .room-session-heading{font-size:12px}
+.room-screen .room-session-heading b{font-weight:600}
+.room-screen .room-session-heading-side small{font-size:10px}
+.room-screen .room-session-heading-side button{min-width:30px;padding:3px 9px;font-size:15px;line-height:1.3;border:1px solid #d8cebf;border-radius:9px;background:#f3ece0;color:#665443}
+.room-screen .room-session-list{gap:5px}
+.room-screen .room-session-name{padding:8px 11px;font-size:13px;line-height:1.35;border-radius:10px}
+.room-screen .room-session-delete{width:28px;height:28px;font-size:16px;border-radius:8px;background:transparent;border-color:transparent;color:#a99a84;opacity:.6}
+.room-screen .room-session-delete:hover{opacity:1;background:#f0dcd3;color:#965743}
+.room-tools{margin:6px 0 18px;padding:0 12px;border:1px solid #e2d9cc;border-radius:14px;background:rgba(250,246,238,.72)}
+.room-tools>summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:10px 2px;cursor:pointer}
+.room-tools>summary::-webkit-details-marker{display:none}
+.room-tools>summary b{font-size:13px;font-weight:600;color:var(--ink,#403b35);white-space:nowrap}
+.room-tools>summary small{margin-left:auto;font-size:10px;line-height:1.4;text-align:right;color:var(--muted,#8a7d6d)}
+.room-tools-chevron{flex-shrink:0;font-size:15px;color:#8a7d6d;transition:transform .18s}
+.room-tools[open] .room-tools-chevron{transform:rotate(180deg)}
+.room-tools[open]>summary{border-bottom:1px solid #e6ded2}
+.room-tools .tool-grid{margin:10px 0 12px}
+/* 像素风美化包在 pixel.css:157 点名给会话卡加了 2px 墨线 + 硬投影，
+   这里把房间页的两块容器统一回浅框，避免一屏两套视觉语言。 */
+.beautify-pixel .room-screen .room-session-switch{border:1px solid #e2d9cc!important;box-shadow:none!important}
+.room-chat-entry{display:flex;align-items:center;gap:11px;width:100%;margin:0 0 10px;padding:12px 14px;border:1px solid #cfc0aa;border-radius:14px;background:#f6efe3;text-align:left;color:var(--ink,#403b35)}
+.room-chat-entry:hover{background:#efe6d6;border-color:#a99a84}
+.room-chat-entry-mark{flex-shrink:0;width:36px;height:36px;display:grid;place-items:center;border:1px solid #ddd0bd;border-radius:10px;background:#fffaf1;font-size:17px}
+.room-chat-entry-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.room-chat-entry-text b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room-chat-entry-text small{font-size:11px;color:var(--muted,#8a7d6d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room-chat-entry-go{flex-shrink:0;font-size:17px;color:#8b6c4a}
