@@ -877,3 +877,49 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .connection-keys{margin-top:14px}
 .connection-person{display:flex;align-items:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted,#8a7d6d)}
 .connection-person select{max-width:180px;padding:6px 9px;border:1px solid var(--line,#e3ddd3);border-radius:9px;background:var(--card,#fff);font-size:12px;color:var(--ink,#403b35)}
+
+/* ── 房间工作区：只放助手头像，点头像进「助手档案」 ────────────────── */
+.shell .room-screen button.room-name-avatar{flex:0 0 auto;width:40px;height:40px;padding:0;border:1px solid #ddd0bd!important;border-radius:50%!important;background:#fffaf1!important;box-shadow:none!important;overflow:hidden;cursor:pointer}
+.room-name-avatar img,.ad-avatar img,.ap-avatar img{display:block;width:100%;height:100%;object-fit:cover}
+.assistant-dock{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.shell .room-screen button.assistant-dock-row{display:flex;align-items:center;gap:11px;width:100%;padding:10px 11px;border:1px solid #e2d9cc!important;border-radius:12px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;text-align:left}
+.shell .room-screen button.assistant-dock-row.current{border-color:#c9b79c!important;background:#faf4e9!important}
+.ad-avatar{flex:0 0 auto;width:38px;height:38px;border:1px solid #e5dacc;border-radius:50%!important;overflow:hidden}
+.ad-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ad-info b{font-size:13px;font-weight:600;color:var(--ink,#403b35)}
+.ad-info small{font-size:10.5px;color:var(--muted,#8a7d6d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad-go{flex:0 0 auto;font-size:17px;color:#8b6c4a}
+
+/* 助手档案：人物设置 / 长期记忆 / 短期记忆 / 主动任务四段收在一个面板 */
+.assistant-profile{display:flex;flex-direction:column;gap:10px}
+.ap-head{display:flex;align-items:center;gap:11px;padding:2px 2px 4px}
+.ap-avatar{flex:0 0 auto;width:44px;height:44px;border:1px solid #e5dacc;border-radius:50%!important;overflow:hidden}
+.ap-head b{font-size:14px;color:var(--ink,#403b35)}
+.ap-head small{display:block;font-size:10.5px;color:var(--muted,#8a7d6d)}
+.ap-tabs{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}
+.ap-tabs::-webkit-scrollbar{display:none}
+.shell .room-screen button.ap-tab{flex:0 0 auto;padding:7px 12px;border:1px solid #e2d9cc!important;border-radius:999px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;font-size:11.5px;color:var(--muted,#8a7d6d);white-space:nowrap}
+.shell .room-screen button.ap-tab.active{border-color:var(--accent,#8b593b)!important;background:#f6efe3!important;color:var(--accent,#8b593b)}
+.ap-body{min-height:110px}
+.ap-short>p{margin:0 0 8px;font-size:11px;line-height:1.5}
+.ap-recent{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto}
+.ap-recent-row{display:flex;gap:8px;padding:8px 10px;border:1px solid #ece3d6;border-radius:10px!important;background:var(--card,#fffdf9);font-size:11.5px;line-height:1.45}
+.ap-recent-row.user{background:#f4ecdf}
+.ap-recent-row b{flex:0 0 auto;font-weight:600;color:var(--accent,#8b593b)}
+.ap-recent-row span{color:var(--ink,#403b35);word-break:break-word}
+
+/* ── 设置页：一级 5 项，主题美化 / 供应商各有二级 ─────────────────── */
+.settings-subnav{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.settings-subnav>p{margin:0 0 2px;font-size:11px;line-height:1.5}
+.shell .settings-screen button.subnav-row{display:flex;align-items:center;gap:11px;width:100%;padding:12px 13px;border:1px solid #e2d9cc!important;border-radius:12px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;text-align:left}
+.subnav-icon{flex:0 0 auto;display:grid;place-items:center;width:30px;height:30px;border-radius:9px!important;background:#f0e8da;color:#8b6c4a;font-size:15px}
+.subnav-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.subnav-text b{font-size:13px;font-weight:600;color:var(--ink,#403b35)}
+.subnav-text small{font-size:10.5px;color:var(--muted,#8a7d6d)}
+.subnav-go{flex:0 0 auto;font-size:17px;color:#8b6c4a}
+.assistant-theme .connection-person{margin-bottom:10px}
+.data-fold{margin:10px 0;border:1px solid #e2d9cc;border-radius:12px!important;background:rgba(250,246,238,.6)}
+.data-fold>summary{list-style:none;padding:11px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink,#403b35)}
+.data-fold>summary::-webkit-details-marker{display:none}
+.data-fold[open]>summary{border-bottom:1px solid #e6ded2}
+.data-fold>.setting-card,.data-fold>.usage-panel{margin:10px}
