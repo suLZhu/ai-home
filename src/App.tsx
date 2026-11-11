@@ -103,6 +103,19 @@ export default function App() {
   const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>({...DEFAULT_THEME,...read<Partial<ThemePrefs>>('ai-home.themePrefs',DEFAULT_THEME)}))
   const [beautifyPack,setBeautifyPack]=useState<string>(()=>read('ai-home.beautifyPack',DEFAULT_BEAUTIFY_PACK))
   useEffect(()=>{ try{localStorage.setItem('ai-home.beautifyPack',JSON.stringify(beautifyPack))}catch{ /* private mode */ } },[beautifyPack])
+  // 全面屏状态栏 / 手势条图标明暗跟随主题：夜间主题用亮色图标，浅色主题用深色图标。
+  // JS 接口在页面加载早期可能尚未注入，做几次短重试；Web 端不存在该接口，静默跳过。
+  useEffect(()=>{
+    const dark=themePrefs.theme==='night'
+    let tries=0
+    const sync=()=>{
+      const bars=(window as any).AiHomeBars
+      if(bars&&typeof bars.setDarkIcons==='function'){bars.setDarkIcons(!dark);return}
+      if(tries++<12)window.setTimeout(sync,250)
+    }
+    sync()
+    return ()=>{tries=999}
+  },[themePrefs.theme])
   const [roomName,setRoomName]=useState<string>(()=>{const saved=read<string>('ai-home.roomName','我的房间');return saved==='我的房间'?'用户':saved})
   useEffect(()=>{ try{localStorage.setItem('ai-home.roomName',JSON.stringify(roomName))}catch{ /* private mode */ } },[roomName])
   const [customAssets,setCustomAssets]=useState<CustomAssets>(()=>read<CustomAssets>('ai-home.customAssets',EMPTY_ASSETS))
@@ -187,18 +200,19 @@ export default function App() {
   // 需要人工处理的批次由聊天输入区上方的恢复条提供「立即发送 / 撤回」。
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => { const saved=read<Record<string,string[]>>('ai-home.tasks',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,string[]> })
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
+  // 左侧抽屉默认完全收起：屏幕边缘只留一条细把手，点一下才滑出，再点遮罩 / × / 系统返回手势收起。
+  // 不再定时自动收回——用户要在里面翻历史会话、重命名，自动收回会打断操作。
   const [sidebarOpen,setSidebarOpen]=useState(false)
-  // 百宝箱侧边栏＝可回收抽屉：点 ☰ 出现；点侧边栏以外的地方（包括下方导航与内容）立即收回并放行点击；侧边栏内 4 秒无操作自动收回。
+  // 抽屉里的会话重命名：输入框与草稿只属于抽屉，不占用聊天顶栏。
+  const [drawerRenameId,setDrawerRenameId]=useState<string|null>(null)
+  const [drawerRenameDraft,setDrawerRenameDraft]=useState('')
   useEffect(()=>{
     if(!sidebarOpen)return
-    let timer=window.setTimeout(()=>setSidebarOpen(false),4000)
-    const bump=()=>{window.clearTimeout(timer);timer=window.setTimeout(()=>setSidebarOpen(false),4000)}
-    const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.mobile-menu-toggle')
-    const onDown=(e:PointerEvent)=>{if(inside(e.target))bump();else{window.clearTimeout(timer);setSidebarOpen(false)}}
-    const onMove=(e:PointerEvent)=>{if(inside(e.target))bump()}
+    const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.sidebar-edge-handle')
+    const onDown=(e:PointerEvent)=>{if(!inside(e.target))setSidebarOpen(false)}
     document.addEventListener('pointerdown',onDown)
-    document.addEventListener('pointermove',onMove)
-    return ()=>{window.clearTimeout(timer);document.removeEventListener('pointerdown',onDown);document.removeEventListener('pointermove',onMove)}
+    const unregister=pushBackHandler(()=>{setSidebarOpen(false);return true})
+    return ()=>{document.removeEventListener('pointerdown',onDown);unregister()}
   },[sidebarOpen])
   const [funShortcut,setFunShortcut]=useState('')
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
@@ -1186,6 +1200,57 @@ export default function App() {
 
   const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
   const openFunShortcut=(key:string)=>{setFunShortcut(key);setPage('fun');setSidebarOpen(false);setActiveTool('')}
+  // 左侧抽屉里的会话操作：和房间页共用 conversations / messages / activeConversationIds，
+  // 切换前先把当前聊天视图写回持久化会话，避免刚发出去的消息丢在旧会话里。
+  const drawerConvs:Conversation[]=conversations[person]||[]
+  const drawerActiveId:string=activeConversationIds[person]||''
+  function drawerWriteBack(){
+    if(!drawerActiveId)return
+    setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===drawerActiveId?{...c,messages:messages[person],updatedAt:new Date().toISOString()}:c)}))
+  }
+  function drawerSwitch(id:string){
+    if(id!==drawerActiveId){
+      drawerWriteBack()
+      const target=(conversations[person]||[]).find(c=>c.id===id)
+      setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}))
+      setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}))
+      setChatError('')
+    }
+    setPage('room');setActiveTool('');setChatOpen(true);setSidebarOpen(false);setDrawerRenameId(null)
+  }
+  function drawerCreate(){
+    drawerWriteBack()
+    const id=crypto.randomUUID()
+    const count=(conversations[person]||[]).length
+    setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:[...(old[person]||[]),{id,title:'新对话 '+(count+1),messages:[],updatedAt:new Date().toISOString()}]}))
+    setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}))
+    setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:[]}))
+    setChatError('')
+    setPage('room');setActiveTool('');setChatOpen(true);setSidebarOpen(false);setDrawerRenameId(null)
+  }
+  function drawerRename(id:string){
+    const title=drawerRenameDraft.trim()
+    setDrawerRenameId(null)
+    if(!title)return
+    setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===id?{...c,title}:c)}))
+  }
+  function drawerDelete(id:string){
+    const list=conversations[person]||[]
+    const target=list.find(c=>c.id===id)
+    if(!target||!window.confirm('删除「'+(target.title||'新对话')+'」？此操作会删除这条会话及其消息，无法撤销。'))return
+    const remaining=list.filter(c=>c.id!==id)
+    const next=remaining.length?remaining:[{id:crypto.randomUUID(),title:'新对话',messages:[],updatedAt:new Date().toISOString()}]
+    setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:next}))
+    if(id===drawerActiveId){
+      const nextActive=next[Math.max(0,list.findIndex(c=>c.id===id)-1)]||next[0]
+      setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:nextActive.id}))
+      setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:nextActive.messages||[]}))
+    }
+    setChatError('')
+    setDrawerRenameId(null)
+  }
+  // 聊天页没有「← 房间」按钮：从抽屉底部或系统返回手势回房间。
+  const drawerBackToRoom=()=>{setSidebarOpen(false);setChatOpen(false);setActiveTool('')}
   const beautifyClass=BEAUTIFY_PACKS.find(p=>p.id===beautifyPack)?.cssClass||''
   // 聊天页优先用当前助手的独立外观（角色外观），否则跟随全局
   const effAppearance=chatOpen?personAppearance[person]:undefined
@@ -1199,8 +1264,35 @@ export default function App() {
   // 消息列表成为唯一滚动容器，页面整体不再被聊天记录撑长。
   const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
-    <button className={"mobile-menu-toggle"+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起百宝箱':'打开百宝箱'} onClick={()=>setSidebarOpen(v=>!v)}><span>☰</span><b>百宝箱</b></button>
-    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')}><div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>百宝箱</b><small>TREASURE BOX</small></div><button className="sidebar-close" aria-label="关闭菜单" onClick={()=>setSidebarOpen(false)}>×</button></div><div className="sidebar-caption">打开一个小惊喜</div><nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 百宝箱{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div></aside>
+    {/* 全面屏：百宝箱与历史聊天都收进左侧抽屉，默认只露一条贴边细把手，点一下才滑出。 */}
+    <button type="button" className={'mobile-menu-toggle sidebar-edge-handle'+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起侧边栏':'打开侧边栏'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">›</span></button>
+    {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}
+    <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
+      <div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}>×</button></div>
+      <div className="sidebar-scroll">
+        <section className="sidebar-section">
+          <div className="sidebar-section-head"><b>历史聊天</b><small>{displayName(person)}</small></div>
+          <div className="sidebar-conv-list">
+            {drawerConvs.map((c:Conversation)=>(
+              <div className={'sidebar-conv-row'+(c.id===drawerActiveId?' active':'')} key={c.id}>
+                {drawerRenameId===c.id
+                  ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
+                  : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
+                <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}>✎</button>
+                <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>drawerDelete(c.id)}>×</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="sidebar-conv-new" onClick={drawerCreate}>＋ 新建对话</button>
+        </section>
+        <section className="sidebar-section">
+          <div className="sidebar-section-head"><b>百宝箱</b><small>TREASURE BOX</small></div>
+          <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav>
+        </section>
+        {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
+      </div>
+      <div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 侧边栏{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div>
+    </aside>
     {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {displayName(toast.person)} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onMe={() => setPage('me')} time={time} displayName={displayName} characters={characters} roomName={roomName} />}
@@ -1757,7 +1849,7 @@ function Chat(p: any) {
     return [...groups.entries()]
   })()
   const patchBinding=(next:PersonBinding)=>p.setBindings((old:Record<Person,PersonBinding>)=>({...old,[chatPerson]:next}))
-  const toolBadge=(id:ComposeToolId)=>id==='world'?trayWorld.length:id==='mcp'?trayMcp.length:id==='model'?(p.modelProfiles||[]).length:0
+  // 输入栏图标只作为「打开对应面板去修改」的入口，不显示任何数量角标。
   // 会话内搜索：只搜当前会话（p.messages[chatPerson]），不跨会话、不跨助手。
   const [searchQuery,setSearchQuery]=useState('')
   const [searchActiveIdx,setSearchActiveIdx]=useState(-1)  // 当前定位到的匹配下标（-1=尚未选中）
@@ -1777,9 +1869,7 @@ function Chat(p: any) {
   const [newCustom,setNewCustom]=useState('')
   const [moreOpen,setMoreOpen]=useState(false)
   const [searchOpen,setSearchOpen]=useState(false)
-  const [renameId,setRenameId]=useState<string|null>(null)
-  const [renameVal,setRenameVal]=useState('')
-  const [renameFrom,setRenameFrom]=useState<'header'|'list'>('list')
+  // 会话的新建 / 切换 / 重命名 / 删除统一收进左侧边抽屉，顶栏不再承载历史会话控件。
   const [lightbox,setLightbox]=useState<{src:string;name:string}|null>(null)
   const imageInput=useRef<HTMLInputElement>(null)
   const fileInput=useRef<HTMLInputElement>(null)
@@ -2061,25 +2151,7 @@ function Chat(p: any) {
     p.setChatError('')
     window.setTimeout(()=>{creatingConversation.current=false},350)
   }
-  function commitRename(id:string){
-    if(renameId!==id)return
-    const name=renameVal.trim()
-    setRenameId(null)
-    if(!name)return
-    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===id?{...x,title:name,updatedAt:new Date().toISOString()}:x)}))
-  }
-  function startRename(id:string,title:string,from:'header'|'list'){setRenameId(id);setRenameVal(title||'');setRenameFrom(from)}
-  // 会话切换收进顶栏一个紧凑下拉：原来的大头像卡片删掉，功能不丢。
-  function switchConversation(id:string){
-    const current=p.activeConversationIds[chatPerson]
-    if(id===current)return
-    p.setConversations((old:Record<Person,Conversation[]>)=>({...old,[chatPerson]:(old[chatPerson]||[]).map(x=>x.id===current?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x)}))
-    p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:id}))
-    p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===id)?.messages||[]}))
-    p.setChatError('')
-  }
-  const activeConv=(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===p.activeConversationIds[chatPerson])
-  const activeTitle=activeConv?.title||p.displayName(p.person)
+  // 会话切换 / 新建 / 重命名 / 删除统一收进左侧抽屉（AppSidebar），聊天顶栏不再出现任何会话控件。
   // 单条消息 = [复选框(多选时)] + [头像] + message-stack 列容器（气泡/修改框 + 操作栏 + 元信息）。
   // 图标栏与气泡在同一 flex 列里，天然贴在气泡正下方：AI 左对齐（不压头像）、用户右对齐。
   // 用户消息 = 复制/修改/删除；最新 AI 回复 = 复制/重新生成/删除；其他 AI 回复 = 复制/删除。
@@ -2121,7 +2193,8 @@ function Chat(p: any) {
     </div>
   }
   return <div className="fullscreen-chat">
-    <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}<select className="chat-conversation-select" aria-label="切换会话" value={p.activeConversationIds[chatPerson]||''} onChange={e=>switchConversation(e.target.value)}>{(p.conversations[chatPerson]||[]).map((c:Conversation)=><option key={c.id} value={c.id}>{c.title||'新对话'}</option>)}</select></span><span className="chat-header-actions"><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    {/* 全面屏顶栏：不铺返回/会话控件。历史会话从左侧抽屉点选，返回房间走系统返回手势或抽屉底部入口。 */}
+    <header className="chat-header"><span className="chat-header-spacer" aria-hidden="true"/><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}
@@ -2170,12 +2243,11 @@ function Chat(p: any) {
       <div className="compose-toolbar"><div className="compose-icons" role="toolbar" aria-label="聊天输入工具">
         {COMPOSE_TOOLS.map(t=>{
           const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||t.id===tray
-          const badge=toolBadge(t.id)
           return <button key={t.id} type="button" className={'compose-tool-icon'+(on?' active':'')} title={t.label} aria-label={t.label} aria-pressed={!!on} onClick={()=>{
             if(t.id==='emoji'){setTray('');setMoreOpen(false);if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)};return}
             if(t.id==='search'){setTray('');setEmojiOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
             setEmojiOpen(false);openTray(t.id as 'model'|'world'|'mcp'|'tools')
-          }}><ComposeGlyph id={t.id}/>{badge>0&&<span className="compose-tool-badge">{badge}</span>}</button>
+          }}><ComposeGlyph id={t.id}/></button>
         })}
       </div><div className="compose-send">
         <button type="button" className={'compose-attach'+(moreOpen?' active':'')} title="图片与文件" aria-label="图片与文件" onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false);setTray('')}}>{moreOpen?'×':'＋'}</button>

@@ -9,14 +9,30 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
+    <!-- 全面屏：系统栏透明 + 深色图标，内容由 WebView 延伸到状态栏与手势条后面，
+         前端用原生注入的安全区变量做避让（见 MainActivity）。 -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowTranslucentNavigation">false</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

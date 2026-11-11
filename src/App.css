@@ -1,3 +1,4 @@
+:root{--app-safe-top:max(env(safe-area-inset-top,0px),var(--native-safe-top,0px));--app-safe-bottom:max(env(safe-area-inset-bottom,0px),var(--native-safe-bottom,0px))}
 /* 禁用 Android WebView/Chrome 的文本自动放大（text autosizing）：
    它会把 14px 正文悄悄放大到 18px+，是「整体太大像老人机」的主因。 */
 /* 禁止 WebView 的「字体自动放大」(font boosting)：安卓系统字体一调大，
@@ -29,7 +30,7 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 
 .image-open-button{display:block;padding:0;border:0;background:transparent;cursor:zoom-in}.image-open-button img{display:block;max-width:min(240px,65vw,100%);max-height:280px;object-fit:contain;border-radius:9px}.image-lightbox{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:28px;background:rgba(30,27,24,.88);color:#f8f4ed}.image-lightbox>img{max-width:94vw;max-height:82vh;object-fit:contain;border-radius:8px}.image-lightbox>div{max-width:90vw;overflow-wrap:anywhere;font-size:13px;color:#ded4c5}.lightbox-close{position:absolute;right:18px;top:16px;width:42px;height:42px;border:1px solid #b9ad9d;border-radius:50%;background:#f5f0e6;color:#38322b;font-size:23px}.download-text{display:block;margin-top:5px;border:0;border-radius:6px;background:#ded4c5;padding:4px 7px;font-size:11px;color:#494136}
 
-.login-shell{min-height:100dvh;display:grid;place-items:center;padding:24px;background:#e7dfd1;color:#39332b}.login-card{width:min(100%,390px);padding:30px 26px;border:1px solid #cfc4b3;border-radius:24px;background:#f5f0e6;box-shadow:0 18px 55px #63574718}.login-mark{width:48px;height:48px;display:grid;place-items:center;border:1px solid #b5a58e;border-radius:50%;font-size:19px;color:#715b43}.login-eyebrow{margin:24px 0 8px;color:#988977;font-size:10px;letter-spacing:.18em}.login-card h1{margin:0;font-size:20px;font-weight:500;letter-spacing:.04em}.login-copy{font-size:13px;line-height:1.8;color:#81786d}.login-card label{display:block;margin-top:22px;font-size:12px;color:#716659}.login-card label input{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:13px;border:1px solid #c9c0b4;border-radius:11px;background:#fbf8f2;color:#39332b;font-size:14px;outline-color:#9b8261}.login-submit{width:100%;margin-top:16px;padding:13px;border:0;border-radius:11px;background:#8b593b;color:#fff8ee;font-size:14px}.login-submit:disabled{opacity:.5}.login-card>small{display:block;margin-top:16px;color:#9a9084;font-size:10px}.login-error{padding:10px;border-radius:9px;background:#f4dfd7;color:#8c392c;font-size:12px}.cloud-status{position:fixed;z-index:30;top:calc(env(safe-area-inset-top, 0px) + 8px);right:10px;display:flex;align-items:center;gap:7px;padding:5px 7px 5px 10px;border:1px solid #d7cdbf;border-radius:20px;background:#f7f2e9ed;color:#7e705e;font-size:10px;box-shadow:0 2px 8px #5146370b}.cloud-status.saved{color:#56745c}.cloud-status.error{color:#a14336}.cloud-status button{border:0;border-radius:13px;background:#e7dfd1;color:#746654;padding:4px 8px;font-size:10px}
+.login-shell{min-height:100dvh;display:grid;place-items:center;padding:24px;background:#e7dfd1;color:#39332b}.login-card{width:min(100%,390px);padding:30px 26px;border:1px solid #cfc4b3;border-radius:24px;background:#f5f0e6;box-shadow:0 18px 55px #63574718}.login-mark{width:48px;height:48px;display:grid;place-items:center;border:1px solid #b5a58e;border-radius:50%;font-size:19px;color:#715b43}.login-eyebrow{margin:24px 0 8px;color:#988977;font-size:10px;letter-spacing:.18em}.login-card h1{margin:0;font-size:20px;font-weight:500;letter-spacing:.04em}.login-copy{font-size:13px;line-height:1.8;color:#81786d}.login-card label{display:block;margin-top:22px;font-size:12px;color:#716659}.login-card label input{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:13px;border:1px solid #c9c0b4;border-radius:11px;background:#fbf8f2;color:#39332b;font-size:14px;outline-color:#9b8261}.login-submit{width:100%;margin-top:16px;padding:13px;border:0;border-radius:11px;background:#8b593b;color:#fff8ee;font-size:14px}.login-submit:disabled{opacity:.5}.login-card>small{display:block;margin-top:16px;color:#9a9084;font-size:10px}.login-error{padding:10px;border-radius:9px;background:#f4dfd7;color:#8c392c;font-size:12px}.cloud-status{position:fixed;z-index:30;top:calc(var(--app-safe-top) + 8px);right:10px;display:flex;align-items:center;gap:7px;padding:5px 7px 5px 10px;border:1px solid #d7cdbf;border-radius:20px;background:#f7f2e9ed;color:#7e705e;font-size:10px;box-shadow:0 2px 8px #5146370b}.cloud-status.saved{color:#56745c}.cloud-status.error{color:#a14336}.cloud-status button{border:0;border-radius:13px;background:#e7dfd1;color:#746654;padding:4px 8px;font-size:10px}
 .mcp-panel{display:flex;flex-direction:column;gap:12px}.mcp-boundary{display:flex;flex-direction:column;gap:5px;padding:12px;border:1px solid #d6c8b5;border-radius:12px;background:#eee5d7;color:#6f563f;font-size:12px}.mcp-boundary span,.mcp-connection-info small,.mcp-connection-info span{font-size:11px;color:#8a7d6d;overflow-wrap:anywhere}.mcp-connection{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #ded4c7;border-radius:12px;background:#f8f3ea}.mcp-connection-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}.mcp-connection-info b{font-size:13px;font-weight:500}.mcp-toggle{display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:11px}.mcp-remove{border:0;background:transparent;color:#99664d;font-size:11px}.mcp-add-form{display:grid;gap:10px;padding-top:12px;border-top:1px solid #ded4c7}.mcp-add-form label{display:grid;gap:5px;color:#786957;font-size:12px}.mcp-add-form input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #d3c8b9;border-radius:9px;background:#fbf8f2;color:#39332b}.mcp-add-form>button{padding:11px;border:0;border-radius:10px;background:#8b593b;color:#fff8ee}
 .mcp-error,.mcp-notice{padding:10px 12px;border-radius:9px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}.mcp-error{background:#f4dfd7;color:#8c392c}.mcp-notice{background:#e5eddf;color:#4d6c4e}.mcp-connection-card{border:1px solid #ded4c7;border-radius:12px;overflow:hidden;background:#f8f3ea}.mcp-connection-card .mcp-connection{border:0;border-radius:0;flex-wrap:wrap}.mcp-action{padding:8px 10px;border:1px solid #c8b7a3;border-radius:9px;background:#eee5d7;color:#72553f;font-size:11px;white-space:nowrap}.mcp-action:disabled{opacity:.5}.mcp-tool{display:grid;gap:8px;padding:12px;border-top:1px solid #ded4c7}.mcp-tool>b{font-size:13px;overflow-wrap:anywhere}.mcp-tool p{margin:0;color:#827768;font-size:11px;line-height:1.6}.mcp-tool label{display:grid;gap:5px;color:#786957;font-size:11px}.mcp-tool textarea{box-sizing:border-box;width:100%;padding:9px;border:1px solid #d3c8b9;border-radius:9px;background:#fbf8f2;color:#39332b;font:12px/1.5 monospace}.mcp-tool pre{max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border-radius:8px;background:#eae2d6;color:#4c4338;font-size:11px}.mcp-add-form h4{margin:0;font-size:14px;font-weight:500;color:#67503d}.mcp-add-form select{padding:10px;border:1px solid #d3c8b9;border-radius:9px;background:#fbf8f2;color:#39332b}
 /* MCP configuration is intentionally a full-width vertical mobile form. */
@@ -233,13 +234,13 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .local-context-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;width:100%;padding:5px 0 8px;font-size:11px;color:var(--muted,#8b858b)}.local-context-controls>span{font-weight:600}.local-context-controls label{display:flex;align-items:center;gap:4px;cursor:pointer}.local-context-controls input{accent-color:var(--accent,#9b83ae);width:14px;height:14px;margin:0}.local-context-controls small{font-size:10px}
 /* Responsive app sidebar */
 .shell{position:relative}.app-sidebar{position:fixed;z-index:30;left:0;top:0;bottom:0;width:248px;padding:24px 16px 18px;box-sizing:border-box;display:flex;flex-direction:column;background:#f4f0f5;border-right:1px solid #e2d9e5;color:#3f3743}.sidebar-brand{display:flex;align-items:center;gap:11px;padding:0 8px 25px}.sidebar-logo{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#e4d7ed;color:#6b557c;font-size:18px}.sidebar-brand>div:nth-child(2){display:grid;gap:3px}.sidebar-brand b{font-size:14px}.sidebar-brand small{font-size:9px;letter-spacing:1.3px;color:#95869d}.sidebar-close{display:none;margin-left:auto;border:0;background:transparent;font-size:20px;color:inherit}.sidebar-caption{padding:0 10px 10px;color:#998da0;font-size:11px;letter-spacing:1px}.sidebar-links{display:grid;gap:6px}.sidebar-link{position:relative;width:100%;display:flex;align-items:center;gap:11px;padding:11px 10px;border:0;border-radius:13px;background:transparent;text-align:left;color:inherit}.sidebar-link.active{background:#e8deed}.sidebar-link-icon{width:35px;height:35px;display:grid;place-items:center;flex-shrink:0;border-radius:11px;background:#ebe5ee;color:#725d81;font-size:17px}.sidebar-link.active .sidebar-link-icon{background:#d8c8e4}.sidebar-link>span:nth-child(2){display:grid;gap:4px;flex:1}.sidebar-link b{font-size:13px;font-weight:600}.sidebar-link small{font-size:10px;color:#988b9d}.sidebar-link i{width:5px;height:5px;border-radius:50%;background:#8d6da5}.sidebar-footer{margin-top:auto;display:flex;align-items:center;gap:8px;padding:14px 10px 2px;border-top:1px solid #e2d9e5;color:#938799;font-size:10px}.sidebar-status-dot{width:7px;height:7px;border-radius:50%;background:#8cba9b}.screen{margin-left:248px;width:calc(100% - 248px);box-sizing:border-box}.bottom-nav{display:none}.mobile-menu-toggle{display:none}.sidebar-scrim{display:none}
-@media(max-width:700px){.app-sidebar{width:min(290px,84vw);transform:translateX(-105%);transition:transform .22s ease;box-shadow:none}.app-sidebar.sidebar-open{transform:translateX(0);box-shadow:15px 0 45px #251a2b20}.sidebar-close{display:block}.sidebar-scrim{display:block;position:fixed;inset:0;z-index:29;border:0;background:#20172755}.screen{margin-left:0;width:100%;padding-top:46px}.mobile-menu-toggle{position:fixed;display:flex;align-items:center;gap:9px;top:calc(env(safe-area-inset-top,0px) + 8px);left:10px;z-index:20;border:1px solid #e2d9e5;border-radius:12px;background:#f8f5f9ed;color:#594b61;padding:7px 11px;font-size:12px;box-shadow:0 3px 12px #35243b0b}.mobile-menu-toggle span{font-size:15px}.bottom-nav{display:flex}}
+@media(max-width:700px){.app-sidebar{width:min(290px,84vw);transform:translateX(-105%);transition:transform .22s ease;box-shadow:none}.app-sidebar.sidebar-open{transform:translateX(0);box-shadow:15px 0 45px #251a2b20}.sidebar-close{display:block}.sidebar-scrim{display:block;position:fixed;inset:0;z-index:29;border:0;background:#20172755}.shell .screen{margin-left:0;width:100%;padding-top:0}.mobile-menu-toggle{position:fixed;display:flex;align-items:center;gap:9px;top:calc(var(--app-safe-top) + 8px);left:10px;z-index:20;border:1px solid #e2d9e5;border-radius:12px;background:#f8f5f9ed;color:#594b61;padding:7px 11px;font-size:12px;box-shadow:0 3px 12px #35243b0b}.mobile-menu-toggle span{font-size:15px}.bottom-nav{display:flex}}
 @media(min-width:701px){.shell{padding-left:0}.screen{min-height:100vh}.room-screen,.home-screen,.settings-screen{max-width:1120px;margin:0 auto}}
 /* Entertainment room: visual module dashboard, no global sidebar */
 .screen{margin-left:0!important;width:100%!important}.bottom-nav{display:flex!important}.fun-screen{max-width:980px;margin:0 auto;padding:18px 16px 30px;box-sizing:border-box}.fun-heading{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px}.fun-eyebrow{font-size:10px;letter-spacing:2px;color:#96899c}.fun-heading h2{font-size:21px;margin:5px 0 8px;font-weight:600;color:#3d493f}.fun-heading p{margin:0;color:#798477;font-size:13px;line-height:1.6}.fun-module-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.fun-module-card{min-height:138px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:14px;border:1px solid #e2e3d8;border-radius:18px;background:#fbfaf5;color:#40483e;box-shadow:0 4px 14px #263c2b08;transition:transform .15s,border-color .15s}.fun-module-card:hover{transform:translateY(-2px);border-color:#c6d4c5}.fun-module-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:#e6eee4;color:#4e6c54;font-size:18px;margin-bottom:13px}.module-icon-1,.module-icon-4{background:#e8e7f4;color:#69638c}.module-icon-2,.module-icon-5{background:#f5e8d9;color:#956c3d}.module-icon-3,.module-icon-6{background:#f3e3e9;color:#996c7e}.module-icon-7{background:#e8e8e5;color:#777a72}.fun-module-card>b{font-size:14px;font-weight:600}.fun-module-card>small{font-size:11px;color:#8a9187;line-height:1.5;margin-top:5px}.fun-module-arrow{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:auto;padding-top:14px;font-size:11px;color:#738774}.fun-module-arrow span{font-size:14px}.fun-module-detail{max-width:760px}.fun-back{margin:0 0 15px;padding:8px 12px;border:1px solid #e0dfd5;border-radius:10px;background:#faf9f3;color:#667568;font-size:12px}.fun-module-detail .lounge-panel{margin-top:0}.fun-module-detail .ledger-panel,.fun-module-detail .diary-panel{margin-top:0}@media(max-width:650px){.fun-screen{padding:16px 12px 24px}.fun-module-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.fun-module-card{min-height:146px;padding:13px;border-radius:16px}.fun-module-icon{width:38px;height:38px;margin-bottom:10px}.fun-heading h2{font-size:20px}}
 /* Sidebar is a mobile-only drawer; the shell is a centered column, so no desktop rail offset. */
 @media(min-width:701px){.app-sidebar,.sidebar-scrim{display:none!important}}
-@media(max-width:700px){.app-sidebar{width:min(285px,84vw);transform:translateX(-105%);transition:transform .22s ease;box-shadow:none}.app-sidebar.sidebar-open{transform:translateX(0);box-shadow:15px 0 45px #251a2b20}.screen{margin-left:0!important;width:100%!important;padding-top:48px}.mobile-menu-toggle{position:fixed;display:flex;align-items:center;gap:9px;top:calc(env(safe-area-inset-top,0px) + 8px);left:10px;z-index:28;border:1px solid #e2d9e5;border-radius:12px;background:#f8f5f9ed;color:#594b61;padding:7px 11px;font-size:12px;box-shadow:0 3px 12px #35243b0b}.mobile-menu-toggle span{font-size:15px}.sidebar-scrim{display:block;position:fixed;inset:0;z-index:29;border:0;background:#20172755}.sidebar-close{display:block;margin-left:auto;border:0;background:transparent;font-size:20px;color:inherit}}
+@media(max-width:700px){.app-sidebar{width:min(285px,84vw);transform:translateX(-105%);transition:transform .22s ease;box-shadow:none}.app-sidebar.sidebar-open{transform:translateX(0);box-shadow:15px 0 45px #251a2b20}.shell .screen{margin-left:0!important;width:100%!important;padding-top:0!important}.mobile-menu-toggle{position:fixed;display:flex;align-items:center;gap:9px;top:calc(var(--app-safe-top) + 8px);left:10px;z-index:28;border:1px solid #e2d9e5;border-radius:12px;background:#f8f5f9ed;color:#594b61;padding:7px 11px;font-size:12px;box-shadow:0 3px 12px #35243b0b}.mobile-menu-toggle span{font-size:15px}.sidebar-scrim{display:block;position:fixed;inset:0;z-index:29;border:0;background:#20172755}.sidebar-close{display:block;margin-left:auto;border:0;background:transparent;font-size:20px;color:inherit}}
 /* Settings landing page as compact expandable modules */
 .settings-screen{max-width:980px;margin:0 auto;padding:20px 16px 34px;box-sizing:border-box}.settings-heading{margin-bottom:16px}.settings-heading>span{font-size:10px;letter-spacing:2px;color:#988b9d}.settings-heading h2{font-size:21px;margin:6px 0 8px;font-weight:600}.settings-heading p{font-size:13px;color:var(--muted,#8b858b);margin:0}.settings-module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.settings-module-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;min-height:132px;padding:14px;border:1px solid transparent;border-radius:17px;background:var(--surface,#fff);color:inherit;box-shadow:0 4px 14px #38273b08}.settings-module-card:hover{transform:translateY(-1px)}.settings-module-icon{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;background:#eee7f2;color:#7b6389;font-size:18px;margin-bottom:12px}.settings-module-card>b{font-size:14px;font-weight:600}.settings-module-card>small{font-size:11px;color:var(--muted,#8b858b);margin-top:5px;line-height:1.5}.settings-module-open{font-size:11px;color:#8b7399;margin-top:auto;padding-top:13px}.settings-detail{display:grid;gap:13px}.settings-back{justify-self:start;padding:8px 12px;border:1px solid var(--line,#e5dfe5);border-radius:10px;background:var(--surface,#fff);color:inherit;font-size:12px}.settings-inner-card{margin:0}.settings-detail .usage-panel{margin:0}@media(max-width:600px){.settings-screen{padding:16px 12px 26px}.settings-module-grid{gap:10px}.settings-module-card{padding:12px;min-height:126px}.settings-heading h2{font-size:20px}}
 /* Compact filters for memory and worldbook libraries */
@@ -256,7 +257,7 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 
 /* In-app banner, distinct from future Android OS notifications. */
 /* 通知横幅下移到顶栏控件（百宝箱按钮/云端状态）之下，不再遮挡它们 */
-.inbox-toast{position:fixed;z-index:1100;top:calc(env(safe-area-inset-top,0px) + 52px);left:50%;transform:translateX(-50%);width:min(92vw,420px);display:flex;align-items:start;gap:8px;background:#fffafef5;color:#443849;border:1px solid #dbcbdc;border-radius:17px;box-shadow:0 10px 32px #33203935;padding:12px 14px;backdrop-filter:blur(16px)}
+.inbox-toast{position:fixed;z-index:1100;top:calc(var(--app-safe-top) + 52px);left:50%;transform:translateX(-50%);width:min(92vw,420px);display:flex;align-items:start;gap:8px;background:#fffafef5;color:#443849;border:1px solid #dbcbdc;border-radius:17px;box-shadow:0 10px 32px #33203935;padding:12px 14px;backdrop-filter:blur(16px)}
 .inbox-toast-main{display:flex;flex:1;min-width:0;flex-direction:column;align-items:start;text-align:left;gap:4px;background:transparent;border:0;color:inherit;cursor:pointer}
 .inbox-toast-main span{font-size:13px;line-height:1.5;max-height:4.5em;overflow:hidden}
 .inbox-toast-main small{font-size:11px;color:#8d728c}
@@ -271,7 +272,7 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .shell{overflow-x:hidden}
 
 /* ── 底部导航：安全区 + 胶囊高亮 ── */
-.bottom-nav{padding:8px 4px max(12px,env(safe-area-inset-bottom,0px))}
+.bottom-nav{padding:8px 4px max(12px,var(--app-safe-bottom))}
 .bottom-nav button{min-height:44px;padding:7px 15px;border-radius:13px;color:var(--muted);transition:background .15s,color .15s}
 .bottom-nav .active{color:var(--accent);background:var(--accent-soft);font-weight:600;text-decoration:none}
 
@@ -680,7 +681,7 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .shell.shell-chat-lock .chat-search-results{max-height:min(260px,30dvh)}
 .shell.shell-chat-lock .emoji-panel{max-height:38dvh;overflow-y:auto}
 /* 移动端安全区：脚注贴底时留出 home indicator */
-.shell.shell-chat-lock .attachment-note{padding-bottom:max(6px,env(safe-area-inset-bottom,0px))}
+.shell.shell-chat-lock .attachment-note{padding-bottom:max(6px,var(--app-safe-bottom))}
 
 /* ── 模型请求诊断（黑匣子）：设置 → 开发者/调试 ── */
 .diag-panel h4{margin:18px 0 8px;font-size:14px}
@@ -707,12 +708,12 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 /* ── Android 安全区适配（status bar / 刘海 / 底部手势条） ──
    viewport-fit=cover 后内容延伸到系统区域，这里用 env() 把关键区域撑开。
    桌面端 env() 恒为 0，不影响原有布局。 */
-.chat-header{padding-top:max(10px,env(safe-area-inset-top,0px))}
-.settings-heading,.fun-screen,.settings-screen{padding-top:max(30px,calc(env(safe-area-inset-top,0px) + 12px))}
-.room-header,.home-people{padding-top:max(15px,calc(env(safe-area-inset-top,0px) + 8px))}
+.chat-header{padding-top:max(10px,var(--app-safe-top))}
+.settings-heading,.fun-screen,.settings-screen{padding-top:max(30px,calc(var(--app-safe-top) + 12px))}
+.room-header,.home-people{padding-top:max(15px,calc(var(--app-safe-top) + 8px))}
 /* 底部输入区：给手势条让位，避免发送按钮被遮住 */
-.shell.shell-chat-lock .compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
-.lounge-compose{padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
+.shell.shell-chat-lock .compose{padding-bottom:max(10px,var(--app-safe-bottom))}
+.lounge-compose{padding-bottom:max(10px,var(--app-safe-bottom))}
 
 /* ── 资源库（设置区）：三类资源一次添加完 ── */
 .resource-library{display:flex;flex-direction:column;gap:10px}
@@ -745,7 +746,7 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .chat-config-head b{font-size:14px;font-weight:500}
 .chat-config-head small{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
 .chat-config-head button{width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:50%;background:var(--card,#fff);color:var(--ink);font-size:20px;line-height:1}
-.chat-config-body{overflow:auto;padding:4px 16px max(18px,env(safe-area-inset-bottom,0px))}
+.chat-config-body{overflow:auto;padding:4px 16px max(18px,var(--app-safe-bottom))}
 .chat-config-section{padding:10px 0;border-bottom:1px solid var(--line)}
 .chat-config-section:last-child{border-bottom:0}
 .chat-config-section h4{margin:0 0 8px;font-size:13px;font-weight:500}
@@ -934,7 +935,6 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .compose-icons::-webkit-scrollbar{display:none}
 .shell .fullscreen-chat button.compose-tool-icon{position:relative;display:grid;place-items:center;flex:0 0 auto;width:31px;height:31px;padding:0!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a8378);cursor:pointer}
 .shell .fullscreen-chat button.compose-tool-icon:hover,.shell .fullscreen-chat button.compose-tool-icon.active{background:var(--accent-soft,#f3e9dc)!important;color:var(--accent,#8b593b)}
-.compose-tool-badge{position:absolute;top:-1px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:8px!important;background:var(--accent,#8b593b);color:#fff;font-size:9px;line-height:14px;text-align:center}
 .compose-send{display:flex;align-items:center;gap:5px;flex:0 0 auto}
 .shell .fullscreen-chat button.compose-attach{width:29px;height:29px;padding:0!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a8378);font-size:19px;line-height:1}
 .shell .fullscreen-chat button.compose-attach:hover,.shell .fullscreen-chat button.compose-attach.active{background:var(--accent-soft,#f3e9dc)!important}
@@ -1159,3 +1159,46 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .shell .settings-screen .vit-icon{flex-basis:28px;width:28px;height:28px}
 .shell .settings-screen .vendor-icon-tile{min-height:48px}
 @media(max-width:420px){.shell .chat-header-actions button{width:28px;height:28px;font-size:12.5px}}
+
+/* ── 全面屏侧边栏：百宝箱与历史聊天默认藏在左侧，只露一条贴边细把手 ──────
+   顶栏 / 状态栏不再放常驻按钮；点把手或左滑边缘才滑出抽屉。 */
+.shell .mobile-menu-toggle.sidebar-edge-handle{position:fixed;left:0;right:auto;top:38%;transform:translateY(-50%);width:16px;height:74px;padding:0;margin:0;border:0;border-radius:0 12px 12px 0;background:var(--accent-soft,#e8deed);color:var(--accent,#725d81);box-shadow:1px 2px 9px #251a2b1a;opacity:.6;z-index:26;display:grid;place-items:center;font-size:13px;line-height:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.shell .mobile-menu-toggle.sidebar-edge-handle span{font-size:14px;line-height:1}
+.shell .mobile-menu-toggle.sidebar-edge-handle.moved{left:0;right:auto;opacity:0;pointer-events:none}
+.shell .sidebar-scrim{position:fixed;inset:0;z-index:29;border:0;background:#1d142455;display:block}
+@media(min-width:701px){.shell .mobile-menu-toggle.sidebar-edge-handle{display:none}}
+@media(max-width:700px){
+  .shell .app-sidebar{width:min(292px,84vw);padding:max(20px,calc(var(--app-safe-top) + 14px)) 14px max(14px,calc(var(--app-safe-bottom) + 10px));z-index:30;visibility:hidden;pointer-events:none;transition:transform .22s ease,visibility 0s linear .22s}
+  .shell .app-sidebar.sidebar-open{visibility:visible;pointer-events:auto;transition:transform .22s ease,visibility 0s}
+}
+.shell .sidebar-brand{padding:0 4px 14px;gap:9px}
+.shell .sidebar-logo{width:34px;height:34px;border-radius:11px;font-size:16px}
+.shell .sidebar-brand b{font-size:13px}
+.shell .sidebar-brand small{font-size:8.5px;letter-spacing:1px}
+.shell .sidebar-close{margin-left:auto;border:0;background:transparent;font-size:20px;color:inherit;line-height:1;padding:4px 6px}
+.shell .sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 2px 8px}
+.shell .sidebar-section{margin:0 0 14px;padding:10px 9px;border:1px solid var(--line,#e8e2ee);border-radius:14px;background:var(--card,#fff)}
+.shell .sidebar-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.shell .sidebar-section-head b{font-size:12px;font-weight:600}
+.shell .sidebar-section-head small{font-size:9px;color:var(--muted,#988b9d);max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .sidebar-conv-list{display:grid;gap:3px}
+.shell .sidebar-conv-row{display:flex;align-items:center;gap:2px;min-width:0;border-radius:9px;padding:1px 2px;background:transparent}
+.shell .sidebar-conv-row.active{background:var(--accent-soft,#e8deed)}
+.shell .sidebar-conv-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;border:0;background:transparent;color:inherit;font-size:11.5px;padding:7px 6px;border-radius:8px}
+.shell .sidebar-conv-row.active .sidebar-conv-name{font-weight:600}
+.shell .sidebar-conv-input{flex:1;min-width:0;width:100%;box-sizing:border-box;font-size:11.5px;padding:6px;border:1px solid var(--accent,#8d6da5);border-radius:8px;background:var(--field,#fff);color:inherit}
+.shell .sidebar-conv-edit,.shell .sidebar-conv-del{flex:0 0 22px;width:22px;height:26px;padding:0;border:0;background:transparent;color:var(--muted,#988b9d);font-size:13px;line-height:1}
+.shell .sidebar-conv-del:hover{color:#c0554c}
+.shell .sidebar-conv-new,.shell .sidebar-back-room{width:100%;margin-top:8px;padding:8px 10px;border:1px dashed var(--line,#e2d9e5);border-radius:10px;background:transparent;color:var(--accent,#725d81);font-size:11.5px;text-align:left}
+.shell .sidebar-back-room{margin-top:4px;border-style:solid;text-align:center}
+.shell .sidebar-links{display:grid;gap:2px}
+.shell .sidebar-link{padding:7px 6px;gap:9px;border-radius:9px}
+.shell .sidebar-link-icon{width:28px;height:28px;border-radius:9px;font-size:14px}
+.shell .sidebar-link b{font-size:11.5px}
+.shell .sidebar-link small{font-size:9px}
+.shell .sidebar-footer{padding:10px 6px 0;font-size:9px}
+/* 全面屏顶栏三等分：左留白 / 助手名 / ＋与切换，标题始终居中 */
+.shell .fullscreen-chat .chat-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:4px;padding-top:max(8px,calc(var(--app-safe-top) + 6px))}
+.shell .fullscreen-chat .chat-header-spacer{display:block;min-width:0}
+.shell .fullscreen-chat .chat-header-title{flex:none;justify-self:center;min-width:0;max-width:100%}
+.shell .fullscreen-chat .chat-header-actions{justify-self:end}

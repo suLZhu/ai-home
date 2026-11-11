@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 4px 0 calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 0 calc(24px + var(--app-safe-bottom));
   color: var(--ink, #41384b);
   max-width: 760px;
 }
