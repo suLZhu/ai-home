@@ -50,6 +50,16 @@ const YS: Person = 'assistant-yanshuo'
 const ASSISTANT_PEOPLE: Person[] = [YWX, YS]
 // 启动时把旧版以中文人名为键的本机数据一次性迁移到 assistantId（幂等）。
 migrateLocalStorage()
+// 助手名字只有一份：显示名 assistants[].name。旧版本角色卡里另存过一份「角色卡名称」，
+// 两处各改各的就会出现「assistant-002 / 助手2号」不一致。初始化 / 云端恢复时统一对齐，
+// 保证系统提示词里的角色名跟界面上的名字一致；names 为空时沿用旧值，避免覆盖老快照。
+function alignCardNames(cards:Record<string,CharacterCard>|null|undefined, names:AssistantRecord[]):Record<Person,CharacterCard>{
+  return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>{
+    const label=names.find(a=>a.id===id)?.name
+    const card=cards?.[id]||blankCard(id)
+    return [id,{...card,name:label||card.name||DEFAULT_DISPLAY_NAMES[id]||id}]
+  })) as Record<Person,CharacterCard>
+}
 type Tool = '人物设置' | '世界书' | '长期记忆' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板' | '助手档案'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
 type TokenUsage = { at?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
@@ -155,7 +165,7 @@ export default function App() {
   const [memory, setMemory] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.memory',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => { const saved=read<Record<string,MemoryEntry[]>>('ai-home.memoryEntries',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MemoryEntry[]> })
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.prompt',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
-  const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => { const saved=read<Record<string,CharacterCard>>('ai-home.characters',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||blankCard(id)])) as Record<Person,CharacterCard> })
+  const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => alignCardNames(read<Record<string,CharacterCard>>('ai-home.characters',{}), assistants))
   const [worldEntries, setWorldEntries] = useState<WorldEntry[]>(() => { const raw:any=read('ai-home.worldEntries', []); if(Array.isArray(raw)) return raw.map((e:any)=>({...e,boundCharacters:(Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:[])).map((x:string)=>toAssistantId(String(x)))})); return ASSISTANT_PEOPLE.flatMap((id:any)=>Array.isArray(raw?.[id])?raw[id].map((e:any)=>({...e,boundCharacters:[id]})):[]) })
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.worldbook',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => { const saved=read<Record<string,MCPConnection[]>>('ai-home.mcpConnections',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MCPConnection[]> })
@@ -312,7 +322,8 @@ export default function App() {
   useEffect(() => { latestSnapshot.current = getSnapshot() }, [getSnapshot])
   const applySnapshot = useCallback((data: any) => {
     if (data.themePrefs && typeof data.themePrefs==='object' && ['lavender','paper','forest','night'].includes(data.themePrefs.theme)) setThemePrefs({...DEFAULT_THEME,...data.themePrefs})
-    if (Array.isArray(data.assistants) && data.assistants.length) setAssistants(applyDefaultDisplayNames(data.assistants))
+    const restoredNames = Array.isArray(data.assistants)&&data.assistants.length?applyDefaultDisplayNames(data.assistants):[]
+    if (restoredNames.length) setAssistants(restoredNames)
     if (data.conversations && ASSISTANT_PEOPLE.every(id=>Array.isArray(data.conversations[id]))) {
       const convs:Record<Person,Conversation[]>=Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.conversations[id]])) as Record<Person,Conversation[]>
       // 数据安全（云端优先恢复的冲突保护）：本快照即将覆盖本地会话。若本地持有
@@ -339,7 +350,8 @@ export default function App() {
     if (data.memory && typeof data.memory === 'object') setMemory(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.memory[id]||''])) as Record<Person,string>)
     if (data.memoryEntries && typeof data.memoryEntries === 'object') setMemoryEntries(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(data.memoryEntries[id])?data.memoryEntries[id]:[]])) as Record<Person,MemoryEntry[]>)
     if (data.prompt && typeof data.prompt === 'object') setPrompt(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.prompt[id]||''])) as Record<Person,string>)
-    if (data.characters && typeof data.characters === 'object') setCharacters(data.characters)
+    if (data.characters && typeof data.characters === 'object') setCharacters(alignCardNames(data.characters, restoredNames))
+    else if (restoredNames.length) setCharacters((old:Record<Person,CharacterCard>)=>alignCardNames(old, restoredNames))
     if (Array.isArray(data.worldEntries)) setWorldEntries(data.worldEntries.map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:(Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:[])).map((x:string)=>toAssistantId(String(x)))}))); else if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries(ASSISTANT_PEOPLE.flatMap((id:any)=>Array.isArray(data.worldEntries[id])?data.worldEntries[id].map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:[id]})):[]))
     if (data.worldbook && typeof data.worldbook === 'object') setWorldbook(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.worldbook[id]||''])) as Record<Person,string>)
     if (data.mcpConnections && typeof data.mcpConnections === 'object') setMcpConnections(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(data.mcpConnections[id])?data.mcpConnections[id].map((x:MCPConnection)=>({...x,person:id})):[]])) as Record<Person,MCPConnection[]>)
@@ -1456,8 +1468,12 @@ function Room(props: {
   const avatarSrc = props.characters[props.person]?.avatar || DEFAULT_AVATAR
   const roomHeader = <header className="room-header"><div className="room-name"><button type="button" className="room-name-avatar" title="人物设置与记忆" aria-label={'打开'+props.displayName(props.person)+'的助手档案'} onClick={()=>props.setActiveTool('助手档案')}><img src={avatarSrc} alt=""/></button><div><b>{props.displayName(props.person)} 的房间</b><small>点头像设置人物与记忆</small></div>{personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}</div></header>
   if (props.activeTool) return <div className="room-screen room-tool-screen">
-    {roomHeader}
-    <button className="settings-back" onClick={() => props.setActiveTool('')}>← 工作区</button>
+    {/* 工具 / 档案页不再重复房间头部的头像与名字：整屏只留档案里那一份改名入口。 */}
+    <header className="room-tool-header">
+      <button className="settings-back" onClick={() => props.setActiveTool('')}>← 工作区</button>
+      <b className="room-tool-title">{props.activeTool}</b>
+      {personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}
+    </header>
     <ToolPanel {...props} />
   </div>
   const person=props.person
@@ -1509,14 +1525,16 @@ function AssistantProfile(p: any) {
   const [tab,setTab]=useState<'人物'|'长期'|'短期'>('人物')
   const recent:ChatMessage[]=(p.messages[person]||[]).slice(-12)
   const tabs=[['人物','人物设置'],['长期','长期记忆'],['短期','短期记忆']] as const
-  const rename=(name:string)=>p.setAssistants((old:AssistantRecord[])=>old.some(a=>a.id===person)?old.map(a=>a.id===person?{...a,name}:a):[...old,{id:person,name}])
-  // 失焦时把新名字同步进角色卡，避免「显示叫小禾、提示词里还叫 assistant-001」。
-  const syncCardName=(name:string)=>p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||{} as CharacterCard),name:name.trim()||p.displayName(person)}}))
+  const rename=(name:string)=>{
+    p.setAssistants((old:AssistantRecord[])=>old.some(a=>a.id===person)?old.map(a=>a.id===person?{...a,name}:a):[...old,{id:person,name}])
+    // 角色卡名称跟随显示名即时同步，不再留第二个输入框，也不会等失焦才对齐提示词。
+    p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||blankCard(person)),name:name.trim()||p.displayName(person)}}))
+  }
   return <div className="assistant-profile">
-    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={p.displayName(person)} onChange={e=>rename(e.target.value)} onBlur={e=>syncCardName(e.target.value)}/><small>人物 · 长期记忆 · 短期记忆（名称可直接改）</small></div></div>
+    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={p.displayName(person)} onChange={e=>rename(e.target.value)}/><small>名称可直接修改</small></div></div>
     <div className="ap-tabs" role="tablist" aria-label="助手档案">{tabs.map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} className={'ap-tab'+(tab===key?' active':'')} key={key} onClick={()=>setTab(key)}>{label}</button>)}</div>
     <div className="ap-body">
-      {tab==='人物'&&<CharacterSettings key={person} value={p.characters[person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))}/>}
+      {tab==='人物'&&<CharacterSettings key={person} value={p.characters[person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))} hideAvatar/>}
       {tab==='长期'&&<><MemoryWorkbench person={person} personLabel={p.displayName} entries={p.memoryEntries[person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>}
       {tab==='短期'&&<div className="ap-short"><p className="muted">短期记忆就是当前会话最近的聊天：换一条会话就会变，不会长期保存。想一直留着的事，请加到「长期记忆」。</p><div className="ap-recent">{recent.length?recent.map((m,i)=><div className={'ap-recent-row '+m.role} key={m.id||i}><b>{m.role==='user'?'我':p.displayName(person)}</b><span>{(m.content||'（图片 / 附件）').slice(0,90)||'（空消息）'}</span></div>):<p className="muted">这个会话还没有消息。</p>}</div></div>}
     </div>
@@ -1526,7 +1544,7 @@ function AssistantProfile(p: any) {
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
   if (t === '助手档案') return <AssistantProfile {...p}/>
-  if (t === '人物设置') return <CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/>
+  if (t === '人物设置') return <><p className="muted">助手名称在房间顶部头像旁修改，这里只编辑人物设定。</p><CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/></>
   if (t === '角色外观') return <PersonAppearance key={p.person} value={p.personAppearance?.[p.person]||null} assets={p.customAssets||EMPTY_ASSETS} onChange={(v:PersonAppearancePref|null)=>p.setPersonAppearance((old:Record<string,PersonAppearancePref>)=>{const next={...old};if(v)next[p.person]=v;else delete next[p.person];return next})}/>
   if (t === '世界书') return <WorldbookEditor personLabel={p.displayName} entries={p.worldEntries.filter((e:WorldEntry)=>e.boundCharacters?.includes(p.person))} onChange={(v:WorldEntry[])=>p.setWorldEntries((old:WorldEntry[])=>{const visibleIds=new Set(old.filter(e=>e.boundCharacters?.includes(p.person)).map(e=>e.id));const incoming=new Map(v.map(e=>[e.id,e]));const kept=old.flatMap(e=>{if(!visibleIds.has(e.id))return [e];const replacement=incoming.get(e.id);if(replacement)return [replacement];const remaining=e.boundCharacters.filter(name=>name!==p.person);return remaining.length?[{...e,boundCharacters:remaining}]:[]});const oldIds=new Set(old.map(e=>e.id));return [...kept,...v.filter(e=>!oldIds.has(e.id))]})}/>
   if (t === 'SKILL 技能库') return <SkillWorkbench person={p.person} personLabel={p.displayName}/>

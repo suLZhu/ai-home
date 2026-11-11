@@ -6,7 +6,7 @@ export type CharacterCard = {
 export const blankCard = (name:string):CharacterCard => ({
  name,avatar:'',description:'',definition:'',greeting:'',language:'',tags:[],notes:'',temperature:''
 })
-export function CharacterSettings({value,onSave}:{value:CharacterCard;onSave:(v:CharacterCard)=>void}){
+export function CharacterSettings({value,onSave,hideAvatar}:{value:CharacterCard;onSave:(v:CharacterCard)=>void;hideAvatar?:boolean}){
  const [draft,setDraft]=useState<CharacterCard>(value)
  const [tag,setTag]=useState('')
  const [advanced,setAdvanced]=useState(false)
@@ -21,10 +21,14 @@ export function CharacterSettings({value,onSave}:{value:CharacterCard;onSave:(v:
   reader.readAsDataURL(f)
  }
  function addTag(){const t=tag.trim();if(t&&!draft.tags.includes(t))setDraft(p=>({...p,tags:[...p.tags,t]}));setTag('')}
- function save(){if(!draft.name.trim()){setStatus('角色名称不能为空');return}try{onSave({...draft,name:draft.name.trim()});setStatus('已保存到当前浏览器')}catch{setStatus('保存失败，请检查浏览器存储空间')}}
+ // 助手名字只有一份（显示名 assistants[].name），角色卡表单不再提供第二个改名框，
+ // 保存时沿用外部传入的 name，避免界面叫小禾、提示词里还叫旧编号。
+ function save(){
+  const name = (value.name || draft.name || '助手').trim()
+  try{onSave({...draft,name});setStatus('已保存到当前浏览器')}catch{setStatus('保存失败，请检查浏览器存储空间')}
+ }
  return <div className="character-editor">
-  <div className="character-head"><div className="character-avatar">{draft.avatar?<img src={draft.avatar} alt="角色头像"/>:<span>{draft.name.slice(0,1)||'角'}</span>}</div><label className="avatar-upload">更换头像<input type="file" accept="image/*" onChange={upload}/></label></div>
-  <label className="character-field">角色卡名称<input value={draft.name} onChange={e=>set('name',e.target.value)} placeholder="角色名称"/></label>
+  <div className={'character-head'+(hideAvatar?' compact':'')}>{!hideAvatar&&<div className="character-avatar">{draft.avatar?<img src={draft.avatar} alt="角色头像"/>:<span>{draft.name.slice(0,1)||'角'}</span>}</div>}<label className="avatar-upload">更换头像<input type="file" accept="image/*" onChange={upload}/></label></div>
   <label className="character-field">描述<textarea rows={3} value={draft.description} onChange={e=>set('description',e.target.value)} placeholder="简短介绍这个角色……"/></label>
   <label className="character-field">角色设定<textarea rows={6} value={draft.definition} onChange={e=>set('definition',e.target.value)} placeholder="角色身份、性格、关系与行为规则……"/></label>
   <label className="character-field">开场白<textarea rows={3} value={draft.greeting} onChange={e=>set('greeting',e.target.value)} placeholder="角色的开场白或问候语……"/></label>
