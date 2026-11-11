@@ -3,7 +3,38 @@
 // 兼容原则：旧快照没有 modelProfiles / bindings 时，行为与改造前完全一致。
 
 export function emptyBinding() {
-  return { modelProfileId: '', mcpIds: null }
+  return { modelProfileId: '', mcpIds: null, keyId: '' }
+}
+
+// 「设置页勾选池」：只有被勾进池里的世界书 / MCP 条目才会在聊天窗口的图标面板出现。
+// null = 尚未配置过（老数据），此时默认全部可见；数组 = 显式清单，空数组 = 一项都不放出来。
+export function normalizePool(raw) {
+  const o = raw && typeof raw === 'object' ? raw : {}
+  return {
+    worldIds: Array.isArray(o.worldIds) ? o.worldIds.filter((x) => typeof x === 'string') : null,
+    mcpIds: Array.isArray(o.mcpIds) ? o.mcpIds.filter((x) => typeof x === 'string') : null,
+  }
+}
+
+export function isInPool(pool, kind, id, allIds = []) {
+  const list = pool && pool[kind]
+  if (Array.isArray(list)) return list.includes(id)
+  return (Array.isArray(allIds) ? allIds : []).includes(id)
+}
+
+// 第一次点勾选时，把「当前全部条目」固化成显式清单，再增删，避免 null 语义下取消一项就只剩一项。
+export function togglePool(pool, kind, id, checked, allIds = []) {
+  const base = normalizePool(pool)
+  const current = Array.isArray(base[kind])
+    ? base[kind].slice()
+    : (Array.isArray(allIds) ? allIds : []).filter((x) => typeof x === 'string')
+  const next = checked ? (current.includes(id) ? current : [...current, id]) : current.filter((x) => x !== id)
+  return { ...base, [kind]: next }
+}
+
+// 编号 001 / 002 / 003……：设置页与聊天面板共用，用户说的「001 的世界书」就是它。
+export function poolLabel(index) {
+  return String(index + 1).padStart(3, '0')
 }
 
 export function normalizeProfiles(raw) {
@@ -15,6 +46,9 @@ export function normalizeProfiles(raw) {
       name: String(p.name || '').trim() || '未命名模型',
       endpoint: String(p.endpoint || '').trim(),
       model: String(p.model || '').trim(),
+      // 供应商中心勾选出来的模型带分组名，聊天窗口按名称分类显示；旧数据缺字段时为空串。
+      vendor: String(p.vendor ?? ''),
+      vendorId: String(p.vendorId ?? ''),
       inputPrice: String(p.inputPrice ?? ''),
       outputPrice: String(p.outputPrice ?? ''),
       cachedInputPrice: String(p.cachedInputPrice ?? ''),
@@ -30,6 +64,8 @@ export function normalizeBindings(raw, people) {
       modelProfileId: v && typeof v.modelProfileId === 'string' ? v.modelProfileId : '',
       // null = 未设置（老数据，全部启用）；数组 = 显式选择，空数组表示全部停用。
       mcpIds: v && Array.isArray(v.mcpIds) ? v.mcpIds.filter((x) => typeof x === 'string') : null,
+      // 多 KEY：助手选用供应商里的哪一把 Key；空串 = 回退旧的「每助手一份」Key。
+      keyId: v && typeof v.keyId === 'string' ? v.keyId : '',
     }
   }
   return out
@@ -42,6 +78,8 @@ export function resolveModelConfig(profileId, profiles, fallback) {
   return {
     endpoint: found.endpoint,
     model: found.model,
+    vendor: found.vendor,
+    vendorId: found.vendorId,
     inputPrice: found.inputPrice,
     outputPrice: found.outputPrice,
     cachedInputPrice: found.cachedInputPrice,

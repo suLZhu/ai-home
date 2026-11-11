@@ -861,7 +861,7 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .wc-sun{position:absolute;right:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#f3c777;box-shadow:0 0 0 4px rgba(243,199,119,.22)}
 .wc-swatches{display:flex;gap:4px;margin-top:4px}
 .wc-swatches i{width:16px;height:10px;border:1px solid #dcd1c0;border-radius:3px}
-.workspace-foot{margin:2px 2px 12px;font-size:10.5px;line-height:1.5;color:var(--muted,#8a7d6d)}
+.shell .room-screen .workspace-foot{margin:4px 2px 12px;font-size:10px;line-height:1.7;color:var(--muted,#8a7d6d)}
 
 /* ── 聊天窗口绑定条：模型 / 世界书 / MCP 三段直接选，点哪段抽屉定位哪段 ── */
 .chat-header-subline.chat-binding-bar{display:flex;align-items:center;gap:4px;padding:4px 8px 5px;text-align:left;cursor:default;overflow-x:auto;scrollbar-width:none}
@@ -923,3 +923,114 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .data-fold>summary::-webkit-details-marker{display:none}
 .data-fold[open]>summary{border-bottom:1px solid #e6ded2}
 .data-fold>.setting-card,.data-fold>.usage-panel{margin:10px}
+
+/* ── 聊天输入框：大圆角卡片 + 底部线性小图标栏（参考图） ─────────────── */
+.shell .fullscreen-chat .compose.compose-box{display:flex;flex-direction:column;gap:4px;margin:6px 8px 10px;padding:9px 11px 7px;border:1px solid var(--line,#d8d0c5)!important;border-radius:16px!important;background:var(--card,#fffdf9)!important;box-shadow:var(--shadow-card,0 5px 18px rgba(64,50,74,.06))!important}
+.shell .fullscreen-chat .compose-box .compose-text{box-sizing:border-box;width:100%;min-height:50px;max-height:120px;padding:5px 3px;border:0!important;border-radius:0!important;background:transparent!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font:inherit;font-size:14px;line-height:1.55;resize:none;outline:none}
+.shell .fullscreen-chat .compose-box .compose-text::placeholder{color:var(--muted,#a39a8c)}
+.compose-toolbar{display:flex;align-items:center;gap:8px}
+.compose-icons{display:flex;align-items:center;gap:1px;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none}
+.compose-icons::-webkit-scrollbar{display:none}
+.shell .fullscreen-chat button.compose-tool-icon{position:relative;display:grid;place-items:center;flex:0 0 auto;width:31px;height:31px;padding:0!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a8378);cursor:pointer}
+.shell .fullscreen-chat button.compose-tool-icon:hover,.shell .fullscreen-chat button.compose-tool-icon.active{background:var(--accent-soft,#f3e9dc)!important;color:var(--accent,#8b593b)}
+.compose-tool-badge{position:absolute;top:-1px;right:-2px;min-width:14px;height:14px;padding:0 3px;border-radius:8px!important;background:var(--accent,#8b593b);color:#fff;font-size:9px;line-height:14px;text-align:center}
+.compose-send{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.shell .fullscreen-chat button.compose-attach{width:29px;height:29px;padding:0!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a8378);font-size:19px;line-height:1}
+.shell .fullscreen-chat button.compose-attach:hover,.shell .fullscreen-chat button.compose-attach.active{background:var(--accent-soft,#f3e9dc)!important}
+.shell .fullscreen-chat .compose-box .send-button{height:30px;padding:0 14px!important;border:0!important;border-radius:9px!important;background:var(--accent,#8b593b)!important;color:#fff!important;box-shadow:none!important;font-size:12px;font-weight:600}
+.shell .fullscreen-chat .compose-box .send-button:disabled{opacity:.45}
+.chat-binding-bar .chat-bind-hint{flex:0 0 auto;margin-left:auto;font-size:9px;color:var(--muted,#8a8378);white-space:nowrap}
+
+/* ── 图标面板：输入框上方浮出的小面板，不遮罩 ─────────────────────── */
+.compose-tray{display:flex;flex-direction:column;max-height:36dvh;overflow:hidden;margin:6px 8px 0;border:1px solid var(--line,#e2d9cc)!important;border-radius:14px!important;background:var(--surface,#fbf8f2)!important}
+.compose-tray-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line,#e6ded2)}
+.compose-tray-head b{font-size:12.5px;font-weight:600;color:var(--ink,#403b35)}
+.compose-tray-head small{flex:1;font-size:10px;color:var(--muted,#8a7d6d)}
+.shell .fullscreen-chat .compose-tray-head button{width:24px;height:24px;padding:0!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;font-size:17px;color:var(--muted)}
+.compose-tray-body{overflow:auto;padding:8px 12px 12px}
+.compose-tray-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;border-top:1px solid var(--line,#e6ded2);font-size:10px;color:var(--muted,#8a7d6d)}
+.shell .fullscreen-chat .compose-tray-foot button{padding:2px 0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:var(--accent,#8b593b);font-size:10px}
+.tray-key-row{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:11px;color:var(--muted)}
+.tray-key-row select{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--card,#fff);color:var(--ink);font-size:11px}
+.tray-group{margin-bottom:8px}
+.tray-group-title{display:block;margin:6px 0 4px;font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--accent,#8b593b)}
+.tray-option{display:flex;align-items:flex-start;gap:9px;margin:5px 0;padding:7px 9px;border:1px solid var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--card,#fff);font-size:12px;cursor:pointer}
+.tray-option>input{flex:0 0 auto;margin-top:2px;accent-color:var(--accent)}
+.tray-option>span{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--ink,#403b35)}
+.tray-option small{display:block;margin-top:2px;font-size:10px;color:var(--muted,#8a7d6d)}
+.tray-no{display:inline-block;margin-right:5px;padding:0 4px;border-radius:5px!important;background:#f0e8da;color:#8b6c4a;font-size:10px;font-style:normal}
+.tray-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.shell .fullscreen-chat button.tray-tool-card{display:flex;flex-direction:column;gap:3px;padding:9px 10px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:10px!important;background:var(--card,#fff)!important;box-shadow:none!important;text-align:left}
+.tray-tool-card b{font-size:12px;font-weight:600;color:var(--ink,#403b35)}
+.tray-tool-card small{font-size:10px;color:var(--muted,#8a7d6d)}
+
+/* ── 工作区小程序：数据驱动，后续可继续加 ─────────────────────────── */
+.workspace-applets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 8px}
+.shell .room-screen button.workspace-applet{display:flex;align-items:center;gap:8px;min-height:52px;padding:9px 10px!important;border:1px solid #e2d9cc!important;border-radius:12px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;text-align:left}
+.wa-icon{flex:0 0 auto;display:grid;place-items:center;width:28px;height:28px;border-radius:8px!important;background:#f0e8da;color:#8b6c4a;font-size:15px}
+.wa-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.wa-text b{font-size:12px;font-weight:600;color:var(--ink,#403b35)}
+.wa-text small{font-size:9.5px;color:var(--muted,#8a7d6d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wa-go{flex:0 0 auto;font-size:15px;color:#8a7d6d}
+.workspace-applet-slot{display:flex;align-items:center;justify-content:center;gap:6px;min-height:52px;padding:8px;border:1px dashed #d8cebf;border-radius:12px!important;color:#a09585;font-size:10px;text-align:center}
+.workspace-applet-slot>span{font-size:16px}
+
+/* ── 设置页：供应商中心 ───────────────────────────────────────────── */
+.vendor-center{display:flex;flex-direction:column;gap:9px;width:100%;min-width:0;margin:8px 0 12px}
+.vendor-center .resource-hint{max-width:100%;overflow-wrap:anywhere}
+.vendor-summary{display:flex;gap:6px;flex-wrap:wrap}
+.vendor-summary span{padding:4px 9px;border:1px solid var(--line,#e3ddd3);border-radius:999px!important;background:var(--card,#fff);font-size:10.5px;color:var(--muted,#8a7d6d)}
+.vendor-card{overflow:hidden;min-width:0;width:100%;box-sizing:border-box;border:1px solid var(--line,#e2d9cc);border-radius:12px!important;background:var(--card,#fffdf9)}
+.shell .settings-screen button.vendor-card-head{display:flex;align-items:center;gap:9px;width:100%;padding:11px 12px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left}
+.vendor-no{flex:0 0 auto;padding:2px 6px;border-radius:6px!important;background:#f0e8da;color:#8b6c4a;font-size:10px}
+.vendor-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.vendor-title b{font-size:12.5px;font-weight:600;color:var(--ink,#403b35)}
+.vendor-title small{font-size:10px;color:var(--muted,#8a7d6d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vendor-meta{flex:0 0 auto;font-size:10px;color:var(--muted,#8a7d6d);white-space:nowrap}
+.vendor-chevron{flex:0 0 auto;font-size:16px;color:#8a7d6d;transition:transform .18s}
+.vendor-card.open .vendor-chevron{transform:rotate(90deg)}
+.vendor-card-body{min-width:0;padding:4px 12px 13px;border-top:1px solid var(--line,#e6ded2)}
+.vendor-endpoint{display:flex;flex-direction:column;gap:4px;margin:9px 0;font-size:11px;color:var(--muted)}
+.vendor-endpoint input,.vendor-add-row input,.vendor-key-row input{box-sizing:border-box;min-width:0;padding:7px 9px;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#fff);color:var(--ink,#403b35);font-size:11.5px;box-shadow:none!important}
+.vendor-section{margin-top:10px}
+.vendor-section>b{display:block;margin-bottom:6px;font-size:11.5px;font-weight:600;color:var(--ink,#403b35)}
+.vendor-section>b small{font-weight:400;color:var(--muted,#8a7d6d);font-size:10px}
+.vendor-section p.muted{margin:3px 0;font-size:10.5px}
+.vendor-model-row{display:flex;align-items:center;gap:9px;padding:6px 8px;border:1px solid var(--line,#eae3d9)!important;border-radius:9px!important;background:var(--surface,#fbf8f2);font-size:11.5px;margin:4px 0;cursor:pointer}
+.vendor-model-row>span{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--ink,#403b35)}
+.vendor-model-row>small{font-size:9.5px;color:var(--muted)}
+.vendor-add-row{display:flex;gap:6px;min-width:0;margin-top:7px;flex-wrap:wrap}
+.vendor-add-row input{flex:1 1 100px;min-width:0}
+.shell .settings-screen .vendor-add-row button{flex:0 0 auto}
+.shell .settings-screen .vendor-add-row button,.shell .settings-screen .vendor-key-actions button,.shell .settings-screen button.vendor-remove{padding:6px 11px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#faf6ef)!important;box-shadow:none!important;color:var(--ink,#403b35);font-size:11px;white-space:nowrap}
+.vendor-key-row{display:grid;grid-template-columns:auto minmax(0,.8fr) minmax(0,1.2fr) 24px;align-items:center;gap:5px;min-width:0;margin:5px 0}
+.vendor-key-row input{width:100%;min-width:0;box-sizing:border-box}
+.vendor-key-no{flex:0 0 auto;font-size:10px;color:#8b6c4a}
+.shell .settings-screen .vendor-key-row button{width:26px;height:26px;padding:0!important;border:0!important;border-radius:7px!important;background:transparent!important;box-shadow:none!important;color:var(--muted);font-size:16px}
+.vendor-key-actions{display:flex;align-items:center;gap:8px;margin-top:7px}
+.vendor-key-actions small{font-size:10px;color:var(--muted)}
+.shell .settings-screen button.vendor-remove{display:block;margin-top:12px;color:#a05a4a!important}
+.vendor-new{display:flex;flex-direction:column;gap:6px;min-width:0;width:100%;box-sizing:border-box;margin-top:4px;padding:12px;border:1px dashed #d8cebf;border-radius:12px!important;background:rgba(250,246,238,.6)}
+.vendor-new>b{font-size:11.5px;color:var(--ink,#403b35)}
+.vendor-new>small{font-size:10px;color:var(--muted)}
+
+/* ── 设置页：聊天可选清单（001 / 002） ────────────────────────────── */
+.chat-pool-picker{display:flex;flex-direction:column;gap:5px;min-width:0;width:100%;box-sizing:border-box;margin:8px 0 12px;padding:12px;border:1px solid var(--line,#e2d9cc);border-radius:12px!important;background:var(--card,#fffdf9)}
+.chat-pool-picker>b{font-size:12px;font-weight:600;color:var(--ink,#403b35)}
+.chat-pool-picker>p{margin:0 0 4px;font-size:10.5px;line-height:1.5}
+.pool-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--line,#eae3d9)!important;border-radius:9px!important;background:var(--surface,#fbf8f2);cursor:pointer}
+.pool-no{flex:0 0 auto;padding:2px 6px;border-radius:6px!important;background:#f0e8da;color:#8b6c4a;font-size:10px}
+.pool-label{flex:1;min-width:0;font-size:11.5px;color:var(--ink,#403b35);overflow-wrap:anywhere}
+.pool-label small{display:block;margin-top:2px;font-size:9.5px;color:var(--muted)}
+
+/* 像素风美化包里 `.beautify-pixel *{border-radius:0!important}` 加载更晚，
+   用更高权重把新组件的圆角拿回来（只作用于这些新组件）。*/
+.shell .fullscreen-chat .compose-box,
+.shell .fullscreen-chat .compose-tray,
+.shell .settings-screen .vendor-card,
+.shell .settings-screen .vendor-new,
+.shell .settings-screen .chat-pool-picker,
+.shell .room-screen .workspace-applets .workspace-applet-slot{border-radius:14px!important}
+.shell .fullscreen-chat .tray-option,
+.shell .settings-screen .vendor-model-row,
+.shell .settings-screen .chat-pool-picker .pool-row{border-radius:10px!important}
