@@ -61,6 +61,11 @@ test('订阅账号归一化：丢弃非法数据并补默认值', () => {
   assert.equal(out[0].endpoint, 'https://api.openai.com/v1')
   assert.equal(out[0].vendorId, 'openai')
   assert.equal(out[0].apiKey, 'sk-abc')
+  // 旧数据只有 Key 时自动切到「令牌」方式，账号密码字段补空。
+  assert.equal(out[0].loginMode, 'token')
+  assert.equal(out[0].username, '')
+  assert.equal(out[0].password, '')
+  assert.equal(out[1].loginMode, 'password')
   assert.equal(out[0].loggedIn, true)
   assert.deepEqual(out[1].availableModels, ['grok-3'])
   assert.deepEqual(out[1].pickedModels, ['grok-3'])
@@ -79,8 +84,13 @@ test('订阅账号归一化：重复 id 自动去重', () => {
   assert.equal(new Set(out.map((x) => x.id)).size, 3)
 })
 
-test('新建订阅账号：带渠道默认地址、未登录、空凭据', () => {
+test('新建订阅账号：默认账号密码登录、带渠道默认地址、未登录、空凭据', () => {
   const a = blankSubscription(channelById('grok'))
+  assert.equal(a.loginMode, 'password')
+  assert.equal(a.username, '')
+  assert.equal(a.password, '')
+  assert.equal(a.loginPath, '')
+  assert.equal(a.tokenSource, '')
   assert.equal(a.channelId, 'grok')
   assert.equal(a.endpoint, 'https://api.x.ai/v1')
   assert.equal(a.vendorId, 'sub-xai')

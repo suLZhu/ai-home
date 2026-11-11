@@ -34,6 +34,10 @@ import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isIn
 import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, chatRequestUrl, modelListUrl, groupModels, orderedKeys, DEFAULT_API_PATH, type Vendor } from './vendors.mjs'
 // 订阅账号：渠道目录 / 搜索 / 凭据归一化。凭据只存本机，不进云端快照。
 import { SUBSCRIPTION_STORAGE_KEY, SUBSCRIPTION_QUICK_TERMS, channelById, searchSubscriptionChannels, normalizeSubscriptions, blankSubscription, type SubscriptionAccount } from './subscriptionChannels.mjs'
+// 订阅号账号密码登录：地址推导 / 预览；真正的换令牌请求走 /api/subscription/login。
+import { DEFAULT_LOGIN_PATH, DEFAULT_TOKEN_PATH, subscriptionLoginUrl, subscriptionTokenUrl } from './subscriptionLogin.mjs'
+// 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
+import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -194,6 +198,8 @@ export default function App() {
   const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => { const saved=read<Record<string,MemoryEntry[]>>('ai-home.memoryEntries',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MemoryEntry[]> })
   const [prompt, setPrompt] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.prompt',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [characters, setCharacters] = useState<Record<Person,CharacterCard>>(() => alignCardNames(read<Record<string,CharacterCard>>('ai-home.characters',{}), assistants))
+  // 用户设置按助手隔离：这个助手怎么称呼我、我是谁、有哪些偏好，聊天时注入首条 system 提示。
+  const [userSettings,setUserSettings]=useState<Record<Person,UserSettings>>(()=>normalizeUserSettings(read<unknown>(USER_SETTINGS_KEY,null),ASSISTANT_PEOPLE))
   const [worldEntries, setWorldEntries] = useState<WorldEntry[]>(() => { const raw:any=read('ai-home.worldEntries', []); if(Array.isArray(raw)) return raw.map((e:any)=>({...e,boundCharacters:(Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:[])).map((x:string)=>toAssistantId(String(x)))})); return ASSISTANT_PEOPLE.flatMap((id:any)=>Array.isArray(raw?.[id])?raw[id].map((e:any)=>({...e,boundCharacters:[id]})):[]) })
   const [worldbook, setWorldbook] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.worldbook',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [mcpConnections, setMcpConnections] = useState<Record<Person, MCPConnection[]>>(() => { const saved=read<Record<string,MCPConnection[]>>('ai-home.mcpConnections',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MCPConnection[]> })
@@ -240,6 +246,9 @@ export default function App() {
   // 需要人工处理的批次由聊天输入区上方的恢复条提供「立即发送 / 撤回」。
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => { const saved=read<Record<string,string[]>>('ai-home.tasks',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,string[]> })
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
+  // 聊天里点头像 → 关聊天打开助手档案；档案左上按钮据此变成「← 返回聊天」。
+  const [profileFromChat,setProfileFromChat]=useState(false)
+  const openAssistantProfile=(fromChat=false)=>{setProfileFromChat(fromChat);setChatOpen(false);setActiveTool('助手档案');setPage('room')}
   // 左侧抽屉默认完全收起：屏幕边缘只留一条细把手，点一下才滑出，再点遮罩 / × / 系统返回手势收起。
   // 不再定时自动收回——用户要在里面翻历史会话、重命名，自动收回会打断操作。
   const [sidebarOpen,setSidebarOpen]=useState(false)
@@ -344,7 +353,7 @@ export default function App() {
   }
   const clearDiagLogs = () => { try { setDiagLogs([]); persistDiagLogs([]) } catch { /* 诊断失败不影响聊天 */ } }
 
-  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool])
+  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
@@ -382,6 +391,8 @@ export default function App() {
     if (data.prompt && typeof data.prompt === 'object') setPrompt(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.prompt[id]||''])) as Record<Person,string>)
     if (data.characters && typeof data.characters === 'object') setCharacters(alignCardNames(data.characters, restoredNames))
     else if (restoredNames.length) setCharacters((old:Record<Person,CharacterCard>)=>alignCardNames(old, restoredNames))
+    // 用户设置是附加字段：旧快照没有时保持本机值不变。
+    if (data.userSettings && typeof data.userSettings === 'object') setUserSettings(normalizeUserSettings(data.userSettings, ASSISTANT_PEOPLE))
     if (Array.isArray(data.worldEntries)) setWorldEntries(data.worldEntries.map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:(Array.isArray(e.boundCharacters)?e.boundCharacters:(e.boundCharacter?[e.boundCharacter]:[])).map((x:string)=>toAssistantId(String(x)))}))); else if (data.worldEntries && typeof data.worldEntries === 'object') setWorldEntries(ASSISTANT_PEOPLE.flatMap((id:any)=>Array.isArray(data.worldEntries[id])?data.worldEntries[id].map((e:any)=>({...{enabled:true,always:false,useRegex:false,caseSensitive:false,scanDepth:4,sticky:0,cooldown:0,delay:0,target:'system',position:'tail',depth:4,priority:0},...e,boundCharacters:[id]})):[]))
     if (data.worldbook && typeof data.worldbook === 'object') setWorldbook(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,data.worldbook[id]||''])) as Record<Person,string>)
     if (data.mcpConnections && typeof data.mcpConnections === 'object') setMcpConnections(Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(data.mcpConnections[id])?data.mcpConnections[id].map((x:MCPConnection)=>({...x,person:id})):[]])) as Record<Person,MCPConnection[]>)
@@ -606,7 +617,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal, modelProfiles, bindings, chatPool])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal, modelProfiles, bindings, chatPool])
 
   useEffect(() => {
     const update = () => setTime(new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date()))
@@ -664,6 +675,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.memoryEntries', JSON.stringify(memoryEntries)), [memoryEntries])
   useEffect(() => localStorage.setItem('ai-home.prompt', JSON.stringify(prompt)), [prompt])
   useEffect(() => localStorage.setItem('ai-home.characters', JSON.stringify(characters)), [characters])
+  useEffect(() => { try { localStorage.setItem(USER_SETTINGS_KEY, JSON.stringify(userSettings)) } catch { /* 私密模式忽略 */ } }, [userSettings])
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
   useEffect(() => localStorage.setItem('ai-home.mcpConnections', JSON.stringify(mcpConnections)), [mcpConnections])
   useEffect(() => localStorage.setItem(MODEL_PROFILES_KEY, JSON.stringify(modelProfiles)), [modelProfiles])
@@ -800,6 +812,8 @@ export default function App() {
       '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
       '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
       card.description && '【角色描述】\n'+card.description,
+      // 用户设定：助手该怎么称呼我、我是谁、偏好与忌讳；每个助手单独配置，直接进入提示词。
+      buildUserContext(userSettings[target], {roomName}),
       card.definition && '【角色设定】\n'+card.definition,
       card.language && '【语言与表达要求】\n'+card.language,
       prompt[target] && '【补充人物提示】\n'+prompt[target],
@@ -1351,7 +1365,9 @@ export default function App() {
         deferredOn={deferredOn} setDeferredOn={setDeferredOn} deferredBatches={deferredBatches} deferredNow={deferredNow}
         enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>flushDeferred(key,true)} cancelDeferred={cancelDeferred}
         editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage}
-        tasks={tasks} addTask={addTask} />}
+        tasks={tasks} addTask={addTask}
+        userSettings={userSettings} setUserSettings={setUserSettings}
+        profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
       {page === 'me' && <MyRoom roomName={roomName} setRoomName={setRoomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
@@ -1464,6 +1480,8 @@ function Room(props: {
   memoryEntries: Record<Person,MemoryEntry[]>, setMemoryEntries: React.Dispatch<React.SetStateAction<Record<Person,MemoryEntry[]>>>,
   mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
+  userSettings:Record<Person,UserSettings>, setUserSettings:React.Dispatch<React.SetStateAction<Record<Person,UserSettings>>>,
+  profileFromChat:boolean, setProfileFromChat:(v:boolean)=>void, openAssistantProfile:(fromChat?:boolean)=>void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
   sending: boolean, chatError: string, setChatError: (v:string)=>void,
   personAppearance: Record<string,PersonAppearancePref>, setPersonAppearance: React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>, customAssets: CustomAssets,
@@ -1497,11 +1515,11 @@ function Room(props: {
       ? <button type="button" className="room-person-toggle" title={'切换到 '+props.displayName(nextPerson)} aria-label={'切换到 '+props.displayName(nextPerson)} onClick={()=>{props.setPerson(nextPerson);props.setActiveTool('')}}><svg className="room-switch-icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M7 7h9l-2.6-2.6a1 1 0 1 1 1.4-1.4l4.3 4.3a1 1 0 0 1 0 1.4l-4.3 4.3a1 1 0 1 1-1.4-1.4L16 9H7a1 1 0 1 1 0-2z" fill="currentColor"/><path d="M17 17H8l2.6 2.6a1 1 0 1 1-1.4 1.4l-4.3-4.3a1 1 0 0 1 0-1.4l4.3-4.3a1 1 0 1 1 1.4 1.4L8 15h9a1 1 0 1 1 0 2z" fill="currentColor"/></svg><small>切换</small></button>
       : null
   const avatarSrc = props.characters[props.person]?.avatar || DEFAULT_AVATAR
-  const roomHeader = <header className="room-header"><div className="room-name"><button type="button" className="room-name-avatar" title="人物设置与记忆" aria-label={'打开'+props.displayName(props.person)+'的助手档案'} onClick={()=>props.setActiveTool('助手档案')}><img src={avatarSrc} alt=""/></button><div><b>{props.displayName(props.person)} 的房间</b><small>点头像设置人物与记忆</small></div>{personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}</div></header>
+  const roomHeader = <header className="room-header"><div className="room-name"><button type="button" className="room-name-avatar" title="人物设置与记忆" aria-label={'打开'+props.displayName(props.person)+'的助手档案'} onClick={()=>props.openAssistantProfile(false)}><img src={avatarSrc} alt=""/></button><div><b>{props.displayName(props.person)} 的房间</b><small>点头像设置人物、用户设定与记忆</small></div>{personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}</div></header>
   if (props.activeTool) return <div className="room-screen room-tool-screen">
     {/* 工具 / 档案页不再重复房间头部的头像与名字：整屏只留档案里那一份改名入口。 */}
     <header className="room-tool-header">
-      <button className="settings-back" onClick={() => props.setActiveTool('')}>← 工作区</button>
+      <button className="settings-back" onClick={() => {const backToChat=props.profileFromChat&&props.activeTool==='助手档案';props.setActiveTool('');if(backToChat){props.setProfileFromChat(false);props.setChatOpen(true)}}}>{props.profileFromChat&&props.activeTool==='助手档案'?'← 返回聊天':'← 工作区'}</button>
       <b className="room-tool-title">{props.activeTool}</b>
       {personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}
     </header>
@@ -1549,32 +1567,68 @@ function WorkspaceApplets({onOpen}:{ onOpen:(t:Tool)=>void }) {
   </div>
 }
 
-// 助手档案：房间里点助手头像后唯一的设置面板。名称直接在这里改，
-// 主动任务已移到工作区小程序，这里只留人物设置与长 / 短期记忆三段。
+// 助手档案：房间里 / 聊天里点助手头像后共用的设置面板。名称直接在这里改，
+// 人物设定、用户设定、长期记忆、短期记忆四段；用户设定只影响当前助手。
 function AssistantProfile(p: any) {
   const person=p.person as Person
-  const [tab,setTab]=useState<'人物'|'长期'|'短期'>('人物')
+  const [tab,setTab]=useState<'人物'|'用户'|'长期'|'短期'>('人物')
+  // 改名输入用本地草稿：全部删掉时保持空白，让用户接着输入新名字，
+  // 不让 displayName 的兜底默认名「蹦」回输入框。空值不写进数据，失焦才恢复显示名。
+  // ToolPanel 用 key={person} 挂载，切换助手时草稿随组件重建自动同步，无需 effect 回填。
+  const [nameDraft,setNameDraft]=useState(()=>String(p.displayName(person)||''))
+  const pRef=useRef(p)
+  useEffect(()=>{pRef.current=p})
+  useEffect(()=>pushBackHandler(()=>{
+    const q=pRef.current
+    if(q.profileFromChat){q.setProfileFromChat(false);q.setActiveTool('');q.setChatOpen(true)}
+    else q.setActiveTool('')
+    return true
+  }),[person])
   const recent:ChatMessage[]=(p.messages[person]||[]).slice(-12)
-  const tabs=[['人物','人物设置'],['长期','长期记忆'],['短期','短期记忆']] as const
-  const rename=(name:string)=>{
+  const tabs=[['人物','人物设置'],['用户','用户设置'],['长期','长期记忆'],['短期','短期记忆']] as const
+  const rename=(value:string)=>{
+    setNameDraft(value)
+    const name=value.trim()
+    if(!name)return
     p.setAssistants((old:AssistantRecord[])=>old.some(a=>a.id===person)?old.map(a=>a.id===person?{...a,name}:a):[...old,{id:person,name}])
-    // 角色卡名称跟随显示名即时同步，不再留第二个输入框，也不会等失焦才对齐提示词。
-    p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||blankCard(person)),name:name.trim()||p.displayName(person)}}))
+    // 角色卡名称跟随显示名即时同步，提示词里的角色名与界面保持一致。
+    p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||blankCard(person)),name}}))
   }
+  const userValue:UserSettings=p.userSettings?.[person]||blankUserSettings()
+  const patchUser=(field:keyof UserSettings,v:string)=>p.setUserSettings((old:Record<Person,UserSettings>)=>({...old,[person]:{...(old[person]||blankUserSettings()),[field]:v}}))
   return <div className="assistant-profile">
-    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={p.displayName(person)} onChange={e=>rename(e.target.value)}/><small>名称可直接修改</small></div></div>
+    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={nameDraft} onChange={e=>rename(e.target.value)} onBlur={()=>{if(!nameDraft.trim())setNameDraft(String(p.displayName(person)||''))}}/><small>名称可直接修改 · 删空后可继续输入</small></div></div>
     <div className="ap-tabs" role="tablist" aria-label="助手档案">{tabs.map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} className={'ap-tab'+(tab===key?' active':'')} key={key} onClick={()=>setTab(key)}>{label}</button>)}</div>
     <div className="ap-body">
       {tab==='人物'&&<CharacterSettings key={person} value={p.characters[person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))} hideAvatar/>}
+      {tab==='用户'&&<UserSettingsEditor value={userValue} onChange={patchUser} assistantName={p.displayName(person)}/>}
       {tab==='长期'&&<><MemoryWorkbench person={person} personLabel={p.displayName} entries={p.memoryEntries[person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>}
       {tab==='短期'&&<div className="ap-short"><p className="muted">短期记忆就是当前会话最近的聊天：换一条会话就会变，不会长期保存。想一直留着的事，请加到「长期记忆」。</p><div className="ap-recent">{recent.length?recent.map((m,i)=><div className={'ap-recent-row '+m.role} key={m.id||i}><b>{m.role==='user'?'我':p.displayName(person)}</b><span>{(m.content||'（图片 / 附件）').slice(0,90)||'（空消息）'}</span></div>):<p className="muted">这个会话还没有消息。</p>}</div></div>}
     </div>
   </div>
 }
 
+// 用户设置一栏：只作用于当前助手，修改即时保存，聊天时由 buildUserContext 注入 system 提示。
+function UserSettingsEditor({value,onChange,assistantName}:{value:UserSettings;onChange:(field:keyof UserSettings,v:string)=>void;assistantName:string}){
+  const fields:[keyof UserSettings,string,string][]=[
+    ['callName','助手怎么称呼你','例如：小顺 / 老板 / 主人'],
+    ['userName','你的名字','例如：李小顺'],
+    ['identity','你的身份 / 职业','例如：船厂安环部，常做体系文件'],
+    ['relationship','你们的关系','例如：搭档 / 私人助理 / 老朋友'],
+  ]
+  return <div id="user-settings-panel" className="user-settings-card">
+    <p className="us-intro">只作用于「{assistantName}」：告诉它该怎么称呼你、你是谁、有哪些偏好。修改即时保存，聊天时自动生效。</p>
+    {fields.map(([key,label,placeholder])=><label className="us-field" key={key}>{label}<input aria-label={label} value={value[key]} onChange={e=>onChange(key,e.target.value)} placeholder={placeholder}/></label>)}
+    <label className="us-field">偏好与忌讳<textarea rows={3} aria-label="偏好与忌讳" value={value.preferences} onChange={e=>onChange('preferences',e.target.value)} placeholder="例如：回复简短、直接给结论；不要客套话；不要用表情"/></label>
+    <label className="us-field">其他用户设定<textarea rows={3} aria-label="其他用户设定" value={value.notes} onChange={e=>onChange('notes',e.target.value)} placeholder="希望助手一直记住的其它事……"/></label>
+    <div className="us-preview"><b>聊天时会自动告诉助手</b><pre>{buildUserContext(value)||'（还没有填写任何设定）'}</pre></div>
+    <small className="us-foot">这些设定按助手单独保存，只留在这台设备的本机数据里；没填的项目不会出现。</small>
+  </div>
+}
+
 function ToolPanel(p: any) {
   const t=p.activeTool as Tool
-  if (t === '助手档案') return <AssistantProfile {...p}/>
+  if (t === '助手档案') return <AssistantProfile key={p.person} {...p}/>
   if (t === '人物设置') return <><p className="muted">助手名称在房间顶部头像旁修改，这里只编辑人物设定。</p><CharacterSettings key={p.person} value={p.characters[p.person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[p.person]:v}))}/></>
   if (t === '角色外观') return <PersonAppearance key={p.person} value={p.personAppearance?.[p.person]||null} assets={p.customAssets||EMPTY_ASSETS} onChange={(v:PersonAppearancePref|null)=>p.setPersonAppearance((old:Record<string,PersonAppearancePref>)=>{const next={...old};if(v)next[p.person]=v;else delete next[p.person];return next})}/>
   if (t === '世界书') return <WorldbookEditor personLabel={p.displayName} entries={p.worldEntries.filter((e:WorldEntry)=>e.boundCharacters?.includes(p.person))} onChange={(v:WorldEntry[])=>p.setWorldEntries((old:WorldEntry[])=>{const visibleIds=new Set(old.filter(e=>e.boundCharacters?.includes(p.person)).map(e=>e.id));const incoming=new Map(v.map(e=>[e.id,e]));const kept=old.flatMap(e=>{if(!visibleIds.has(e.id))return [e];const replacement=incoming.get(e.id);if(replacement)return [replacement];const remaining=e.boundCharacters.filter(name=>name!==p.person);return remaining.length?[{...e,boundCharacters:remaining}]:[]});const oldIds=new Set(old.map(e=>e.id));return [...kept,...v.filter(e=>!oldIds.has(e.id))]})}/>
@@ -2290,7 +2344,7 @@ function Chat(p: any) {
     const canRegenerate=m.role==='assistant'&&isLast&&canAct&&!p.sending
     return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')} key={i} data-message-id={m.id||undefined}>
       {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
-      {m.role==='assistant'&&<span className="message-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>}
+      {m.role==='assistant'&&<button type="button" className="message-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button>}
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
@@ -2319,7 +2373,7 @@ function Chat(p: any) {
   }
   return <div className="fullscreen-chat">
     {/* 全面屏顶栏：不铺返回/会话控件。历史会话从左侧抽屉点选，返回房间走系统返回手势或抽屉底部入口。 */}
-    <header className="chat-header"><span className="chat-header-spacer" aria-hidden="true"/><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
+    <header className="chat-header"><span className="chat-header-spacer" aria-hidden="true"/><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}
@@ -2523,9 +2577,9 @@ const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '
 
 // 设置页统一放 API Key 与默认接口：复用原来的模型设置面板，按助手切换。
 // 工作区不再陈列「模型设置」工具，聊天窗口也不放 Key，只负责选用与绑定。
-// ── 订阅账号：搜索渠道 → 接入 → 填自己的订阅凭据验证登录 → 选模型进聊天 ────
-// 凭据只落本机，并同步进 vendors.keys，聊天侧直接复用已有的多 KEY / 模型绑定链路，
-// 不另造一套请求路径。这里「登录」的是用户自己的 API 订阅凭据，不是网页账号。
+// ── 订阅账号：搜索渠道 → 接入 → 填账号密码登录 → 选模型进聊天 ──────────
+// 登录后换到的访问令牌同步进 vendors.keys，模型列表与聊天都复用已有链路，
+// 直接消耗订阅账号自己的额度。账号 / 密码 / 令牌只落本机，不进云端快照。
 function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions,setSubscriptions}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
@@ -2589,26 +2643,42 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     const a=blankSubscription(ch)
     commit([...subscriptions,a]);setOpenId(a.id);setModelsOpen(o=>({...o,[a.id]:false}))
   }
+  // 账号密码方式：让服务端代发登录请求换访问令牌；令牌方式：直接用用户输入的那把。
+  // 两条路最终都落到同一个 token 上，后面 /models 与聊天完全一致。
+  const acquireToken=async(a:SubscriptionAccount):Promise<{token:string;source:string}>=>{
+    if(a.loginMode==='token'){
+      const key=readKey(a).trim()
+      if(!key)throw new Error('请先填写订阅令牌。')
+      return {token:key,source:'手动填写'}
+    }
+    if(!a.username.trim()||!a.password.trim())throw new Error('请先填写订阅账号和密码。')
+    const r=await apiFetch('/api/subscription/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),loginPath:a.loginPath,tokenPath:a.tokenPath,username:a.username.trim(),password:a.password})})
+    const d=await r.json().catch(()=>({}))
+    if(!r.ok)throw new Error(d?.error||('登录接口返回 HTTP '+r.status))
+    const token=String(d?.token||'').trim()
+    if(!token)throw new Error('登录接口没有返回访问令牌。')
+    return {token,source:String(d?.source||'订阅号登录')}
+  }
   const verifyLogin=async(a:SubscriptionAccount)=>{
-    const key=readKey(a).trim()
     if(!a.endpoint.trim()){setVerify(v=>({...v,[a.id]:{loading:false,error:'请先填写订阅地址。'}}));return}
-    if(!key){setVerify(v=>({...v,[a.id]:{loading:false,error:'请先填写 API Key / 订阅令牌。'}}));return}
     setVerify(v=>({...v,[a.id]:{loading:true,error:''}}))
     try{
-      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),apiKey:key,modelsUrl:modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})})})
+      const {token,source}=await acquireToken(a)
+      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),apiKey:token,modelsUrl:modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})})})
       const d=await r.json().catch(()=>({}))
       if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
       const ids:string[]=Array.isArray(d?.models)?d.models.filter((x:unknown)=>typeof x==='string'&&x.trim()).map((x:string)=>x.trim()):[]
       if(!ids.length)throw new Error('这个地址没有返回可用模型，检查一下订阅地址或模型列表路径。')
-      const keyId=writeVendor(a,key)
-      patch(a.id,x=>({...x,vendorKeyId:keyId,loggedIn:true,modelCount:ids.length,availableModels:[...new Set(ids)],lastVerified:new Date().toISOString()}))
+      const keyId=writeVendor(a,token)
+      patch(a.id,x=>({...x,apiKey:'',vendorKeyId:keyId,tokenSource:source,loggedIn:true,modelCount:ids.length,availableModels:[...new Set(ids)],lastVerified:new Date().toISOString()}))
       setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
       setModelsOpen(o=>({...o,[a.id]:true}))
-    }catch(e){setVerify(v=>({...v,[a.id]:{loading:false,error:e instanceof Error?e.message:'验证失败'}}))}
+    }catch(e){setVerify(v=>({...v,[a.id]:{loading:false,error:e instanceof Error?e.message:'登录失败'}}))}
   }
   const logout=(a:SubscriptionAccount)=>{
     writeVendor(a,'')
-    patch(a.id,x=>({...x,vendorKeyId:'',apiKey:'',loggedIn:false,modelCount:0,availableModels:[],pickedModels:[],lastVerified:''}))
+    // 退出只注销访问令牌，账号密码留着方便下次一键登录。
+    patch(a.id,x=>({...x,vendorKeyId:'',apiKey:'',tokenSource:'',loggedIn:false,modelCount:0,availableModels:[],pickedModels:[],lastVerified:''}))
     setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
   }
   const remove=(a:SubscriptionAccount)=>{
@@ -2624,8 +2694,8 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     patch(a.id,x=>({...x,pickedModels:picked?x.pickedModels.filter(m=>m!==id):[...x.pickedModels,id]}))
   }
   return <div id="subscription-accounts" className="subscription-accounts">
-    <div className="sub-head"><b>订阅账号</b><small>搜索渠道 → 接入 → 填自己的订阅凭据 → 聊天里就能选模型</small></div>
-    <p className="sub-policy">这里登录的是你自己的 API 订阅凭据（Key / 令牌 + 订阅地址）：验证只请求该地址的 /models 拉模型清单，不会登录 ChatGPT / Claude 等网页账号；凭据只存这台设备，不进云端快照。</p>
+    <div className="sub-head"><b>订阅账号</b><small>搜索渠道 → 接入 → 填账号密码登录 → 聊天里直接花这个订阅号的额度</small></div>
+    <p className="sub-policy">填你订阅号 / 中转站的账号和密码，登录后自动换取访问令牌，拉模型与聊天都走这个账号的额度。账号密码只存这台设备，不进云端快照。官方 ChatGPT / Claude 网页会员没有公开的账号密码换令牌接口，这类改用下面的「令牌」方式。</p>
     <div className="sub-search"><input aria-label="搜索订阅渠道" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索渠道：GPT / Claude / Grok …"/>{query&&<button type="button" aria-label="清空搜索" onClick={()=>setQuery('')}>×</button>}</div>
     <div className="sub-quick">{SUBSCRIPTION_QUICK_TERMS.map(t=><button type="button" key={t} className={query.toLowerCase()===t.toLowerCase()?'active':''} onClick={()=>setQuery(q=>q.toLowerCase()===t.toLowerCase()?'':t)}>{t}</button>)}</div>
     <div className="sub-results">
@@ -2642,7 +2712,7 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     </div>
     <div className="sub-accounts">
       <div className="sub-section-head"><b>我的订阅账号</b><small>{subscriptions.length} 个</small></div>
-      {subscriptions.length===0&&<p className="muted">还没有接入渠道。搜一下 GPT / Claude / Grok，点「＋ 接入」后填自己的 Key 验证即可。</p>}
+      {subscriptions.length===0&&<p className="muted">还没有接入渠道。搜一下 GPT / Claude / Grok，点「＋ 接入」后填订阅号的账号密码登录即可。</p>}
       {subscriptions.map(a=>{
         const ch=channelOf(a),open=openId===a.id,state=verify[a.id]
         const mq=modelQuery.trim().toLowerCase()
@@ -2650,21 +2720,37 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
         return <div className={'sub-account'+(open?' open':'')} key={a.id} data-account-id={a.id}>
           <button type="button" className="sub-account-head" aria-expanded={open} onClick={()=>setOpenId(open?'':a.id)}>
             <span className="sub-channel-icon" aria-hidden="true">{ch?.short||'＋'}</span>
-            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · '+a.modelCount+' 个模型':'未登录 · 填 Key 后验证'}</small></span>
+            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · 使用订阅号额度 · '+a.modelCount+' 个模型':'未登录 · 填账号密码登录后用额度'}</small></span>
             <span className={'sub-status'+(a.loggedIn?' on':'')}>{a.loggedIn?'已登录':'未登录'}</span><span aria-hidden="true">{open?'▴':'▾'}</span>
           </button>
           {open&&<div className="sub-account-body">
             {ch?.needsCompatibleUrl&&<p className="sub-warn">这个渠道需要 OpenAI 兼容地址：请填你的订阅号 / 聚合平台提供的 Base URL，官方网页版地址不能直接用。</p>}
+            <div className="sub-mode-row" role="group" aria-label="登录方式">
+              <button type="button" className={a.loginMode==='password'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'password'}))}>账号密码</button>
+              <button type="button" className={a.loginMode==='token'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'token'}))}>令牌</button>
+            </div>
             <label className="sub-field">账号备注<input aria-label="订阅账号备注" value={a.label} onChange={e=>patch(a.id,x=>({...x,label:e.target.value}))} placeholder="如我的主号"/></label>
             <label className="sub-field">订阅地址 Base URL<input aria-label="订阅地址 Base URL" value={a.endpoint} onChange={e=>patch(a.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
             <p className="sub-url-hint">请求地址 <b>{chatRequestUrl({endpoint:a.endpoint,apiPath:a.apiPath})||'填写订阅地址后显示'}</b></p>
-            <label className="sub-field">API Key / 订阅令牌<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
-            <details className="sub-advanced" open={!!advanced[a.id]}><summary onClick={e=>{e.preventDefault();setAdvanced(s=>({...s,[a.id]:!s[a.id]}))}}>{advanced[a.id]?'▾':'▸'} 高级 · 模型列表路径</summary>
+            {a.loginMode==='password'
+              ? <>
+                <label className="sub-field">订阅账号<input aria-label="订阅账号" autoComplete="username" value={a.username} onChange={e=>patch(a.id,x=>({...x,username:e.target.value}))} placeholder="手机号 / 邮箱 / 用户名"/></label>
+                <label className="sub-field">订阅密码<div className="sub-key-row"><input aria-label="订阅密码" type={showKey[a.id]?'text':'password'} autoComplete="off" value={a.password} onChange={e=>patch(a.id,x=>({...x,password:e.target.value}))} placeholder="订阅号登录密码"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
+                {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天直接消耗「{a.username||a.label}」的额度（令牌来源：{a.tokenSource||'订阅号登录'}）</p>}
+              </>
+              : <label className="sub-field">订阅令牌 / API Key<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>}
+            <details className="sub-advanced" open={!!advanced[a.id]}><summary onClick={e=>{e.preventDefault();setAdvanced(s=>({...s,[a.id]:!s[a.id]}))}}>{advanced[a.id]?'▾':'▸'} 高级 · 接口路径</summary>
               <label className="sub-field">模型列表路径 <small>留空自动推导</small><input aria-label="模型列表路径" value={a.modelsPath} onChange={e=>patch(a.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
               <p className="sub-url-hint">列表地址 <b>{modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})||'填写订阅地址后显示'}</b></p>
+              {a.loginMode==='password'&&<>
+                <label className="sub-field">登录接口路径 <small>留空用 {DEFAULT_LOGIN_PATH}</small><input aria-label="登录接口路径" value={a.loginPath} onChange={e=>patch(a.id,x=>({...x,loginPath:e.target.value}))} placeholder={DEFAULT_LOGIN_PATH}/></label>
+                <p className="sub-url-hint">登录地址 <b>{subscriptionLoginUrl(a.endpoint,a.loginPath)||'填写订阅地址后显示'}</b></p>
+                <label className="sub-field">令牌接口路径 <small>登录没返回令牌时自动再取一次</small><input aria-label="令牌接口路径" value={a.tokenPath} onChange={e=>patch(a.id,x=>({...x,tokenPath:e.target.value}))} placeholder={DEFAULT_TOKEN_PATH}/></label>
+                <p className="sub-url-hint">令牌地址 <b>{subscriptionTokenUrl(a.endpoint,a.tokenPath)||'填写订阅地址后显示'}</b></p>
+              </>}
             </details>
             <div className="sub-actions">
-              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'验证中…':'验证并登录'}</button>
+              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'登录中…':a.loggedIn?'重新登录':'登录并使用额度'}</button>
               {a.loggedIn&&<button type="button" onClick={()=>logout(a)}>退出登录</button>}
               <button type="button" className="sub-remove" onClick={()=>remove(a)}>移除</button>
             </div>

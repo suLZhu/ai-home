@@ -23,6 +23,7 @@ import { initProactiveHeat, tickHeat, coolHeat, readHeat, dispatchProactiveRun }
 import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './server/agent/MemoryStore.mjs'
 import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
+import { performSubscriptionLogin } from './subscriptionLogin.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -350,6 +351,22 @@ const apiServer = createServer(async (req, res) => {
   }
 
   // Shared ledger for both assistants. All routes require the existing authenticated session.
+  // 订阅号账号密码登录：服务端代发登录请求（绕开浏览器 CORS / Cookie 限制），
+  // 只把换到的访问令牌回给前端；前端直接把它当 Bearer 用，消耗该订阅账号额度。
+  // 账号密码不落库、不写日志，只由请求体临时携带。
+  if (url.pathname === '/api/subscription/login' && req.method === 'POST') {
+    try {
+      const b = await readBody(req)
+      const result = await performSubscriptionLogin({
+        endpoint: b.endpoint, loginPath: b.loginPath, tokenPath: b.tokenPath,
+        username: b.username, password: b.password, fetchImpl: fetch,
+      })
+      return send(res, 200, result)
+    } catch (error) {
+      return send(res, 502, { error: error?.message || '订阅号登录失败' })
+    }
+  }
+
   // 代理请求 OpenAI 兼容接口的 /models 列表，绕过浏览器 CORS 限制。
   if (url.pathname === '/api/models' && req.method === 'POST') {
     try {

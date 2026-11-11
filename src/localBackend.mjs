@@ -18,6 +18,7 @@
 import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 import { normalizeLocalTask, makeLocalTask, dueLocalTasks, advanceLocalTask } from './localTasks.mjs'
+import { performSubscriptionLogin } from './subscriptionLogin.mjs'
 
 // ── localStorage 存储层 ─────────────────────────────────────────────────────
 const K = {
@@ -355,6 +356,21 @@ export async function localHandle(path, init) {
       if (!apiKey) { delete keys[person] } else { keys[person] = apiKey }
       try { writeJSON(K.keys, keys) } catch { return json(500, { error: '本地存储写入失败' }) }
       return json(200, { ok: true, saved: !!apiKey })
+    }
+
+    // ── 订阅号账号密码登录：本地模式同样直连订阅接口换令牌 ──
+    if (p === '/api/subscription/login' && method === 'POST') {
+      let b
+      try { b = await readBody(init) } catch { return json(400, { error: '请求无效' }) }
+      try {
+        const result = await performSubscriptionLogin({
+          endpoint: b.endpoint, loginPath: b.loginPath, tokenPath: b.tokenPath,
+          username: b.username, password: b.password, fetchImpl: fetch,
+        })
+        return json(200, result)
+      } catch (error) {
+        return json(502, { error: (error && error.message) || '订阅号登录失败' })
+      }
     }
 
     // ── 模型列表（直连上游） ──

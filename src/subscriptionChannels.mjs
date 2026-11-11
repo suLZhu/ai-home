@@ -1,9 +1,11 @@
 // 订阅账号渠道目录：只提供「有哪些渠道可接」以及搜索 / 归一化，不含任何 React 依赖。
 // 重要边界：
 // 1) 这里只放官方公开 API 地址或留空，绝不硬编码来路不明的第三方中转站网址。
-// 2) 「登录」指验证用户自己填写的 API 订阅凭据（Key / 令牌 + 订阅地址），
-//    不是登录 ChatGPT / Claude 等网页账号，也不做账号共享或 OAuth 抓取。
-// 3) 凭据只写本机 localStorage（'ai-home.subscriptions' 与 vendors.keys），不进云端快照。
+// 2) 默认登录方式是「订阅号账号 + 密码」：向用户自己填的订阅接口换访问令牌，
+//    之后聊天直接消耗该订阅账号的额度；令牌方式仅作为兼容保留。
+//    官方 GPT / Claude 网页会员没有公开的账号密码换令牌接口，这类仍用令牌方式。
+// 3) 账号、密码、令牌只写本机 localStorage（'ai-home.subscriptions' 与 vendors.keys），
+//    不进云端快照。
 
 const str = (v) => String(v ?? '').trim()
 
@@ -16,7 +18,7 @@ export const SUBSCRIPTION_CHANNELS = [
     id: 'gpt', name: 'GPT / OpenAI', short: 'GPT', category: '国外官方',
     aliases: ['gpt', 'openai', 'chatgpt', 'o1', 'o3', 'o4', 'gpt4o', 'gpt-4o', 'sora'],
     endpoint: 'https://api.openai.com/v1', vendorId: 'openai',
-    hint: 'OpenAI 官方直连，填你自己的 API Key。', needsCompatibleUrl: false,
+    hint: 'OpenAI 官方直连；官方只发令牌，登录方式选「令牌」。', needsCompatibleUrl: false,
   },
   {
     id: 'claude', name: 'Claude / Anthropic', short: 'CL', category: '国外官方',
@@ -53,7 +55,7 @@ export const SUBSCRIPTION_CHANNELS = [
     id: 'openrouter', name: 'OpenRouter 聚合', short: 'OR', category: '聚合平台',
     aliases: ['openrouter', 'or', '聚合', 'juhe', 'router'],
     endpoint: 'https://openrouter.ai/api/v1', vendorId: 'sub-openrouter',
-    hint: '聚合平台，一把 Key 可用多家模型。', needsCompatibleUrl: false,
+    hint: '聚合平台，一把令牌可用多家模型。', needsCompatibleUrl: false,
   },
   {
     id: 'moonshot', name: '月之暗面 Kimi', short: 'KI', category: '国内官方',
@@ -77,13 +79,13 @@ export const SUBSCRIPTION_CHANNELS = [
     id: 'ollama', name: 'Ollama 本地', short: 'OL', category: '本地',
     aliases: ['ollama', '本地', 'local', 'bendi', 'llama'],
     endpoint: 'http://127.0.0.1:11434/v1', vendorId: 'ollama',
-    hint: '本机模型，通常不需要 Key；随便填一个占位值即可验证。', needsCompatibleUrl: false,
+    hint: '本机模型，通常不需要令牌；随便填一个占位值即可验证。', needsCompatibleUrl: false,
   },
   {
     id: 'custom', name: '自定义订阅号', short: '＋', category: '自定义',
     aliases: ['custom', '自定义', 'zidingyi', '中转', '中转站', '订阅号', '其他', 'other', 'third-party'],
     endpoint: '', vendorId: '',
-    hint: '填你自己订阅号 / 中转站给的 OpenAI 兼容地址与 Key。', needsCompatibleUrl: true,
+    hint: '填订阅号 / 中转站给你的兼容地址，再用账号密码登录，直接花这个账号的额度。', needsCompatibleUrl: true,
   },
 ]
 
@@ -140,6 +142,13 @@ export function normalizeSubscriptions(raw) {
       apiPath: str(x.apiPath),
       modelsPath: str(x.modelsPath),
       apiKey: str(x.apiKey),
+      // 默认账号密码登录；旧数据里只有 Key 的条目自动切到令牌方式，避免一升级就要求重填。
+      loginMode: x.loginMode === 'token' || (!x.loginMode && str(x.apiKey)) ? 'token' : 'password',
+      username: str(x.username),
+      password: str(x.password),
+      loginPath: str(x.loginPath),
+      tokenPath: str(x.tokenPath),
+      tokenSource: str(x.tokenSource),
       vendorId: str(x.vendorId) || ch.vendorId || ('sub-' + x.channelId),
       vendorKeyId: str(x.vendorKeyId),
       loggedIn: !!x.loggedIn,
@@ -162,6 +171,12 @@ export function blankSubscription(channel) {
     apiPath: '',
     modelsPath: '',
     apiKey: '',
+    loginMode: 'password',
+    username: '',
+    password: '',
+    loginPath: '',
+    tokenPath: '',
+    tokenSource: '',
     vendorId: ch.vendorId || ('sub-' + ch.id),
     vendorKeyId: '',
     loggedIn: false,

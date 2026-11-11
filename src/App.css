@@ -1338,3 +1338,21 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 #subscription-accounts input{border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;box-sizing:border-box}
 #subscription-accounts .sub-search{border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important}
 #subscription-accounts .sub-search input{border:0!important;border-radius:0!important;background:transparent!important;padding:7px 0!important;font-size:12.5px}
+/* 订阅号登录方式切换 / 登录成功提示 */
+.shell .sub-mode-row{display:flex;gap:6px;padding:3px;border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important}
+.shell .sub-mode-row>button{flex:1;padding:6px 10px!important;border:0!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;font-size:11px;color:var(--muted,#8a8378)!important}
+.shell .sub-mode-row>button.active{background:var(--accent-soft,#f7ece5)!important;color:var(--ink,#403b35)!important;font-weight:600}
+.shell .sub-login-note{margin:0;padding:7px 9px;border-radius:9px!important;background:#e7f3e6!important;color:#39713a!important;font-size:10px;line-height:1.5}
+/* 用户设置一栏：细线圆角，容器 ID 压住像素主题对 input 的高权重覆盖 */
+.shell #user-settings-panel{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line,#e6ded2)!important;border-radius:12px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important}
+.shell #user-settings-panel .us-intro{margin:0;font-size:10.5px;line-height:1.55;color:var(--muted,#8a8378)}
+.shell #user-settings-panel .us-field{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--ink,#403b35)}
+.shell #user-settings-panel .us-field>small{font-size:9.5px;color:var(--muted,#8a8378)}
+#user-settings-panel input,#user-settings-panel textarea{width:100%;min-width:0;box-sizing:border-box;padding:7px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;font-size:11.5px;line-height:1.5;resize:vertical}
+#user-settings-panel .us-preview{padding:8px 9px;border:1px dashed var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important}
+.shell #user-settings-panel .us-preview>b{font-size:10px;color:var(--muted,#8a8378)}
+.shell #user-settings-panel .us-preview>pre{margin:5px 0 0;white-space:pre-wrap;word-break:break-word;font-size:10.5px;line-height:1.5;color:var(--ink,#403b35)}
+.shell #user-settings-panel .us-foot{font-size:9.5px;line-height:1.5;color:var(--muted,#8a8378)}
+/* 助手头像（聊天顶栏 + 消息气泡）可点击进档案：button 只保留头像外观 */
+.shell button.message-avatar.avatar-link,.shell button.chat-avatar.avatar-link{padding:0!important;border:0!important;box-shadow:none!important;cursor:pointer;font:inherit;line-height:1}
+.shell button.message-avatar.avatar-link:active,.shell button.chat-avatar.avatar-link:active{opacity:.72}

@@ -18,6 +18,12 @@ export type SubscriptionAccount = {
   apiPath: string
   modelsPath: string
   apiKey: string
+  loginMode: 'password' | 'token'
+  username: string
+  password: string
+  loginPath: string
+  tokenPath: string
+  tokenSource: string
   vendorId: string
   vendorKeyId: string
   loggedIn: boolean
