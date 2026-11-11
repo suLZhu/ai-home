@@ -33,6 +33,18 @@ test('用户设置：提示词只收录填过的字段，称呼优先级最高',
   assert.ok(!text.includes('用户在应用里给自己起的名字'))
 })
 
+test('用户设置：我的头像按助手各存一份，只收图片 dataURL 且不进提示词', () => {
+  const img = 'data:image/jpeg;base64,AAAA'
+  const out = normalizeUserSettings({
+    [PEOPLE[0]]: { avatar: img, callName: '小顺' },
+    [PEOPLE[1]]: { avatar: 'javascript:alert(1)' },
+  }, PEOPLE)
+  assert.equal(out[PEOPLE[0]].avatar, img)
+  assert.equal(out[PEOPLE[1]].avatar, '')
+  assert.ok(!buildUserContext(out[PEOPLE[0]]).includes('data:image'))
+  assert.equal(blankUserSettings().avatar, '')
+})
+
 test('用户设置：没填名字时才用应用昵称，且忽略默认「用户」', () => {
   assert.equal(buildUserContext({ callName: '' }, { roomName: '用户' }), '')
   assert.ok(buildUserContext({ identity: '安环部' }, { roomName: '阿顺' }).includes('阿顺'))

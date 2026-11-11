@@ -5,53 +5,38 @@ import {
   channelById, searchSubscriptionChannels, normalizeSubscriptions, blankSubscription,
 } from '../src/subscriptionChannels.mjs'
 
-test('渠道目录：用户点名的 GPT / Claude / Grok 都能搜到', () => {
-  for (const [q, id] of [['gpt', 'gpt'], ['GPT', 'gpt'], ['claude', 'claude'], ['Claude', 'claude'], ['grok', 'grok'], ['GROK', 'grok']]) {
-    const found = searchSubscriptionChannels(q)
-    assert.equal(found[0]?.id, id, `搜索 ${q} 应优先命中 ${id}`)
+test('渠道目录：只保留 GPT / Claude / Grok，其余全部删掉', () => {
+  assert.deepEqual(SUBSCRIPTION_CHANNELS.map(c => c.id), ['gpt', 'claude', 'grok'])
+  assert.deepEqual(SUBSCRIPTION_QUICK_TERMS, ['GPT', 'Claude', 'Grok'])
+  for (const [q, id] of [['gpt', 'gpt'], ['GPT', 'gpt'], ['claude', 'claude'], ['Claude', 'claude'], ['grok', 'grok'], ['GROK', 'grok'], ['openai', 'gpt'], ['codex', 'gpt']]) {
+    assert.equal(searchSubscriptionChannels(q)[0]?.id, id, `搜索 ${q} 应优先命中 ${id}`)
   }
-  assert.ok(SUBSCRIPTION_QUICK_TERMS.includes('GPT'))
-  assert.ok(SUBSCRIPTION_QUICK_TERMS.includes('Claude'))
-  assert.ok(SUBSCRIPTION_QUICK_TERMS.includes('Grok'))
-})
-
-test('渠道目录：中文名 / 拼音 / 别名 / 空关键词 / 无结果', () => {
-  assert.equal(searchSubscriptionChannels('硅基流动')[0]?.id, 'siliconflow')
-  assert.equal(searchSubscriptionChannels('guijiliudong')[0]?.id, 'siliconflow')
-  assert.equal(searchSubscriptionChannels('Kimi')[0]?.id, 'moonshot')
-  assert.equal(searchSubscriptionChannels('openai')[0]?.id, 'gpt')
-  assert.equal(searchSubscriptionChannels('中转站')[0]?.id, 'custom')
-  assert.equal(searchSubscriptionChannels('').length, SUBSCRIPTION_CHANNELS.length)
+  assert.equal(searchSubscriptionChannels('').length, 3)
+  assert.deepEqual(searchSubscriptionChannels('Gemini'), [])
+  assert.deepEqual(searchSubscriptionChannels('硅基流动'), [])
+  assert.deepEqual(searchSubscriptionChannels('自定义'), [])
   assert.deepEqual(searchSubscriptionChannels('不存在的渠道xyz'), [])
-  // 多词 AND：只命中同时包含两个词的渠道
-  assert.ok(searchSubscriptionChannels('gpt openai').some((c) => c.id === 'gpt'))
+  assert.ok(searchSubscriptionChannels('gpt openai').some(c => c.id === 'gpt'))
   assert.deepEqual(searchSubscriptionChannels('gpt 智谱'), [])
 })
 
-test('渠道目录：只使用官方公开地址，Claude 与自定义不预填来路不明的网址', () => {
-  const allowedHosts = new Set([
-    'api.openai.com', 'api.x.ai', 'generativelanguage.googleapis.com',
-    'api.deepseek.com', 'api.siliconflow.cn', 'openrouter.ai',
-    'api.moonshot.cn', 'open.bigmodel.cn', 'dashscope.aliyuncs.com', '127.0.0.1',
-  ])
+test('渠道目录：只用官方公开地址，Claude 不预填来路不明的网址', () => {
+  const allowedHosts = new Set(['api.openai.com', 'api.x.ai'])
   for (const ch of SUBSCRIPTION_CHANNELS) {
-    assert.ok(ch.id && ch.name && ch.hint, '每个渠道都要有 id / 名称 / 说明')
-    if (!ch.endpoint) {
-      assert.equal(ch.needsCompatibleUrl, true, `${ch.id} 没预填地址时必须标注需要兼容地址`)
-      continue
-    }
-    const u = new URL(ch.endpoint)
-    assert.ok(allowedHosts.has(u.hostname), `${ch.id} 的地址 ${u.hostname} 不在官方白名单里`)
+    assert.ok(ch.id && ch.name && ch.hint)
+    if (!ch.endpoint) { assert.equal(ch.needsCompatibleUrl, true); continue }
+    assert.ok(allowedHosts.has(new URL(ch.endpoint).hostname))
   }
   assert.equal(channelById('claude').endpoint, '')
-  assert.equal(channelById('custom').endpoint, '')
+  assert.equal(channelById('custom'), undefined)
   assert.equal(channelById('不存在'), undefined)
   assert.equal(SUBSCRIPTION_STORAGE_KEY, 'ai-home.subscriptions')
 })
 
-test('订阅账号归一化：丢弃非法数据并补默认值', () => {
+test('归一化：丢弃非法数据、清掉已删除渠道、默认网页登录', () => {
   const raw = [
     null, 42, { channelId: '' }, { channelId: 'nope' },
+    { channelId: 'gemini' }, { channelId: 'deepseek' },
     { channelId: 'gpt', apiKey: 'sk-abc', label: '  我的号  ', loggedIn: true },
     { channelId: 'grok', endpoint: 'https://my.example/v1', availableModels: ['grok-3', '', 7], pickedModels: ['grok-3'] },
   ]
@@ -61,36 +46,27 @@ test('订阅账号归一化：丢弃非法数据并补默认值', () => {
   assert.equal(out[0].endpoint, 'https://api.openai.com/v1')
   assert.equal(out[0].vendorId, 'openai')
   assert.equal(out[0].apiKey, 'sk-abc')
-  // 旧数据只有 Key 时自动切到「令牌」方式，账号密码字段补空。
-  assert.equal(out[0].loginMode, 'token')
-  assert.equal(out[0].username, '')
-  assert.equal(out[0].password, '')
-  assert.equal(out[1].loginMode, 'password')
-  assert.equal(out[0].loggedIn, true)
+  assert.equal(out[0].loginMode, 'token', '旧数据只有 Key 时自动切到令牌方式')
+  assert.equal(out[1].loginMode, 'web', '新数据默认网页登录')
+  assert.equal(out[1].endpoint, 'https://my.example/v1')
   assert.deepEqual(out[1].availableModels, ['grok-3'])
   assert.deepEqual(out[1].pickedModels, ['grok-3'])
-  assert.equal(out[1].endpoint, 'https://my.example/v1')
-  assert.equal(out[1].modelCount, 0)
-  assert.equal(out[1].loggedIn, false)
 })
 
-test('订阅账号归一化：重复 id 自动去重', () => {
+test('归一化：重复 id 去重、网页登录方式可持久化', () => {
   const out = normalizeSubscriptions([
     { id: 'same', channelId: 'gpt' },
     { id: 'same', channelId: 'claude' },
-    { id: 'same', channelId: 'grok' },
+    { id: 'same', channelId: 'grok', loginMode: 'web' },
   ])
   assert.equal(out.length, 3)
-  assert.equal(new Set(out.map((x) => x.id)).size, 3)
+  assert.equal(new Set(out.map(x => x.id)).size, 3)
+  assert.equal(out[2].loginMode, 'web')
 })
 
-test('新建订阅账号：默认账号密码登录、带渠道默认地址、未登录、空凭据', () => {
+test('新建订阅账号：默认网页登录、带渠道默认地址、空凭据', () => {
   const a = blankSubscription(channelById('grok'))
-  assert.equal(a.loginMode, 'password')
-  assert.equal(a.username, '')
-  assert.equal(a.password, '')
-  assert.equal(a.loginPath, '')
-  assert.equal(a.tokenSource, '')
+  assert.equal(a.loginMode, 'web')
   assert.equal(a.channelId, 'grok')
   assert.equal(a.endpoint, 'https://api.x.ai/v1')
   assert.equal(a.vendorId, 'sub-xai')
@@ -100,4 +76,5 @@ test('新建订阅账号：默认账号密码登录、带渠道默认地址、�
   const b = blankSubscription(channelById('claude'))
   assert.equal(b.endpoint, '')
   assert.equal(b.vendorId, 'sub-anthropic')
+  assert.equal(blankSubscription(null).channelId, 'gpt')
 })

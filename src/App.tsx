@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -38,6 +38,10 @@ import { SUBSCRIPTION_STORAGE_KEY, SUBSCRIPTION_QUICK_TERMS, channelById, search
 import { DEFAULT_LOGIN_PATH, DEFAULT_TOKEN_PATH, subscriptionLoginUrl, subscriptionTokenUrl } from './subscriptionLogin.mjs'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
+// 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
+import { fileToAvatar, isAvatarDataUrl } from './avatarImage.mjs'
+// 订阅账号网页登录：官方 OAuth / 设备码授权页与回调解析。
+import { GATEWAY_REFERENCES, oauthProfile, oauthLoginUrl, makePkce, buildAuthorizeUrl, parseOAuthCallback } from './subscriptionOAuth.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -1596,11 +1600,34 @@ function AssistantProfile(p: any) {
   }
   const userValue:UserSettings=p.userSettings?.[person]||blankUserSettings()
   const patchUser=(field:keyof UserSettings,v:string)=>p.setUserSettings((old:Record<Person,UserSettings>)=>({...old,[person]:{...(old[person]||blankUserSettings()),[field]:v}}))
+  const card:CharacterCard=p.characters[person]||blankCard(person)
+  const [avatarError,setAvatarError]=useState('')
+  const fileRef=useRef<HTMLInputElement>(null)
+  const changeAvatar=async(e:ChangeEvent<HTMLInputElement>)=>{
+    const f=e.target.files?.[0]
+    e.target.value=''
+    if(!f)return
+    setAvatarError('')
+    try{
+      const data=await fileToAvatar(f)
+      p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||blankCard(person)),avatar:data}}))
+    }catch(err){setAvatarError(err instanceof Error?err.message:'头像设置失败')}
+  }
+  const resetAvatar=()=>{
+    p.setCharacters((old:Record<Person,CharacterCard>)=>({...old,[person]:{...(old[person]||blankCard(person)),avatar:''}}))
+    setAvatarError('')
+  }
   return <div className="assistant-profile">
-    <div className="ap-head"><span className="ap-avatar"><img src={p.characters[person]?.avatar||DEFAULT_AVATAR} alt=""/></span><div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={nameDraft} onChange={e=>rename(e.target.value)} onBlur={()=>{if(!nameDraft.trim())setNameDraft(String(p.displayName(person)||''))}}/><small>名称可直接修改 · 删空后可继续输入</small></div></div>
+    <div className="ap-head">
+      <button type="button" className="ap-avatar ap-avatar-button" title="更换当前助手的头像" aria-label="更换当前助手的头像" onClick={()=>fileRef.current?.click()}><img src={card.avatar||DEFAULT_AVATAR} alt=""/><span className="ap-avatar-pen" aria-hidden="true">✎</span></button>
+      <div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={nameDraft} onChange={e=>rename(e.target.value)} onBlur={()=>{if(!nameDraft.trim())setNameDraft(String(p.displayName(person)||''))}}/><small>名称可直接修改 · 点头像换头像</small></div>
+    </div>
+    <div className="ap-avatar-bar"><button type="button" onClick={()=>fileRef.current?.click()}>更换头像</button>{!!card.avatar&&<button type="button" onClick={resetAvatar}>恢复默认</button>}<small>只改当前助手，另一位不受影响</small></div>
+    <input ref={fileRef} className="ap-avatar-file" type="file" accept="image/*" aria-label="选择助手头像图片" onChange={e=>void changeAvatar(e)}/>
+    {avatarError&&<p className="ap-avatar-error" role="alert">{avatarError}</p>}
     <div className="ap-tabs" role="tablist" aria-label="助手档案">{tabs.map(([key,label])=><button type="button" role="tab" aria-selected={tab===key} className={'ap-tab'+(tab===key?' active':'')} key={key} onClick={()=>setTab(key)}>{label}</button>)}</div>
     <div className="ap-body">
-      {tab==='人物'&&<CharacterSettings key={person} value={p.characters[person]} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))} hideAvatar/>}
+      {tab==='人物'&&<CharacterSettings key={person} value={card} onSave={(v:CharacterCard)=>p.setCharacters((x:Record<Person,CharacterCard>)=>({...x,[person]:v}))} hideAvatar/>}
       {tab==='用户'&&<UserSettingsEditor value={userValue} onChange={patchUser} assistantName={p.displayName(person)}/>}
       {tab==='长期'&&<><MemoryWorkbench person={person} personLabel={p.displayName} entries={p.memoryEntries[person]} onChange={(v:MemoryEntry[])=>p.setMemoryEntries((x:Record<Person,MemoryEntry[]>)=>({...x,[person]:v}))}/><Editor title="补充记忆文本（兼容旧版）" value={p.memory[person]} onChange={(v:string)=>p.setMemory((x:any)=>({...x,[person]:v}))} placeholder="旧版自由文本记忆，可逐步整理进上面的分类记忆库。" /></>}
       {tab==='短期'&&<div className="ap-short"><p className="muted">短期记忆就是当前会话最近的聊天：换一条会话就会变，不会长期保存。想一直留着的事，请加到「长期记忆」。</p><div className="ap-recent">{recent.length?recent.map((m,i)=><div className={'ap-recent-row '+m.role} key={m.id||i}><b>{m.role==='user'?'我':p.displayName(person)}</b><span>{(m.content||'（图片 / 附件）').slice(0,90)||'（空消息）'}</span></div>):<p className="muted">这个会话还没有消息。</p>}</div></div>}
@@ -1609,18 +1636,36 @@ function AssistantProfile(p: any) {
 }
 
 // 用户设置一栏：只作用于当前助手，修改即时保存，聊天时由 buildUserContext 注入 system 提示。
+// 输入框一律留白，不再铺「例如：…」的示例文字；我的头像也按助手各存一份。
 function UserSettingsEditor({value,onChange,assistantName}:{value:UserSettings;onChange:(field:keyof UserSettings,v:string)=>void;assistantName:string}){
-  const fields:[keyof UserSettings,string,string][]=[
-    ['callName','助手怎么称呼你','例如：小顺 / 老板 / 主人'],
-    ['userName','你的名字','例如：李小顺'],
-    ['identity','你的身份 / 职业','例如：船厂安环部，常做体系文件'],
-    ['relationship','你们的关系','例如：搭档 / 私人助理 / 老朋友'],
+  const fields:[keyof UserSettings,string][]=[
+    ['callName','助手怎么称呼你'],
+    ['userName','你的名字'],
+    ['identity','你的身份 / 职业'],
+    ['relationship','你们的关系'],
   ]
+  const fileRef=useRef<HTMLInputElement>(null)
+  const [avatarError,setAvatarError]=useState('')
+  const changeAvatar=async(e:ChangeEvent<HTMLInputElement>)=>{
+    const f=e.target.files?.[0]
+    e.target.value=''
+    if(!f)return
+    setAvatarError('')
+    try{onChange('avatar',await fileToAvatar(f))}catch(err){setAvatarError(err instanceof Error?err.message:'头像设置失败')}
+  }
   return <div id="user-settings-panel" className="user-settings-card">
+    <div className="us-avatar-row">
+      <button type="button" className="us-avatar" aria-label="更换我的头像" title="更换我的头像" onClick={()=>fileRef.current?.click()}>{isAvatarDataUrl(value.avatar)?<img src={value.avatar} alt=""/>:<span>我</span>}</button>
+      <div className="us-avatar-text"><b>我的头像</b><small>只在这个助手的会话里显示</small></div>
+      <button type="button" onClick={()=>fileRef.current?.click()}>更改</button>
+      {value.avatar&&<button type="button" onClick={()=>onChange('avatar','')}>清除</button>}
+    </div>
+    <input ref={fileRef} className="ap-avatar-file" type="file" accept="image/*" aria-label="选择我的头像图片" onChange={e=>void changeAvatar(e)}/>
+    {avatarError&&<p className="ap-avatar-error" role="alert">{avatarError}</p>}
     <p className="us-intro">只作用于「{assistantName}」：告诉它该怎么称呼你、你是谁、有哪些偏好。修改即时保存，聊天时自动生效。</p>
-    {fields.map(([key,label,placeholder])=><label className="us-field" key={key}>{label}<input aria-label={label} value={value[key]} onChange={e=>onChange(key,e.target.value)} placeholder={placeholder}/></label>)}
-    <label className="us-field">偏好与忌讳<textarea rows={3} aria-label="偏好与忌讳" value={value.preferences} onChange={e=>onChange('preferences',e.target.value)} placeholder="例如：回复简短、直接给结论；不要客套话；不要用表情"/></label>
-    <label className="us-field">其他用户设定<textarea rows={3} aria-label="其他用户设定" value={value.notes} onChange={e=>onChange('notes',e.target.value)} placeholder="希望助手一直记住的其它事……"/></label>
+    {fields.map(([key,label])=><label className="us-field" key={key}>{label}<input aria-label={label} value={value[key]} onChange={e=>onChange(key,e.target.value)}/></label>)}
+    <label className="us-field">偏好与忌讳<textarea rows={3} aria-label="偏好与忌讳" value={value.preferences} onChange={e=>onChange('preferences',e.target.value)}/></label>
+    <label className="us-field">其他用户设定<textarea rows={3} aria-label="其他用户设定" value={value.notes} onChange={e=>onChange('notes',e.target.value)}/></label>
     <div className="us-preview"><b>聊天时会自动告诉助手</b><pre>{buildUserContext(value)||'（还没有填写任何设定）'}</pre></div>
     <small className="us-foot">这些设定按助手单独保存，只留在这台设备的本机数据里；没填的项目不会出现。</small>
   </div>
@@ -2268,6 +2313,8 @@ function Chat(p: any) {
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   function pickEmoji(emoji:string){p.setDraft(p.draft+emoji);const next=[emoji,...recentEmojis.filter(x=>x!==emoji)].slice(0,24);setRecentEmojis(next);localStorage.setItem('ai-home.recentEmojis',JSON.stringify(next))}
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
+  // 我的头像按助手各存一份：在助手档案的「用户设置」里改。
+  const userAvatar=(p.userSettings&&p.userSettings[chatPerson]&&p.userSettings[chatPerson].avatar)||''
   const myName=String(p.roomName||'我')
   // 图片表情包：上传后缩到 128px 存 localStorage（控制体积），点击即作为图片附件进发送栏。
   function shrinkSticker(src:string):Promise<string>{return new Promise(resolve=>{const img=new Image();img.onload=()=>{const max=128;const scale=Math.min(1,max/Math.max(img.width,img.height,1));const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');if(!ctx){resolve(src);return}ctx.drawImage(img,0,0,w,h);let out='';try{out=c.toDataURL('image/webp',0.82)}catch{out=''}if(!out.startsWith('data:image/webp')){try{out=c.toDataURL('image/png')}catch{out=src}}resolve(out)};img.onerror=()=>resolve(src);img.src=src})}
@@ -2368,7 +2415,7 @@ function Chat(p: any) {
         {m.role==='assistant'&&m.usage&&<div className="message-usage" title="用量来自模型 API 返回的 usage 字段；未返回时不估算缓存量。"><span>↑ {m.usage.promptTokens??'—'} tokens</span><span>↓ {m.usage.completionTokens??'—'} tokens</span>{(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}{m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}{m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s</span>}{estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}</div>}
         {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
       </div>
-      {m.role==='user'&&<span className="message-avatar message-avatar-me" aria-hidden="true">{myName.slice(0,1)}</span>}
+      {m.role==='user'&&<button type="button" className="message-avatar message-avatar-me avatar-link" title="我的头像 · 点开助手档案的用户设置" aria-label="我的头像" onClick={()=>p.openAssistantProfile(true)}>{userAvatar?<img src={userAvatar} alt=""/>:myName.slice(0,1)}</button>}
     </div>
   }
   return <div className="fullscreen-chat">
@@ -2592,6 +2639,10 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
   const [advanced,setAdvanced]=useState<Record<string,boolean>>({})
   const [modelQuery,setModelQuery]=useState('')
   const [verify,setVerify]=useState<Record<string,{loading:boolean;error:string}>>({})
+  type WebState={url:string;state:string;verifier:string;callback:string;error:string}
+  const blankWeb=():WebState=>({url:'',state:'',verifier:'',callback:'',error:''})
+  const [web,setWeb]=useState<Record<string,WebState>>({})
+  const patchWeb=(id:string,part:Partial<WebState>)=>setWeb(w=>({...w,[id]:{...blankWeb(),...w[id],...part}}))
   const results=searchSubscriptionChannels(query)
   const commit=(next:SubscriptionAccount[])=>setSubscriptions(next)
   const patch=(id:string,fn:(a:SubscriptionAccount)=>SubscriptionAccount)=>commit(subscriptions.map(a=>a.id===id?fn(a):a))
@@ -2643,9 +2694,36 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     const a=blankSubscription(ch)
     commit([...subscriptions,a]);setOpenId(a.id);setModelsOpen(o=>({...o,[a.id]:false}))
   }
-  // 账号密码方式：让服务端代发登录请求换访问令牌；令牌方式：直接用用户输入的那把。
-  // 两条路最终都落到同一个 token 上，后面 /models 与聊天完全一致。
+  // 网页登录：生成 PKCE → 打开官方授权页 → 用户把回调地址 / 令牌粘回来。
+  // 拿到授权码时由后端代发 code→token（浏览器直连官方 token 接口会被 CORS 挡住），
+  // 后端不可用时用户仍可直接粘贴现成令牌，两条路都不碰用户密码。
+  const startWebLogin=async(a:SubscriptionAccount)=>{
+    try{
+      const pkce=await makePkce()
+      const url=buildAuthorizeUrl(a.channelId,pkce)||oauthLoginUrl(a.channelId)
+      patchWeb(a.id,{...blankWeb(),url,state:pkce.state,verifier:pkce.verifier})
+      const win=window.open(url,'_blank','noopener,noreferrer')
+      if(!win)patchWeb(a.id,{error:'新窗口被拦截了，点「复制登录地址」后手动粘到浏览器打开。'})
+    }catch(e){patchWeb(a.id,{error:e instanceof Error?e.message:'无法生成登录地址'})}
+  }
+  const copyLoginUrl=async(a:SubscriptionAccount)=>{
+    const url=web[a.id]?.url||oauthLoginUrl(a.channelId)
+    if(!url)return
+    try{await navigator.clipboard.writeText(url);patchWeb(a.id,{error:'登录地址已复制，粘贴到浏览器打开即可。'})}
+    catch{patchWeb(a.id,{error:'复制失败，请手动打开官方登录页。'})}
+  }
+  // 三种方式最终都落到同一个 token 上，后面 /models 与聊天完全一致。
   const acquireToken=async(a:SubscriptionAccount):Promise<{token:string;source:string}>=>{
+    if(a.loginMode==='web'){
+      const w=web[a.id]||blankWeb()
+      const parsed=parseOAuthCallback(w.callback,w.state)
+      if(!parsed.ok)throw new Error(parsed.error||'请先完成网页登录')
+      if(parsed.token)return {token:parsed.token,source:'网页登录 · 粘贴令牌'}
+      const r=await apiFetch('/api/subscription/oauth/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:a.channelId,code:parsed.code,codeVerifier:w.verifier,state:parsed.state})})
+      const d=await r.json().catch(()=>({}))
+      if(!r.ok||!d?.token)throw new Error(d?.error||'授权码换令牌失败：官方 token 接口不允许网页直连。请直接粘贴登录拿到的访问令牌，或把订阅地址换成自建网关。')
+      return {token:String(d.token),source:'网页登录 · OAuth 授权码'}
+    }
     if(a.loginMode==='token'){
       const key=readKey(a).trim()
       if(!key)throw new Error('请先填写订阅令牌。')
@@ -2694,13 +2772,14 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     patch(a.id,x=>({...x,pickedModels:picked?x.pickedModels.filter(m=>m!==id):[...x.pickedModels,id]}))
   }
   return <div id="subscription-accounts" className="subscription-accounts">
-    <div className="sub-head"><b>订阅账号</b><small>搜索渠道 → 接入 → 填账号密码登录 → 聊天里直接花这个订阅号的额度</small></div>
-    <p className="sub-policy">填你订阅号 / 中转站的账号和密码，登录后自动换取访问令牌，拉模型与聊天都走这个账号的额度。账号密码只存这台设备，不进云端快照。官方 ChatGPT / Claude 网页会员没有公开的账号密码换令牌接口，这类改用下面的「令牌」方式。</p>
+    <div className="sub-head"><b>订阅账号</b><small>GPT / Claude / Grok · 网页登录自己的账号 → 聊天用这个账号的额度</small></div>
+    <p className="sub-policy">只保留 GPT / Claude / Grok 三家。默认「网页登录」：弹出官方授权页 → 登录自己的账号 → 把回调地址或令牌粘回来。也可切「账号密码」（订阅号 / 中转站）或「令牌」。凭据只存本机，不进云端快照。注意：官方网页会员的 OAuth 令牌不是 API Key，「订阅地址」要填能把订阅额度转成兼容接口的网关地址。</p>
+    <details className="sub-refs"><summary>▸ 订阅登录的开源实现参考（GitHub）</summary>{GATEWAY_REFERENCES.map(r=><a key={r.url} href={r.url} target="_blank" rel="noreferrer">{r.name}</a>)}<p className="muted">Kelivo 在 Accounts 页直接用 ChatGPT(Codex) / Grok 账号登录；CLIProxyAPI 把各家 CLI 的 OAuth 令牌转成 OpenAI / Claude 兼容端点，本应用把它的地址填进「订阅地址」即可。</p></details>
     <div className="sub-search"><input aria-label="搜索订阅渠道" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索渠道：GPT / Claude / Grok …"/>{query&&<button type="button" aria-label="清空搜索" onClick={()=>setQuery('')}>×</button>}</div>
     <div className="sub-quick">{SUBSCRIPTION_QUICK_TERMS.map(t=><button type="button" key={t} className={query.toLowerCase()===t.toLowerCase()?'active':''} onClick={()=>setQuery(q=>q.toLowerCase()===t.toLowerCase()?'':t)}>{t}</button>)}</div>
     <div className="sub-results">
       <div className="sub-section-head"><b>渠道</b><small>{results.length} 个可接入</small></div>
-      {results.length===0&&<p className="muted">没有匹配的渠道，换个关键词或选「自定义订阅号」。</p>}
+      {results.length===0&&<p className="muted">没有匹配的渠道。这里只保留 GPT / Claude / Grok 三家。</p>}
       {results.map(ch=>{
         const present=subscriptions.find(s=>s.channelId===ch.id)
         return <div className="sub-result-row" key={ch.id} data-channel-id={ch.id}>
@@ -2712,7 +2791,7 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
     </div>
     <div className="sub-accounts">
       <div className="sub-section-head"><b>我的订阅账号</b><small>{subscriptions.length} 个</small></div>
-      {subscriptions.length===0&&<p className="muted">还没有接入渠道。搜一下 GPT / Claude / Grok，点「＋ 接入」后填订阅号的账号密码登录即可。</p>}
+      {subscriptions.length===0&&<p className="muted">还没有接入渠道。点上面任一渠道的「＋ 接入」，再点「打开登录页」用自己的账号授权。</p>}
       {subscriptions.map(a=>{
         const ch=channelOf(a),open=openId===a.id,state=verify[a.id]
         const mq=modelQuery.trim().toLowerCase()
@@ -2720,25 +2799,37 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
         return <div className={'sub-account'+(open?' open':'')} key={a.id} data-account-id={a.id}>
           <button type="button" className="sub-account-head" aria-expanded={open} onClick={()=>setOpenId(open?'':a.id)}>
             <span className="sub-channel-icon" aria-hidden="true">{ch?.short||'＋'}</span>
-            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · 使用订阅号额度 · '+a.modelCount+' 个模型':'未登录 · 填账号密码登录后用额度'}</small></span>
+            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · 使用订阅额度 · '+a.modelCount+' 个模型':'未登录 · 网页登录后用额度'}</small></span>
             <span className={'sub-status'+(a.loggedIn?' on':'')}>{a.loggedIn?'已登录':'未登录'}</span><span aria-hidden="true">{open?'▴':'▾'}</span>
           </button>
           {open&&<div className="sub-account-body">
             {ch?.needsCompatibleUrl&&<p className="sub-warn">这个渠道需要 OpenAI 兼容地址：请填你的订阅号 / 聚合平台提供的 Base URL，官方网页版地址不能直接用。</p>}
             <div className="sub-mode-row" role="group" aria-label="登录方式">
+              <button type="button" className={a.loginMode==='web'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'web'}))}>网页登录</button>
               <button type="button" className={a.loginMode==='password'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'password'}))}>账号密码</button>
               <button type="button" className={a.loginMode==='token'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'token'}))}>令牌</button>
             </div>
             <label className="sub-field">账号备注<input aria-label="订阅账号备注" value={a.label} onChange={e=>patch(a.id,x=>({...x,label:e.target.value}))} placeholder="如我的主号"/></label>
             <label className="sub-field">订阅地址 Base URL<input aria-label="订阅地址 Base URL" value={a.endpoint} onChange={e=>patch(a.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
             <p className="sub-url-hint">请求地址 <b>{chatRequestUrl({endpoint:a.endpoint,apiPath:a.apiPath})||'填写订阅地址后显示'}</b></p>
-            {a.loginMode==='password'
-              ? <>
-                <label className="sub-field">订阅账号<input aria-label="订阅账号" autoComplete="username" value={a.username} onChange={e=>patch(a.id,x=>({...x,username:e.target.value}))} placeholder="手机号 / 邮箱 / 用户名"/></label>
-                <label className="sub-field">订阅密码<div className="sub-key-row"><input aria-label="订阅密码" type={showKey[a.id]?'text':'password'} autoComplete="off" value={a.password} onChange={e=>patch(a.id,x=>({...x,password:e.target.value}))} placeholder="订阅号登录密码"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
-                {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天直接消耗「{a.username||a.label}」的额度（令牌来源：{a.tokenSource||'订阅号登录'}）</p>}
-              </>
-              : <label className="sub-field">订阅令牌 / API Key<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>}
+            {a.loginMode==='web'
+              ? <div className="sub-web">
+                  <p className="sub-web-lead">{oauthProfile(a.channelId)?.label} · 点「打开登录页」弹出官方授权页，用你自己的账号登录并授权。</p>
+                  <div className="sub-web-actions"><button type="button" onClick={()=>void startWebLogin(a)}>打开登录页</button><button type="button" onClick={()=>void copyLoginUrl(a)}>复制登录地址</button></div>
+                  {web[a.id]?.url&&<p className="sub-url-hint">登录页 <b>{web[a.id].url.split('?')[0]}</b></p>}
+                  <label className="sub-field">登录后的回调地址 / 令牌<textarea rows={2} aria-label="登录回调地址" value={web[a.id]?.callback||''} onChange={e=>patchWeb(a.id,{callback:e.target.value,error:''})} placeholder="粘贴浏览器地址栏整条链接，或直接粘贴访问令牌"/></label>
+                  <small className="sub-web-hint">{oauthProfile(a.channelId)?.callbackHint}</small>
+                  <small className="sub-web-hint">{oauthProfile(a.channelId)?.note}</small>
+                  {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天走「{a.label}」的订阅额度（{a.tokenSource||'网页登录'}）</p>}
+                  {web[a.id]?.error&&<p className="sub-error">{web[a.id].error}</p>}
+                </div>
+              : a.loginMode==='password'
+                ? <>
+                  <label className="sub-field">订阅账号<input aria-label="订阅账号" autoComplete="username" value={a.username} onChange={e=>patch(a.id,x=>({...x,username:e.target.value}))} placeholder="手机号 / 邮箱 / 用户名"/></label>
+                  <label className="sub-field">订阅密码<div className="sub-key-row"><input aria-label="订阅密码" type={showKey[a.id]?'text':'password'} autoComplete="off" value={a.password} onChange={e=>patch(a.id,x=>({...x,password:e.target.value}))} placeholder="订阅号登录密码"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
+                  {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天直接消耗「{a.username||a.label}」的额度（令牌来源：{a.tokenSource||'订阅号登录'}）</p>}
+                </>
+                : <label className="sub-field">订阅令牌 / API Key<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>}
             <details className="sub-advanced" open={!!advanced[a.id]}><summary onClick={e=>{e.preventDefault();setAdvanced(s=>({...s,[a.id]:!s[a.id]}))}}>{advanced[a.id]?'▾':'▸'} 高级 · 接口路径</summary>
               <label className="sub-field">模型列表路径 <small>留空自动推导</small><input aria-label="模型列表路径" value={a.modelsPath} onChange={e=>patch(a.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
               <p className="sub-url-hint">列表地址 <b>{modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})||'填写订阅地址后显示'}</b></p>
@@ -2750,7 +2841,7 @@ function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions
               </>}
             </details>
             <div className="sub-actions">
-              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'登录中…':a.loggedIn?'重新登录':'登录并使用额度'}</button>
+              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'登录中…':a.loginMode==='web'?'完成登录':a.loggedIn?'重新登录':'登录并使用额度'}</button>
               {a.loggedIn&&<button type="button" onClick={()=>logout(a)}>退出登录</button>}
               <button type="button" className="sub-remove" onClick={()=>remove(a)}>移除</button>
             </div>

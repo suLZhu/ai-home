@@ -5,6 +5,7 @@ export type UserSettings = {
   relationship: string
   preferences: string
   notes: string
+  avatar: string
 }
 
 export const USER_SETTINGS_KEY: string

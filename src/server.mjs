@@ -24,6 +24,7 @@ import { initMemoryStore, SQLiteMemoryProvider, MEMORY_LIFECYCLES } from './serv
 import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 import { performSubscriptionLogin } from './subscriptionLogin.mjs'
+import { exchangeOAuthCode } from './subscriptionOAuth.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -364,6 +365,20 @@ const apiServer = createServer(async (req, res) => {
       return send(res, 200, result)
     } catch (error) {
       return send(res, 502, { error: error?.message || '订阅号登录失败' })
+    }
+  }
+
+  // 网页登录的授权码 → 令牌：官方 token 接口不允许浏览器跨域，由服务端代发。
+  if (url.pathname === '/api/subscription/oauth/exchange' && req.method === 'POST') {
+    try {
+      const b = await readBody(req)
+      const result = await exchangeOAuthCode({
+        channelId: b.channelId, code: b.code, codeVerifier: b.codeVerifier,
+        state: b.state, userAgent: 'anthropic', fetchImpl: fetch,
+      })
+      return send(res, 200, result)
+    } catch (error) {
+      return send(res, 502, { error: error?.message || '授权码换令牌失败' })
     }
   }
 

@@ -19,6 +19,7 @@ import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 import { normalizeLocalTask, makeLocalTask, dueLocalTasks, advanceLocalTask } from './localTasks.mjs'
 import { performSubscriptionLogin } from './subscriptionLogin.mjs'
+import { exchangeOAuthCode } from './subscriptionOAuth.mjs'
 
 // ── localStorage 存储层 ─────────────────────────────────────────────────────
 const K = {
@@ -370,6 +371,21 @@ export async function localHandle(path, init) {
         return json(200, result)
       } catch (error) {
         return json(502, { error: (error && error.message) || '订阅号登录失败' })
+      }
+    }
+
+    // ── 网页登录授权码换令牌：本地模式直连官方端点，跨域被拦时给出明确提示 ──
+    if (p === '/api/subscription/oauth/exchange' && method === 'POST') {
+      let b
+      try { b = await readBody(init) } catch { return json(400, { error: '请求无效' }) }
+      try {
+        const result = await exchangeOAuthCode({
+          channelId: b.channelId, code: b.code, codeVerifier: b.codeVerifier,
+          state: b.state, fetchImpl: fetch,
+        })
+        return json(200, result)
+      } catch (error) {
+        return json(502, { error: (error && error.message) || '授权码换令牌失败' })
       }
     }
 

@@ -18,7 +18,7 @@ export type SubscriptionAccount = {
   apiPath: string
   modelsPath: string
   apiKey: string
-  loginMode: 'password' | 'token'
+  loginMode: 'web' | 'password' | 'token'
   username: string
   password: string
   loginPath: string

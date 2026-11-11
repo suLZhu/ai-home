@@ -1356,3 +1356,32 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 /* 助手头像（聊天顶栏 + 消息气泡）可点击进档案：button 只保留头像外观 */
 .shell button.message-avatar.avatar-link,.shell button.chat-avatar.avatar-link{padding:0!important;border:0!important;box-shadow:none!important;cursor:pointer;font:inherit;line-height:1}
 .shell button.message-avatar.avatar-link:active,.shell button.chat-avatar.avatar-link:active{opacity:.72}
+/* 助手档案 / 用户设置：本机换头像，两位助手各存一份 */
+.ap-avatar-file{display:none!important}
+.shell .room-screen button.ap-avatar-button{position:relative;flex:0 0 auto;width:44px;height:44px;padding:0!important;border:1px solid #e5dacc!important;border-radius:50%!important;background:#fffaf1!important;box-shadow:none!important;overflow:hidden;cursor:pointer}
+.ap-avatar-pen{position:absolute;right:0;bottom:0;display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--accent,#8b593b);color:#fff;font-size:9px;line-height:1}
+.shell .room-screen .ap-avatar-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.shell .room-screen .ap-avatar-bar>button{padding:4px 9px!important;border:1px solid var(--line,#e2d9cc)!important;border-radius:999px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;font-size:10.5px;color:var(--muted,#8a7d6d)!important}
+.ap-avatar-bar small{font-size:9.5px;color:var(--muted,#8a7d6d)}
+.ap-avatar-error,.shell #user-settings-panel .ap-avatar-error{margin:0;font-size:10px;color:#b1483a}
+.us-avatar-row{display:flex;align-items:center;gap:8px}
+.shell #user-settings-panel button.us-avatar{flex:0 0 auto;width:38px;height:38px;padding:0!important;border:1px solid var(--line,#e6ded2)!important;border-radius:50%!important;background:var(--accent-soft,#f1e8dd)!important;box-shadow:none!important;overflow:hidden;display:grid;place-items:center;color:var(--accent,#8b593b);font-size:13px;cursor:pointer}
+.us-avatar img{width:100%;height:100%;object-fit:cover}
+.us-avatar-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.us-avatar-text b{font-size:11px;color:var(--ink,#403b35)}
+.us-avatar-text small{font-size:9.5px;color:var(--muted,#8a8378)}
+.shell #user-settings-panel .us-avatar-row>button:not(.us-avatar){padding:4px 8px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:8px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;font-size:10px;color:var(--muted,#8a8378)!important}
+.shell button.message-avatar.message-avatar-me.avatar-link{padding:0!important;border:1px solid var(--line,#e6ded2)!important;box-shadow:none!important;cursor:pointer;font-size:11px;overflow:hidden}
+.shell button.message-avatar.message-avatar-me.avatar-link img{width:100%;height:100%;object-fit:cover}
+/* 订阅账号：网页登录与 GitHub 参考链接 */
+.shell #subscription-accounts .sub-web{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--surface,#fbf8f4)!important}
+.sub-web-lead,.sub-web-hint{margin:0;font-size:10px;line-height:1.5;color:var(--muted,#8a8378)}
+.sub-web-actions{display:flex;gap:6px}
+.shell #subscription-accounts .sub-web-actions>button{padding:5px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:8px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;font-size:10.5px;color:var(--accent,#8b593b)!important}
+.shell #subscription-accounts .sub-refs{margin:8px 0;padding:7px 9px;border:1px solid var(--line,#e6ded2)!important;border-radius:10px!important;background:var(--surface,#fbf8f4)!important}
+.shell #subscription-accounts .sub-refs summary{font-size:10.5px;color:var(--muted,#8a8378);cursor:pointer}
+.shell #subscription-accounts .sub-refs a{display:block;margin-top:5px;font-size:10px;color:var(--accent,#8b593b);word-break:break-all}
+.shell #subscription-accounts .sub-refs p{margin:6px 0 0;font-size:9.5px;line-height:1.5}
+#subscription-accounts textarea{width:100%;min-width:0;box-sizing:border-box;padding:7px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;font-size:11px;line-height:1.5;resize:vertical}
+/* 面板底部留白，别被底部导航压住 */
+.shell #user-settings-panel{padding-bottom:22px}

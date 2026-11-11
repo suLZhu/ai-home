@@ -1,9 +1,12 @@
-// 用户设置：每位助手单独记住「怎么称呼用户 / 用户是谁 / 有什么偏好」。
+// 用户设置：每位助手单独记住「怎么称呼用户 / 用户是谁 / 有什么偏好 / 我的头像」。
 // 纯函数、无 React 依赖；聊天时由 buildUserContext 拼进首条 system 提示，真正影响助手说话。
+// 头像只是界面数据，绝不注入提示词，也不重复塞进别的存储。
+import { isAvatarDataUrl, AVATAR_MAX_DATAURL_CHARS } from './avatarImage.mjs'
+
 export const USER_SETTINGS_KEY = 'ai-home.userSettings'
 
 export const BLANK_USER_SETTINGS = {
-  callName: '', userName: '', identity: '', relationship: '', preferences: '', notes: '',
+  callName: '', userName: '', identity: '', relationship: '', preferences: '', notes: '', avatar: '',
 }
 
 const str = (v) => String(v ?? '').trim()
@@ -19,6 +22,7 @@ export function normalizeUserSettings(raw, people) {
   const ids = Array.isArray(people) ? people : []
   return Object.fromEntries(ids.map(id => {
     const x = src[id] && typeof src[id] === 'object' && !Array.isArray(src[id]) ? src[id] : {}
+    const avatar = String(x.avatar ?? '')
     return [id, {
       callName: cut(x.callName, 40),
       userName: cut(x.userName, 40),
@@ -26,6 +30,7 @@ export function normalizeUserSettings(raw, people) {
       relationship: cut(x.relationship, 120),
       preferences: cut(x.preferences, 600),
       notes: cut(x.notes, 600),
+      avatar: isAvatarDataUrl(avatar) && avatar.length <= AVATAR_MAX_DATAURL_CHARS ? avatar : '',
     }]
   }))
 }
