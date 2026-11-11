@@ -838,3 +838,42 @@ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .room-chat-entry-text b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room-chat-entry-text small{font-size:11px;color:var(--muted,#8a7d6d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room-chat-entry-go{flex-shrink:0;font-size:17px;color:#8b6c4a}
+
+/* ── 工作区「小程序卡片」：两列、每张都渲染当前助手的一点真实数据 ── */
+.room-tools .workspace-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0 8px}
+.tool-grid button.workspace-card,
+.shell .room-screen .tool-grid button.workspace-card{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-height:98px;margin:0;padding:10px 11px;border:1px solid #e2d9cc!important;border-radius:14px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important;text-align:left}
+.tool-grid button.workspace-card:hover,
+.shell .room-screen .tool-grid button.workspace-card:hover{border-color:#c9b79c!important;background:#faf4e9!important}
+.wc-top{display:flex;align-items:center;gap:6px}
+.wc-icon{flex:0 0 auto;display:grid;place-items:center;width:20px;height:20px;border-radius:7px;background:#f0e8da;color:#8b6c4a;font-size:12px}
+.wc-top b{font-size:12px;font-weight:600;color:var(--ink,#403b35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc-body{position:relative;display:flex;flex-direction:column;gap:2px;min-width:0}
+.wc-value{font-size:13px;font-weight:600;color:var(--ink,#403b35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.wc-number{font-size:22px;font-weight:600;line-height:1.1;color:var(--accent,#8b593b)}
+.wc-body small{font-size:10px;line-height:1.35;color:var(--muted,#8a7d6d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc-dots{display:flex;gap:3px;margin-top:3px}
+.wc-dots i{width:6px;height:6px;border-radius:50%;background:#e5dbcb}
+.wc-dots i.on{background:var(--accent,#8b593b)}
+.wc-bar{display:block;height:4px;margin-top:5px;border-radius:3px;background:#eee5d7;overflow:hidden}
+.wc-bar i{display:block;height:100%;border-radius:3px;background:var(--accent,#8b593b)}
+.wc-avatar{position:absolute;right:0;top:-2px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#efe3d0;color:#8b6c4a;font-size:11px}
+.wc-sun{position:absolute;right:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#f3c777;box-shadow:0 0 0 4px rgba(243,199,119,.22)}
+.wc-swatches{display:flex;gap:4px;margin-top:4px}
+.wc-swatches i{width:16px;height:10px;border:1px solid #dcd1c0;border-radius:3px}
+.workspace-foot{margin:2px 2px 12px;font-size:10.5px;line-height:1.5;color:var(--muted,#8a7d6d)}
+
+/* ── 聊天窗口绑定条：模型 / 世界书 / MCP 三段直接选，点哪段抽屉定位哪段 ── */
+.chat-header-subline.chat-binding-bar{display:flex;align-items:center;gap:4px;padding:4px 8px 5px;text-align:left;cursor:default;overflow-x:auto;scrollbar-width:none}
+.chat-header-subline.chat-binding-bar::-webkit-scrollbar{display:none}
+.chat-header-subline.chat-binding-bar:hover{background:transparent!important;color:var(--muted,#8a8378)}
+.chat-binding-bar .chat-bind-person{flex:0 0 auto;max-width:46px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--muted,#8a8378)}
+.chat-binding-bar button.chat-bind-chip{flex:0 0 auto;padding:3px 7px;border:1px solid #e6ddd0!important;border-radius:999px!important;background:rgba(255,255,255,.6)!important;box-shadow:none!important;font-size:10px;line-height:1.35;color:var(--ink,#403b35);white-space:nowrap}
+.chat-binding-bar button.chat-bind-chip:hover{background:#f4ecdf!important}
+.chat-binding-bar button.chat-config-toggle{flex:0 0 auto;margin-left:auto;padding:3px 6px;border:0!important;background:transparent!important;box-shadow:none!important;font-size:10px;line-height:1.35;color:var(--accent,#8b593b);white-space:nowrap}
+.chat-config-section.chat-config-flash{box-shadow:inset 0 0 0 2px rgba(139,89,59,.35);border-radius:10px}
+
+/* ── 设置页：连接与 API Key 统一放在资源库下方 ── */
+.connection-keys{margin-top:14px}
+.connection-person{display:flex;align-items:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted,#8a7d6d)}
+.connection-person select{max-width:180px;padding:6px 9px;border:1px solid var(--line,#e3ddd3);border-radius:9px;background:var(--card,#fff);font-size:12px;color:var(--ink,#403b35)}

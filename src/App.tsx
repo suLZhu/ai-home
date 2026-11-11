@@ -68,7 +68,9 @@ function readMessages(): Record<Person,ChatMessage[]> {
   return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,migrate(Array.isArray(old?.[id])?old[id]:[])])) as Record<Person,ChatMessage[]>
 }
 
-const tools: Tool[] = ['人物设置', '世界书', '长期记忆', '工作流', '自主生活', 'MCP', '模型设置', '角色外观', '工具调用看板']
+// 工作区只陈列 6 个「小程序」卡片：模型 / 世界书 / MCP 的选择与绑定在聊天窗口，
+// 资源的增删改与 API Key 统一在「设置 → 资源库」。三类工具面板本身仍保留，
+// 设置页的快捷入口可以直达，但房间工作区不再陈列这些配置入口。
 // 云端凭证失效 → 已自动切回本地模式的一次性提示语（三处降级点共用同一句文案）。
 const FALLBACK_LOCAL_NOTICE = '云端登录已过期，已切换为本地模式（数据只存本机）'
 // 系统默认名 → 当前默认名（仅迁移「从未改过名」的助手，用户改过的名字保留）。
@@ -1168,7 +1170,7 @@ export default function App() {
         tasks={tasks} addTask={addTask} />}
       {page === 'me' && <MyRoom roomName={roomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} onApiBaseApplied={recheckAfterApiChange} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} assistants={assistants} setAssistants={setAssistants} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} roomName={roomName} setRoomName={setRoomName} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} projects={projects} setProjects={setProjects} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} onApiBaseApplied={recheckAfterApiChange} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
@@ -1326,14 +1328,46 @@ function Room(props: {
       <div className="room-session-switch"><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>×</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，用下面的按钮新建。</p>}</div><button type="button" className="room-history-new" onClick={createConversation}>＋ 新建对话</button></div>
     </details>
     <details className="room-tools" ref={toolsRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomToolsExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
-      <summary><b>工作区</b><small>9 个工具 · 点开使用</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
-      <div className="tool-grid">{tools.map(t => <button key={t} onClick={() => props.setActiveTool(t)}><b>{t}</b><span>{toolHint(t)}</span></button>)}</div>
+      <summary><b>工作区</b><small>6 个小组件 · 点开使用</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
+      <WorkspaceCards person={person} displayName={props.displayName} characters={props.characters} memoryEntries={props.memoryEntries} tasks={props.tasks} personAppearance={props.personAppearance} onOpen={props.setActiveTool}/>
+      <p className="workspace-foot">模型 / 世界书 / MCP 在聊天窗口里选与绑定，资源统一在「设置 → 资源库」管理。</p>
     </details>
   </div>
 }
 
-function toolHint(t: Tool) {
-  return ({'人物设置':'角色卡、头像、开场白与语言','世界书':'世界观与关键词','长期记忆':'值得长期留下的事','工作流':'定时触发、执行步骤与运行状态','MCP':'外部工具连接','模型设置':'接口与模型','SKILL 技能库':'技能说明与工作流程','角色外观':'独立聊天背景与聊天气泡','工具调用看板':'MCP、世界书与记账的真实执行记录'} as Record<Tool,string>)[t]
+// 工作区「小程序卡片」：每张都渲染一点当前助手的真实数据（计数、时钟、色块、
+// 进度条），点开仍是原来的工具面板。抽成独立子组件是为了在这里安全使用 Hook，
+// 不必顾虑 Room 组件在条件 return 之后的 Hook 顺序。
+function WorkspaceCards({person,displayName,characters,memoryEntries,tasks,personAppearance,onOpen}:{
+  person:Person; displayName:(p:Person)=>string
+  characters:Record<Person,CharacterCard>; memoryEntries:Record<Person,MemoryEntry[]>
+  tasks:Record<Person,string[]>; personAppearance:Record<string,PersonAppearancePref>
+  onOpen:(t:Tool)=>void
+}) {
+  const [now,setNow]=useState(()=>new Date())
+  useEffect(()=>{const t=window.setInterval(()=>setNow(new Date()),30000);return()=>window.clearInterval(t)},[])
+  const card=characters[person]
+  const mems=memoryEntries[person]||[]
+  const pinned=mems.filter(m=>m.pinned).length
+  const jobs=tasks[person]||[]
+  const look=personAppearance[person]
+  const calls=(()=>{try{const raw=JSON.parse(localStorage.getItem('ai-home.toolCalls.v1')||'[]');return Array.isArray(raw)?raw.length:0}catch{return 0}})()
+  const hour=now.getHours()
+  const clock=String(hour).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')
+  const greet=hour<6?'夜深了':hour<11?'早上好':hour<14?'中午好':hour<18?'下午好':'晚上好'
+  const dots=(n:number)=><span className="wc-dots" aria-hidden="true">{[1,2,3,4,5].map(i=><i key={i} className={i<=n?'on':''}/>)}</span>
+  const items:{key:Tool;icon:string;render:React.ReactNode}[]=[
+    {key:'人物设置',icon:'♙',render:<><b className="wc-value">{displayName(person)}</b><small>{card?.description?'已写角色设定':'还没写角色设定'}</small>{dots([card?.description,card?.greeting,card?.definition].filter(Boolean).length)}</>},
+    {key:'长期记忆',icon:'✎',render:<><b className="wc-number">{mems.length}</b><small>条记忆 · {pinned} 条置顶</small>{dots(Math.min(mems.length,5))}</>},
+    {key:'工作流',icon:'◷',render:<><b className="wc-number">{jobs.length}</b><small>项待办 / 定时任务</small><span className="wc-bar" aria-hidden="true"><i style={{width:Math.min(100,jobs.length*20)+'%'}}/></span></>},
+    {key:'自主生活',icon:'☀',render:<><b className="wc-value">{clock}</b><small>{greet} · 今天也慢慢来</small><span className="wc-sun" aria-hidden="true"/></>},
+    {key:'角色外观',icon:'◐',render:<><b className="wc-value">{look?'自定义':'默认'}</b><small>聊天气泡与背景</small><span className="wc-swatches" aria-hidden="true"><i style={{background:look?.chatBackground||'#e8dfd0'}}/><i style={{background:look?.bubble||'#fbf7f0'}}/></span></>},
+    {key:'工具调用看板',icon:'▦',render:<><b className="wc-number">{calls}</b><small>条执行记录</small>{dots(Math.min(calls,5))}</>},
+  ]
+  return <div className="tool-grid workspace-grid">{items.map(it=><button type="button" className="workspace-card" key={it.key} onClick={()=>onOpen(it.key)}>
+    <span className="wc-top"><span className="wc-icon" aria-hidden="true">{it.icon}</span><b>{it.key}</b></span>
+    <span className="wc-body">{it.render}</span>
+  </button>)}</div>
 }
 
 function ToolPanel(p: any) {
@@ -1596,6 +1630,10 @@ function Chat(p: any) {
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   const [configOpen,setConfigOpen]=useState(false)
   const closeConfig=useCallback(()=>setConfigOpen(false),[])
+  // 绑定条点哪一段，配置抽屉就定位到哪一段；seq 保证重复点同一段也会重新定位。
+  const [configFocus,setConfigFocus]=useState<''|'model'|'world'|'mcp'>('')
+  const [configSeq,setConfigSeq]=useState(0)
+  const openConfig=(focus:''|'model'|'world'|'mcp')=>{setConfigFocus(focus);setConfigSeq(n=>n+1);setConfigOpen(true)}
   // 顶栏摘要行的只读状态：模型预设 / 世界书条数 / MCP 条数。
   // 绑定操作统一走「配置」抽屉，聊天页不再维护第二套开关与面板状态。
   const quickMcp=useMcpLibrary()
@@ -1959,8 +1997,14 @@ function Chat(p: any) {
   }
   return <div className="fullscreen-chat">
     <header className="chat-header"><button onClick={()=>p.setChatOpen(false)}>← 房间</button><span className="chat-header-title"><span className="chat-avatar">{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</span>{activeConv&&renameId===activeConv.id&&renameFrom==='header'?<input className="header-rename-input" autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(activeConv.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(activeConv.id)}/>:<b title="双击重命名对话" onDoubleClick={()=>activeConv&&startRename(activeConv.id,activeTitle,'header')}>{activeTitle}</b>}</span><span className="chat-header-actions"><button type="button" className={searchOpen?'tool-active':''} aria-label="搜索当前会话的聊天记录" title="搜索当前会话的聊天记录" onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}>🔍</button><button type="button" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className={'select-toggle'+(selectMode?' tool-active':'')} aria-pressed={selectMode} title="多选消息批量删除（也可长按消息进入）" onClick={()=>{if(selectMode)exitSelect();else enterSelect()}}>{selectMode?'退出':'选择'}</button><button onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>切换</button></span></header>
-    {/* 顶栏摘要行本身就是「配置」入口：状态只显示一次，绑定操作只留配置抽屉一处。 */}
-    <button type="button" className={'chat-header-subline chat-config-toggle'+(configOpen?' tool-active':'')} role="status" title="配置当前助手使用的模型 / 世界书 / MCP" aria-label="配置当前助手" onClick={()=>setConfigOpen(v=>!v)}>{p.displayName(chatPerson)} · {quickProfile?.name||'工作区模型'} · 世界书 {quickWorldCount} · MCP {quickMcpCount}<span aria-hidden="true"> · 配置 ›</span></button>
+    {/* 绑定条：模型 / 世界书 / MCP 的选择就放在聊天窗口里，点任一段直达配置抽屉对应段。 */}
+    <div className="chat-header-subline chat-binding-bar" role="group" aria-label="当前助手的绑定">
+      <span className="chat-bind-person">{p.displayName(chatPerson)}</span>
+      <button type="button" className="chat-bind-chip" title="选择当前助手用的模型预设" onClick={()=>openConfig('model')}>◈ {quickProfile?.name||'工作区模型'}</button>
+      <button type="button" className="chat-bind-chip" title="选择当前助手用的世界书条目" onClick={()=>openConfig('world')}>▤ 世界书 {quickWorldCount}</button>
+      <button type="button" className="chat-bind-chip" title="选择当前助手启用的 MCP 服务" onClick={()=>openConfig('mcp')}>⌘ MCP {quickMcpCount}</button>
+      <button type="button" className={'chat-config-toggle'+(configOpen?' tool-active':'')} title="配置当前助手" aria-label="配置当前助手" onClick={()=>openConfig('')}>配置 ›</button>
+    </div>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     <div className="conversation-bar"><div className="conversation-list">{(p.conversations[chatPerson]||[]).map((c:Conversation)=><span key={c.id} className={'conversation-chip'+(p.activeConversationIds[chatPerson]===c.id?' selected':'')}>{renameId===c.id&&renameFrom==='list'?<input autoFocus value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')commitRename(c.id);if(e.key==='Escape')setRenameId(null)}} onBlur={()=>commitRename(c.id)}/>:<button type="button" title="双击重命名" onDoubleClick={()=>startRename(c.id,c.title||'','list')} onClick={()=>{const nextId=c.id;p.setConversations((old:Record<Person,Conversation[]>)=>{const active=old[chatPerson]?.find(x=>x.id===p.activeConversationIds[chatPerson]);const list=(old[chatPerson]||[]).map(x=>x.id===active?.id?{...x,messages:p.messages[chatPerson],updatedAt:new Date().toISOString()}:x);return {...old,[chatPerson]:list}});p.setActiveConversationIds((old:Record<Person,string>)=>({...old,[chatPerson]:nextId}));p.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[chatPerson]:(p.conversations[chatPerson]||[]).find((x:Conversation)=>x.id===nextId)?.messages||[]}));p.setChatError('')}}>{(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)?(<img className="conversation-avatar" src={p.characters[chatPerson].avatar} alt=""/>):<img className="conversation-avatar" src={DEFAULT_AVATAR} alt=""/>}{p.displayName(chatPerson)}</button>}</span>)}</div></div>
@@ -1993,7 +2037,7 @@ function Chat(p: any) {
     </form>}
     {!selectMode&&<small className="attachment-note">图片可点击放大；TXT、MD、JSON、CSV、LOG 可读取文本并下载读取出的文本副本。其他文件的原文件下载与云端上传后续接入。</small>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
-    {configOpen&&<ChatConfigPanel person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
+    {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
   </div>
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
@@ -2025,7 +2069,7 @@ function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];setProj
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<select value={category} onChange={e=>setCategory(e.target.value)}>{['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=><option key={x}>{x}</option>)}</select></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;onApiBaseApplied?:()=>void}) {
+function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,roomName,setRoomName,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,projects,setProjects,onOpenTool,displayName,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;assistants:AssistantRecord[];setAssistants:React.Dispatch<React.SetStateAction<AssistantRecord[]>>;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;roomName:string;setRoomName:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;projects:ProjectRecord[];setProjects:React.Dispatch<React.SetStateAction<ProjectRecord[]>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：设置子页先退回「全部设置」列表；已在列表时不消费，交给上层。
   useEffect(()=>{
@@ -2046,8 +2090,11 @@ function Settings({onLogout,cloudStatus,assistants,setAssistants,themePrefs,setT
   // 时区预览：只读展示当前时区此刻的日期/星期/时间/时段。
   const tzPreview=buildTimeContext(new Date(timeTick),timeZone)
   const tzError=(()=>{const raw=tzInput.trim();if(!raw)return '';try{new Intl.DateTimeFormat('en-US',{timeZone:raw});return ''}catch{return '无法识别的时区名称，请输入 IANA 时区（如 Asia/Shanghai）'}})()
+  // 资源库支持按 tab 直达（section 形如 resources:world），入口都留在设置页。
+  const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.length):'') as ''|'model'|'world'|'mcp'
+  const showResources=section==='resources'||!!resourceTab
   const cards=[{id:'resources',icon:'◈',title:'资源库',desc:'世界书 / MCP / 模型，一次添加完',meta:modelProfiles.length+' 套模型 · '+worldEntries.length+' 条世界书'},{id:'projects',icon:'▦',title:'项目管理',desc:'进度、备忘与归档',meta:projects.filter(p=>p.status==='进行中').length+' 个进行中'},{id:'usage',icon:'◷',title:'用量与费用',desc:'Token、缓存与人民币估算',meta:'双助手用量'},{id:'appearance',icon:'◐',title:'外观与美化',desc:'主题颜色与美化包皮肤',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'assistants',icon:'♙',title:'助手与工作区',desc:'名称、模型 API、独立记忆与工具',meta:assistants.length+' 位助手'},{id:'data',icon:'☁',title:'数据与账户',desc:'云端保存状态与登录管理',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'dev',icon:'⌘',title:'开发者 / 调试',desc:'模型请求诊断（黑匣子）',meta:'仅本机 · 不上传'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} onOpenTool={onOpenTool} displayName={displayName} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='resources'&&<ResourceLibrary worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>工作区快捷入口</b><p>快速进入各助手的模型、记忆与工具设置。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'模型设置'})}>模型 API</button><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'世界书'})}>世界书</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button><button type="button" onClick={()=>onOpenTool({person,tool:'MCP'})}>工具权限</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}</>}{section==='room'&&<div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} onOpenTool={onOpenTool} displayName={displayName} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{showResources&&<><ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} /><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></>}{section==='projects'&&<ProjectManager projects={projects} setProjects={setProjects}/ >}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='assistants'&&<><div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div><div className="setting-card settings-inner-card"><b>统一设置 · 资源库</b><p>模型预设、世界书条目、MCP 服务，以及各助手的 API Key 与默认接口，都在这里一次配置；聊天窗口只负责按助手选用。</p><div className="settings-shortcuts"><div><button type="button" onClick={()=>setSection('resources:model')}>模型与 API Key</button><button type="button" onClick={()=>setSection('resources:world')}>世界书</button><button type="button" onClick={()=>setSection('resources:mcp')}>MCP 服务</button></div></div></div><div className="setting-card settings-inner-card"><b>工作区小程序</b><p>按助手快速打开记忆、工作流与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'长期记忆'})}>独立记忆</button><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>工作流</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div><div className="setting-card settings-inner-card"><b>助手管理 · 名称</b><p>修改显示名称不会改变身份 ID，也不会移动原有聊天和记忆。</p>{assistants.map((a,i)=><label key={a.id} style={{display:'block',marginTop:12}}><small>助手 {i+1}</small><input aria-label={'助手'+(i+1)+'显示名称'} maxLength={32} style={{display:'block',width:'100%',padding:10,marginTop:4,borderRadius:10}} value={a.name} onChange={e=>setAssistants(old=>old.map(x=>x.id===a.id?{...x,name:e.target.value}:x))}/></label>)}</div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}</>}{section==='room'&&<div className="setting-card settings-inner-card"><b>我的房间名称</b><p className="muted">主页中间入口与「我的房间」顶部显示的名字，随时可改。</p><input className="memory-search" value={roomName} onChange={e=>setRoomName(e.target.value)} maxLength={12}/></div>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：iOS 分组列表 + 顶部搜索，4 组收纳原有全部设置 ──────────
@@ -2066,12 +2113,9 @@ function KelivoSettingsHome({onSelect,onClassic,onOpenTool,displayName,modelProf
       {id:'usage',icon:'◷',label:'用量与费用',keywords:'token 花费 统计',section:'usage'},
     ]},
     {title:'模型与服务',rows:[
-      {id:'resources',icon:'◈',label:'资源库',keywords:'模型预设 世界书 MCP 一次性添加 供应商',section:'resources'},
-      {id:'assistants',icon:'♙',label:'助手与工作区',keywords:'助手 名称 API Key 快捷入口',section:'assistants'},
-      {id:'w-world',icon:'▤',label:'世界书',keywords:'设定 条目 关键词',tool:'世界书'},
+      {id:'resources',icon:'◈',label:'资源库',keywords:'模型预设 世界书 MCP 设定 条目 API Key 接口 地址 服务 一次性添加 供应商',section:'resources'},
+      {id:'assistants',icon:'♙',label:'助手与工作区',keywords:'助手 名称 快捷入口',section:'assistants'},
       {id:'w-memory',icon:'✎',label:'长期记忆',keywords:'记忆 偏好',tool:'长期记忆'},
-      {id:'w-mcp',icon:'⌘',label:'MCP 工具权限',keywords:'工具 服务 服务器',tool:'MCP'},
-      {id:'w-model',icon:'◉',label:'模型 API',keywords:'接口 地址 Key',tool:'模型设置'},
       {id:'w-avatar',icon:'☺',label:'角色外观',keywords:'头像 形象',tool:'角色外观'},
       {id:'w-board',icon:'▦',label:'工具调用看板',keywords:'日志 调用记录',tool:'工具调用看板'},
     ]},
@@ -2098,8 +2142,8 @@ function KelivoSettingsHome({onSelect,onClassic,onOpenTool,displayName,modelProf
     {!q&&<div className="kelivo-status"><span>{isLocalMode()?'本机存储':'云端 · '+(cloudStatus==='saved'?'已同步':'同步中')}</span><span>{modelProfiles.length} 套模型 · {worldEntries.length} 条世界书</span></div>}
     {visible.length===0&&<p className="kelivo-empty">没有找到「{query}」相关的设置。</p>}
     {visible.map(g=>{
-      // 6 个工作区工具和「资源库」是同一批能力的两种入口，默认收成一行；
-      // 搜索时全部平铺，保证按「世界书 / MCP」这类别名仍能一步直达。
+      // 3 个工作区小程序默认收成一行；搜索时全部平铺，保证按别名仍能一步直达。
+      // 模型 / 世界书 / MCP 的入口已合并进「资源库」，不再单独列行。
       const fold=g.title==='模型与服务'&&!q
       const toolRows=fold?g.rows.filter(r=>r.tool):[]
       const mainRows=fold?g.rows.filter(r=>!r.tool):g.rows
@@ -2107,7 +2151,7 @@ function KelivoSettingsHome({onSelect,onClassic,onOpenTool,displayName,modelProf
         <h3>{g.title}</h3>
         <div className="kelivo-list">{mainRows.map(rowBtn)}</div>
         {toolRows.length>0&&<details className="kelivo-tools-fold">
-          <summary><span>工作区工具 · {toolRows.length} 项</span><span className="kelivo-fold-chevron" aria-hidden="true">⌄</span></summary>
+          <summary><span>工作区小程序 · {toolRows.length} 项</span><span className="kelivo-fold-chevron" aria-hidden="true">⌄</span></summary>
           <div className="kelivo-person"><span>默认打开哪位助手</span><select id="kelivo-ws-person" aria-label="选择工作区助手" value={wsPerson} onChange={e=>setWsPerson(e.target.value as Person)}>{ASSISTANT_PEOPLE.map(id=><option key={id} value={id}>{displayName(id)}</option>)}</select></div>
           <div className="kelivo-list">{toolRows.map(rowBtn)}</div>
         </details>}
@@ -2142,13 +2186,31 @@ function useMcpLibrary() {
 
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
-function ResourceLibrary({ worldEntries, setWorldEntries, modelProfiles, setModelProfiles, bindings, setBindings, displayName }: {
+// 设置页统一放 API Key 与默认接口：复用原来的模型设置面板，按助手切换。
+// 工作区不再陈列「模型设置」工具，聊天窗口也不放 Key，只负责选用与绑定。
+function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName}:{
+  modelConfig:Record<Person,ModelConfig>; setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>
+  apiKey:Record<Person,string>; setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>
+  displayName:(p:Person)=>string
+}) {
+  const [person,setPerson]=useState<Person>(YWX)
+  return <div className="setting-card settings-inner-card connection-keys">
+    <b>连接与 API Key</b>
+    <p className="muted">按助手填写 API Key 和默认接口。聊天窗口选用模型预设后会优先用预设里的地址与模型，没选预设时才用这里的配置。Key 只存本机，不写进云端快照。</p>
+    <label className="connection-person">助手<select aria-label="选择要配置的助手" value={person} onChange={e=>setPerson(e.target.value as Person)}>{ASSISTANT_PEOPLE.map(id=><option key={id} value={id}>{displayName(id)}</option>)}</select></label>
+    <ModelSettings key={person} value={modelConfig[person]||{endpoint:'',model:''}} onChange={v=>setModelConfig(old=>({...old,[person]:v}))} apiKey={apiKey[person]||''} setApiKey={v=>setApiKey(old=>({...old,[person]:v}))}/>
+  </div>
+}
+
+function ResourceLibrary({ initialTab, worldEntries, setWorldEntries, modelProfiles, setModelProfiles, bindings, setBindings, displayName }: {
+  initialTab?: 'model'|'world'|'mcp'
   worldEntries: WorldEntry[]; setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>
   modelProfiles: ModelProfile[]; setModelProfiles: React.Dispatch<React.SetStateAction<ModelProfile[]>>
   bindings: Record<Person,PersonBinding>; setBindings: React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
   displayName: (p: Person) => string
 }) {
-  const [tab, setTab] = useState<'model'|'world'|'mcp'>('model')
+  // 直达某个 tab 靠父层给的 key 重新挂载，初始 state 直接取 initialTab，不必在 effect 里 setState。
+  const [tab, setTab] = useState<'model'|'world'|'mcp'>(initialTab||'model')
   const [draft, setDraft] = useState({ ...EMPTY_PROFILE })
   const [mcpDraft, setMcpDraft] = useState({ name: '', url: '', token: '', owner: 'all' })
   const [mcpBusy, setMcpBusy] = useState(false)
@@ -2192,7 +2254,7 @@ function ResourceLibrary({ worldEntries, setWorldEntries, modelProfiles, setMode
     <div className="library-filter-tabs resource-tabs">
       {([['model','模型预设'],['world','世界书'],['mcp','MCP 服务']] as const).map(([key,label]) => <button type="button" key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}<small>{key==='model'?modelProfiles.length:key==='world'?worldEntries.length:mcp.connections.length}</small></button>)}
     </div>
-    <p className="resource-hint">在这里一次性把资源都添加好；到聊天窗口点顶栏「配置」，再决定当前助手用哪几项。</p>
+    <p className="resource-hint">资源与 API Key 在这里一次配置好；到聊天窗口点顶部的模型 / 世界书 / MCP 绑定条，按当前助手选用即可。</p>
     {tab==='model' && <>
       <div className="resource-list">
         {modelProfiles.length===0 && <p className="muted">还没有模型预设。添加一套后，聊天窗口里所有助手都能直接选用。</p>}
@@ -2204,7 +2266,7 @@ function ResourceLibrary({ worldEntries, setWorldEntries, modelProfiles, setMode
         <label>模型名称<input value={draft.model} onChange={e=>setDraft({...draft,model:e.target.value})} placeholder="例如 gpt-4o-mini" required/></label>
         <div className="resource-price-grid"><label>输入价<input value={draft.inputPrice} onChange={e=>setDraft({...draft,inputPrice:e.target.value})}/></label><label>输出价<input value={draft.outputPrice} onChange={e=>setDraft({...draft,outputPrice:e.target.value})}/></label><label>缓存价<input value={draft.cachedInputPrice} onChange={e=>setDraft({...draft,cachedInputPrice:e.target.value})}/></label><label>汇率<input value={draft.usdToCny} onChange={e=>setDraft({...draft,usdToCny:e.target.value})}/></label></div>
         <div className="resource-form-actions"><button type="submit">{draft.id?'保存修改':'添加预设'}</button>{draft.id&&<button type="button" onClick={()=>setDraft({...EMPTY_PROFILE})}>取消编辑</button>}</div>
-        <small>API Key 不放在预设里，仍按助手单独填写（聊天窗口的「模型设置」或设置区「助手与工作区」），也不会上传云端快照。</small>
+        <small>API Key 不放在预设里，在下方「连接与 API Key」按助手填写；只存本机，不上传云端快照。</small>
       </form>
     </>}
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
@@ -2227,12 +2289,22 @@ function ResourceLibrary({ worldEntries, setWorldEntries, modelProfiles, setMode
 }
 
 // 聊天窗口的配置抽屉：只决定「当前助手」用哪套模型、哪几条世界书、哪几个 MCP。
-function ChatConfigPanel({ person, displayName, modelProfiles, bindings, setBindings, worldEntries, setWorldEntries, onClose }: {
+function ChatConfigPanel({ person, displayName, modelProfiles, bindings, setBindings, worldEntries, setWorldEntries, focus, onClose }: {
   person: Person; displayName: (p: Person) => string
   modelProfiles: ModelProfile[]; bindings: Record<Person,PersonBinding>; setBindings: React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
   worldEntries: WorldEntry[]; setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>
-  onClose: () => void
+  focus: ''|'model'|'world'|'mcp'; onClose: () => void
 }) {
+  // 从绑定条点进来时，把对应的那一段滚到眼前并短暂高亮；点「配置 ›」则正常从顶部看。
+  useEffect(()=>{
+    if(!focus)return
+    const el=document.querySelector('.chat-config-panel [data-part="'+focus+'"]')
+    if(!el)return
+    el.scrollIntoView({block:'start',behavior:'smooth'})
+    el.classList.add('chat-config-flash')
+    const t=window.setTimeout(()=>el.classList.remove('chat-config-flash'),1400)
+    return ()=>window.clearTimeout(t)
+  },[focus])
   const mcp = useMcpLibrary()
   const binding = bindings[person] || emptyBinding()
   const mine = mcp.connections.filter(c => c.person === person)
@@ -2247,16 +2319,16 @@ function ChatConfigPanel({ person, displayName, modelProfiles, bindings, setBind
     <section className="chat-config-panel" role="dialog" aria-label="当前助手配置" onClick={e=>e.stopPropagation()}>
       <header className="chat-config-head"><div><b>{displayName(person)} · 配置</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭配置">×</button></header>
       <div className="chat-config-body">
-        <section className="chat-config-section"><h4>使用的模型</h4>
+        <section className="chat-config-section" data-part="model"><h4>使用的模型</h4>
           <label className="chat-config-option"><input type="radio" name="model-profile" checked={!binding.modelProfileId} onChange={()=>patch({...binding,modelProfileId:''})}/><span>工作区原有配置<small>不选用预设时沿用旧设置</small></span></label>
           {modelProfiles.map(p=><label className="chat-config-option" key={p.id}><input type="radio" name="model-profile" checked={binding.modelProfileId===p.id} onChange={()=>patch({...binding,modelProfileId:p.id})}/><span>{p.name}<small>{p.model} · {p.endpoint}</small></span></label>)}
           {modelProfiles.length===0&&<p className="muted">设置 → 资源库里还没有模型预设。</p>}
         </section>
-        <section className="chat-config-section"><h4>世界书条目</h4>
+        <section className="chat-config-section" data-part="world"><h4>世界书条目</h4>
           {worldEntries.length===0&&<p className="muted">资源库里还没有世界书条目。</p>}
           {worldEntries.map(e=><label className="chat-config-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,person)} onChange={v=>setWorldEntries(old=>toggleWorldEntryBinding(old,person,e.id,v.target.checked))}/><span>{e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · {e.always?'常驻':'关键词触发'} · {e.boundCharacters?.map(displayName).join('、')||'未绑定'}</small></span></label>)}
         </section>
-        <section className="chat-config-section"><h4>MCP 服务</h4>
+        <section className="chat-config-section" data-part="mcp"><h4>MCP 服务</h4>
           {mcp.error&&<p className="mcp-error">{mcp.error}</p>}
           {mine.length===0&&<p className="muted">这位助手名下还没有 MCP 服务，去「设置 → 资源库」添加。</p>}
           {mine.map(c=><label className="chat-config-option" key={c.id}><input type="checkbox" checked={mcpIds.includes(c.id)} onChange={v=>patch(toggleMcpId(binding,c.id,v.target.checked,allIds))}/><span>{c.name}<small>{c.url}</small></span></label>)}
