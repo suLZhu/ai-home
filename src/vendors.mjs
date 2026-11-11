@@ -3,34 +3,90 @@
 // 安全边界：vendors 里的 API Key 只存本机，不写进云端快照；勾选出来的模型清单
 // 会同步进 modelProfiles（随快照同步），因为它不含凭证。
 
-// 常见 OpenAI 兼容服务商。模型名按各家常驻型号列一份，用户仍可在卡片里自行追加。
+// 常见 OpenAI 兼容服务商。只预置「名称 + 接口地址」，模型一律由用户按自己填的
+// 网址实时拉取或手动添加，不再塞任何写死的默认模型（用户明确要求别出现别的默认模型）。
 export const BUILTIN_VENDORS = [
-  { id: 'deepseek', name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'] },
-  { id: 'siliconflow', name: '硅基流动', endpoint: 'https://api.siliconflow.cn/v1', models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen3-8B', 'Qwen/Qwen2.5-7B-Instruct'] },
-  { id: 'zhipu', name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4-flash', 'glm-4-plus', 'glm-4-air'] },
-  { id: 'moonshot', name: '月之暗面', endpoint: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k'] },
-  { id: 'dashscope', name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-plus', 'qwen-turbo', 'qwen-max'] },
-  { id: 'openai', name: 'OpenAI', endpoint: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o'] },
-  { id: 'ollama', name: 'Ollama 本地', endpoint: 'http://127.0.0.1:11434/v1', models: ['qwen2.5', 'llama3.1'] },
+  { id: 'deepseek', name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', models: [] },
+  { id: 'siliconflow', name: '硅基流动', endpoint: 'https://api.siliconflow.cn/v1', models: [] },
+  { id: 'zhipu', name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', models: [] },
+  { id: 'moonshot', name: '月之暗面', endpoint: 'https://api.moonshot.cn/v1', models: [] },
+  { id: 'dashscope', name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [] },
+  { id: 'openai', name: 'OpenAI', endpoint: 'https://api.openai.com/v1', models: [] },
+  { id: 'ollama', name: 'Ollama 本地', endpoint: 'http://127.0.0.1:11434/v1', models: [] },
 ]
+
+// 旧版本写死在供应商里的模型名。升级时清掉「未勾选」的预置项，
+// 用户勾过或自己添加的模型原样保留，避免一升级就丢聊天可选模型。
+const LEGACY_PRESET_MODELS = new Set([
+  'deepseek-chat', 'deepseek-reasoner',
+  'deepseek-ai/DeepSeek-V3', 'Qwen/Qwen3-8B', 'Qwen/Qwen2.5-7B-Instruct',
+  'glm-4-flash', 'glm-4-plus', 'glm-4-air',
+  'moonshot-v1-8k', 'moonshot-v1-32k',
+  'qwen-plus', 'qwen-turbo', 'qwen-max',
+  'gpt-4o-mini', 'gpt-4o', 'qwen2.5', 'llama3.1',
+])
 
 const str = (v) => String(v ?? '').trim()
 
-// 「添加模型」下拉目录：按供应商分组、跨组去重，本家那组排到最前。
-// 自定义供应商没有预置清单，也能从这份全量目录里点选模型。
-export function modelCatalog(vendorId = '') {
-  const seen = new Set()
-  const groups = []
-  for (const v of BUILTIN_VENDORS) {
-    const models = []
-    for (const name of v.models) {
-      if (seen.has(name)) continue
-      seen.add(name)
-      models.push(name)
-    }
-    if (models.length) groups.push({ id: v.id, label: v.name, own: v.id === vendorId, models })
+export const DEFAULT_API_PATH = '/chat/completions'
+
+// 只收相对 Base URL 的路径：'/chat/completions'、'v1/models' 都规范化成开头带 / 的形式。
+export function normalizeApiPath(raw = '') {
+  const s = str(raw) || DEFAULT_API_PATH
+  return '/' + s.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+function joinEndpoint(base, path) {
+  const b = str(base).replace(/\/+$/, '')
+  if (!b) return ''
+  const p = path.startsWith('/') ? path : '/' + path
+  return b.toLowerCase().endsWith(p.toLowerCase()) ? b : b + p
+}
+
+// 聊天请求真实发出去的地址（UI 里的「请求地址」预览、modelProfiles.endpoint 都用它）。
+export function chatRequestUrl(vendor) {
+  return joinEndpoint(vendor?.endpoint, normalizeApiPath(vendor?.apiPath))
+}
+
+// 模型列表地址：Base URL 以 /vN 结尾时补 /models，否则补 /v1/models；
+// 用户可在「模型列表路径」里自定义相对路径覆盖自动推导。
+export function modelListUrl(vendor) {
+  // 容错：有人把完整 chat 地址粘进 Base URL 时，先剥掉末尾的 chat 路径再推导。
+  const base = str(vendor?.endpoint).replace(/\/+$/, '').replace(/\/chat\/completions$/i, '')
+  if (!base) return ''
+  const custom = str(vendor?.modelsPath)
+  const suffix = custom
+    ? '/' + custom.replace(/^\/+/, '').replace(/\/+$/, '')
+    : /\/v\d+(?:[.-]\w+)?$/i.test(base) ? '/models' : '/v1/models'
+  return joinEndpoint(base, suffix)
+}
+
+// 把 /models 返回的模型 ID 按系列折叠分组，参考设置页「Claude Haiku / Claude Opus」那种分组。
+// 纯函数，便于单测；组内保持上游返回顺序，组按名称稳定排序。
+export function groupModels(ids) {
+  const groups = new Map()
+  for (const raw of Array.isArray(ids) ? ids : []) {
+    const id = str(raw)
+    if (!id) continue
+    const key = modelGroupKey(id)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(id)
   }
-  return groups.sort((a, b) => Number(b.own) - Number(a.own))
+  return [...groups].map(([key, models]) => ({ id: key, label: modelGroupLabel(key), models }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+}
+
+function modelGroupKey(id) {
+  const parts = id.split('/')
+  if (parts.length > 1) return parts[0]
+  return id.split(/[-_]/).filter(Boolean).slice(0, 2).join('-') || id
+}
+
+const GROUP_WORDS = { gpt: 'GPT', glm: 'GLM', qwen: 'Qwen', deepseek: 'DeepSeek', claude: 'Claude', ollama: 'Ollama', gemini: 'Gemini', moonshot: 'Moonshot', llama: 'Llama', mistral: 'Mistral' }
+function modelGroupLabel(key) {
+  return key.split(/[-_]/).filter(Boolean)
+    .map(w => GROUP_WORDS[w.toLowerCase()] || (/^v?\d/.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ')
 }
 
 // 多 KEY 的角色：备用优先于主号（用户要「先用备用再用主号」）。
@@ -79,14 +135,16 @@ function normalizeModels(raw, fallback) {
     const s = saved.get(name)
     return { id: name, name: str(s?.name) || name, selected: !!(s && s.selected) }
   })
-  // 用户自己追加的模型（不在预置清单里）也要保留。
+  // 用户自己追加 / 已勾选的模型要保留；旧版本写死、且从未勾选过的预置模型不再出现。
   for (const [id, m] of saved) {
-    if (!list.some((x) => x.id === id)) list.push({ id, name: str(m.name) || id, selected: !!m.selected })
+    if (list.some((x) => x.id === id)) continue
+    if (!m.selected && LEGACY_PRESET_MODELS.has(id)) continue
+    list.push({ id, name: str(m.name) || id, selected: !!m.selected })
   }
   return list
 }
 
-// 兼容原则：旧版本没有 vendors 数据时，直接得到完整的预置清单（未勾选、无 Key）。
+// 兼容原则：旧版本没有 vendors 数据时，只给出预置「服务商 + 接口地址」，模型清单为空。
 export function normalizeVendors(raw) {
   const saved = new Map(
     (Array.isArray(raw) ? raw : [])
@@ -99,9 +157,11 @@ export function normalizeVendors(raw) {
       id: v.id,
       name: v.name,
       endpoint: s ? str(s.endpoint) || v.endpoint : v.endpoint,
+      apiPath: s ? str(s.apiPath) : '',
+      modelsPath: s ? str(s.modelsPath) : '',
       builtin: true,
       keys: s ? normalizeKeys(s.keys) : [],
-      models: s ? normalizeModels(s.models, v.models) : v.models.map((name) => ({ id: name, name, selected: false })),
+      models: s ? normalizeModels(s.models, v.models) : [],
     }
   })
   const custom = (Array.isArray(raw) ? raw : [])
@@ -110,6 +170,8 @@ export function normalizeVendors(raw) {
       id: v.id,
       name: str(v.name) || '自定义供应商',
       endpoint: str(v.endpoint),
+      apiPath: str(v.apiPath),
+      modelsPath: str(v.modelsPath),
       builtin: false,
       keys: normalizeKeys(v.keys),
       models: normalizeModels(v.models, []),
@@ -201,5 +263,5 @@ export function readKeyCandidates(body) {
 
 // 自定义供应商 / 自定义模型的空白模板。
 export function blankVendor(name = '', endpoint = '') {
-  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, builtin: false, keys: [], models: [] }
+  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, keys: [], models: [] }
 }

@@ -8,7 +8,8 @@ import {
 import {
   BUILTIN_VENDORS, normalizeVendors, vendorModelProfileId, syncVendorProfiles,
   allVendorKeys, resolveVendorKey, resolveKeyCandidates, readKeyCandidates,
-  isRetryableKeyStatus, orderedKeys, keyRoleLabel, modelCatalog,
+  isRetryableKeyStatus, orderedKeys, keyRoleLabel,
+  DEFAULT_API_PATH, normalizeApiPath, chatRequestUrl, modelListUrl, groupModels,
 } from '../src/vendors.mjs'
 
 const A = 'assistant-yanweixi'
@@ -118,13 +119,19 @@ test('勾选池：显式清单为空就是一项都不放出来，坏数据会�
 })
 
 // ── 供应商中心：预置、多选模型、多 KEY ──
-test('normalizeVendors 首次进入就带 DeepSeek / 硅基流动等预置，且不勾选任何模型', () => {
+test('normalizeVendors 预置服务商不带任何写死模型，旧预置未勾选模型升级时被清掉', () => {
   const list = normalizeVendors(null)
   assert.ok(list.some(v => v.name === 'DeepSeek'))
   assert.ok(list.some(v => v.name === '硅基流动'))
-  assert.ok(list.every(v => v.models.every(m => !m.selected)))
+  assert.ok(list.every(v => v.models.length === 0))
   assert.ok(list.every(v => v.keys.length === 0))
   assert.equal(list[0].endpoint, BUILTIN_VENDORS[0].endpoint)
+  assert.ok(BUILTIN_VENDORS.every(v => v.models.length === 0))
+  const old = normalizeVendors([{
+    id: 'deepseek', name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', builtin: true,
+    keys: [], models: [{ id: 'deepseek-chat', selected: false }, { id: 'my-model', selected: true }],
+  }])
+  assert.deepEqual(old[0].models.map(m => m.id), ['my-model'])
 })
 
 test('供应商勾选状态、多 KEY、自定义模型与自定义供应商都能往返', () => {
@@ -137,7 +144,6 @@ test('供应商勾选状态、多 KEY、自定义模型与自定义供应商都�
   assert.equal(list[0].endpoint, 'https://custom/v1')
   assert.equal(list[0].keys.length, 2)
   assert.equal(list[0].models.find(m => m.id === 'deepseek-chat').selected, true)
-  assert.equal(list[0].models.find(m => m.id === 'deepseek-reasoner').selected, false)
   assert.equal(list[0].models.find(m => m.id === 'my-model').name, '自建模型')
   assert.equal(list.find(v => v.id === 'custom-1').name, '我的中转')
 })
@@ -205,15 +211,29 @@ test('候选队列：默认备用 → 主号 → 旧的按助手 Key，显式选
   assert.deepEqual(resolveKeyCandidates(vendors, '', '', 'deepseek'), ['sk-back', 'sk-main'])
 })
 
-test('模型目录按供应商分组去重，本家排最前，自定义也能拿到全量目录', () => {
-  const own = modelCatalog('deepseek')
-  assert.equal(own[0].id, 'deepseek')
-  assert.equal(own[0].own, true)
-  assert.deepEqual(own[0].models, ['deepseek-chat', 'deepseek-reasoner'])
-  const all = modelCatalog('custom-abc').flatMap(g => g.models)
-  assert.equal(new Set(all).size, all.length)
-  assert.equal(all.length, new Set(BUILTIN_VENDORS.flatMap(v => v.models)).size)
-  assert.ok(all.includes('deepseek-chat') && all.includes('qwen-plus') && all.includes('glm-4-flash'))
+test('按 Base URL 推导聊天 / 模型列表地址，自定义 API 路径真实生效', () => {
+  assert.equal(DEFAULT_API_PATH, '/chat/completions')
+  assert.equal(normalizeApiPath('v1/responses/'), '/v1/responses')
+  assert.equal(normalizeApiPath(''), '/chat/completions')
+  assert.equal(chatRequestUrl({ endpoint: 'https://api.openai.com/v1' }), 'https://api.openai.com/v1/chat/completions')
+  assert.equal(chatRequestUrl({ endpoint: 'https://api.openai.com/v1/chat/completions' }), 'https://api.openai.com/v1/chat/completions')
+  assert.equal(chatRequestUrl({ endpoint: 'https://my.example/v1', apiPath: '/v1/responses' }), 'https://my.example/v1/v1/responses')
+  assert.equal(modelListUrl({ endpoint: 'https://api.openai.com/v1' }), 'https://api.openai.com/v1/models')
+  assert.equal(modelListUrl({ endpoint: 'https://open.bigmodel.cn/api/paas/v4' }), 'https://open.bigmodel.cn/api/paas/v4/models')
+  assert.equal(modelListUrl({ endpoint: 'https://my.example' }), 'https://my.example/v1/models')
+  assert.equal(modelListUrl({ endpoint: 'https://my.example/v1/chat/completions' }), 'https://my.example/v1/models')
+  assert.equal(modelListUrl({ endpoint: 'https://my.example/v1', modelsPath: 'v1/models/mine' }), 'https://my.example/v1/v1/models/mine')
+  assert.equal(chatRequestUrl({ endpoint: '' }), '')
+  assert.equal(modelListUrl(null), '')
+})
+
+test('从网址拉到的模型按系列折叠分组，组内保持上游顺序', () => {
+  const groups = groupModels(['claude-opus-4.6', 'claude-haiku-5.5', 'claude-opus-5', 'Qwen/Qwen3-8B', 'gpt-4o-mini', '', null])
+  assert.deepEqual(groups.map(g => g.id), ['claude-haiku', 'claude-opus', 'gpt-4o', 'Qwen'])
+  assert.deepEqual(groups.find(g => g.id === 'claude-opus').models, ['claude-opus-4.6', 'claude-opus-5'])
+  assert.equal(groups.find(g => g.id === 'claude-haiku').label, 'Claude Haiku')
+  assert.equal(groups.find(g => g.id === 'Qwen').label, 'Qwen')
+  assert.deepEqual(groupModels(null), [])
 })
 
 test('服务端读候选队列兼容旧客户端，并限制最多 6 把', () => {

@@ -31,7 +31,7 @@ import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiag
 // 资源库绑定层：设置区一次性添加模型/MCP/世界书，聊天窗口按助手选择由哪个使用。
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
-import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, modelCatalog, type Vendor } from './vendors.mjs'
+import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, chatRequestUrl, modelListUrl, groupModels, orderedKeys, DEFAULT_API_PATH, type Vendor } from './vendors.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -678,6 +678,8 @@ export default function App() {
     const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
     // 多 KEY：默认「备用优先、主号兜底」，服务端按顺序自动换下一把；
     // 聊天窗口显式选了某把 Key 就把它提到队首。旧的「每助手一份」Key 永远排在最后。
+    const activeVendor = activeModel.vendorId ? vendors.find(v=>v.id===activeModel.vendorId) : undefined
+    const activeChatUrl = activeVendor ? chatRequestUrl(activeVendor) : ''
     const apiKeyCandidates = resolveKeyCandidates(vendors, bindings[target]?.keyId || '', apiKey[target] || '', activeModel.vendorId || '')
     const activeApiKey = apiKeyCandidates[0] || resolveVendorKey(vendors, bindings[target]?.keyId || '') || apiKey[target] || ''
     if (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim()) {
@@ -837,7 +839,7 @@ export default function App() {
           // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
           requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
         }))
-        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody})})
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody})})
         let response=await chatProxy()
         if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
@@ -2313,89 +2315,166 @@ function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName
   </div>
 }
 
-// ── 供应商中心：一排两个小图标，点开一家才展开模型清单与多 KEY ─────────────
-// 打勾的模型同步进 modelProfiles（聊天窗口按供应商名称分组选用）；Key 只留本机。
+// ── 供应商中心：一排两个小图标，点开一家才展开「配置 / 模型」两块 ─────────
+// 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
+// 搜索 + 折叠分组 + 逐条 ＋ 点选；Key 只留本机，不进云端快照。
 function VendorCenter({vendors,setVendors,setModelProfiles}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
 }) {
-  // 一次只出现一个编辑区：'new' = 新增供应商表单，其余 = 某家供应商的详情。
+  // 一次只出现一个编辑区：'new' = 新增表单，其余 = 某家供应商详情。
   const [editing,setEditing]=useState<string>('')
-  const [modelDrafts,setModelDrafts]=useState<Record<string,string>>({})
-  const [customModelOpen,setCustomModelOpen]=useState<Record<string,boolean>>({})
-  const [keyDrafts,setKeyDrafts]=useState<Record<string,{label:string;value:string}>>({})
-  const [showKeys,setShowKeys]=useState<Record<string,boolean>>({})
+  const [tab,setTab]=useState<'config'|'model'>('config')
+  const [pickerOpen,setPickerOpen]=useState(false)
+  const [modelQuery,setModelQuery]=useState('')
+  const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
+  const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
+  const [collapsed,setCollapsed]=useState<Record<string,boolean>>({})
+  const [customModelOpen,setCustomModelOpen]=useState(false)
+  const [modelDraft,setModelDraft]=useState('')
+  const [keyDraft,setKeyDraft]=useState({label:'',value:''})
+  const [showKey,setShowKey]=useState(false)
   const [newName,setNewName]=useState('')
+  const [newKey,setNewKey]=useState('')
   const [newEndpoint,setNewEndpoint]=useState('')
+  const [newApiPath,setNewApiPath]=useState('')
   // 每次改动都基于当前 vendors 算出新数组，再同步模型池；不在 setState updater 里嵌套 setState。
   const commit=(next:Vendor[])=>{setVendors(next);setModelProfiles(old=>syncVendorProfiles(next,old))}
   const patch=(id:string,fn:(v:Vendor)=>Vendor)=>commit(vendors.map(v=>v.id===id?fn(v):v))
-  const keyDraft=(id:string)=>keyDrafts[id]||{label:'',value:''}
+  const selectedModels=vendors.reduce((n,v)=>n+v.models.filter(m=>m.selected).length,0)
+  const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
+  const showNew=editing==='new'
+  const active=vendors.find(v=>v.id===editing)
+  const primary=active?(active.keys.find(k=>k.role==='primary')||active.keys[0]):undefined
+  const backupKeys=active?active.keys.filter(k=>k!==primary):[]
+  const chatUrl=active?chatRequestUrl(active):''
+  // 批量点选：一次 patch 落盘，避免连续 setState 互相覆盖。
+  const pickModels=(vendorId:string,ids:string[])=>patch(vendorId,v=>{
+    const map=new Map(v.models.map(m=>[m.id,m]))
+    for(const id of ids){const m=map.get(id);map.set(id,m?{...m,selected:true}:{id,name:id,selected:true})}
+    return {...v,models:[...map.values()]}
+  })
+  const pickModel=(vendorId:string,modelId:string)=>pickModels(vendorId,[modelId])
+  const setPrimary=(value:string)=>{if(!active)return;patch(active.id,v=>{
+    const i=v.keys.findIndex(k=>k.role==='primary')
+    if(i>=0)return {...v,keys:v.keys.map((k,j)=>j===i?{...k,value}:k)}
+    return {...v,keys:[{id:crypto.randomUUID(),label:'主号',value,role:'primary'},...v.keys]}
+  })}
+  const addBackupKey=()=>{
+    const value=keyDraft.value.trim();if(!value||!active)return
+    patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
+    setKeyDraft({label:'',value:''})
+  }
+  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setKeyDraft({label:'',value:''})}
+  const openVendor=(id:string)=>{
+    if(editing===id){setEditing('');resetEditUI();return}
+    setEditing(id);setTab('config');resetEditUI()
+  }
   const addVendor=(e:FormEvent)=>{
     e.preventDefault()
     const name=newName.trim(),endpoint=newEndpoint.trim()
     if(!name)return
     const id='custom-'+Math.random().toString(36).slice(2,10)
-    commit([...vendors,{id,name,endpoint,builtin:false,keys:[],models:[]}] as Vendor[])
-    setEditing(id);setNewName('');setNewEndpoint('')
+    const keys=newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]
+    commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,keys,models:[]}] as Vendor[])
+    setEditing(id);setTab('model');resetEditUI()
+    setNewName('');setNewKey('');setNewEndpoint('');setNewApiPath('')
   }
-  const selectedModels=vendors.reduce((n,v)=>n+v.models.filter(m=>m.selected).length,0)
-  const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
-  const showNew=editing==='new'
-  const active=vendors.find(v=>v.id===editing)
-  const catalog=active?modelCatalog(active.id):[]
-  // 下拉点选：清单里已有就顺手勾上，没有就追加一条并勾选。
-  const pickModel=(vendorId:string,modelId:string)=>patch(vendorId,v=>{
-    const exists=v.models.some(m=>m.id===modelId)
-    return {...v,models:exists?v.models.map(m=>m.id===modelId?{...m,selected:true}:m):[...v.models,{id:modelId,name:modelId,selected:true}]}
-  })
-  const addCustomModel=(vendorId:string)=>{
-    const name=(modelDrafts[vendorId]||'').trim()
-    if(!name)return
-    pickModel(vendorId,name)
-    setModelDrafts(d=>({...d,[vendorId]:''}))
-    setCustomModelOpen(d=>({...d,[vendorId]:false}))
+  // 只向「当前这一家」的接口拉模型，用备用优先的第一把有效 Key。
+  const fetchRemote=async(v:Vendor)=>{
+    const key=orderedKeys(v.keys).find(k=>k.value)?.value||''
+    if(!v.endpoint.trim()){setListState({loading:false,error:'请先填写 API Base URL。'});return}
+    if(!key){setListState({loading:false,error:'请先在「配置」里填写 API Key。'});return}
+    setListState({loading:true,error:''})
+    try{
+      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:v.endpoint.trim(),apiKey:key,modelsUrl:modelListUrl(v)})})
+      const d=await r.json().catch(()=>({}))
+      if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
+      const ids=Array.isArray(d?.models)?d.models.filter((x:unknown)=>typeof x==='string'&&x.trim()).map((x:string)=>x.trim()):[]
+      if(!ids.length)throw new Error('该网址没有返回可用模型，可手动输入模型名。')
+      setRemoteModels(m=>({...m,[v.id]:[...new Set<string>(ids)]}))
+      setListState({loading:false,error:''})
+    }catch(e){setListState({loading:false,error:e instanceof Error?e.message:'获取模型失败'})}
   }
+  const remoteIds=active?(remoteModels[active.id]||[]):[]
+  const query=modelQuery.trim().toLowerCase()
+  const visibleGroups=groupModels(remoteIds)
+    .map(g=>({...g,models:g.models.filter(id=>!query||id.toLowerCase().includes(query))}))
+    .filter(g=>g.models.length)
+  const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
+
   return <div className="vendor-center">
     <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{selectedModels} 个模型已勾选</span><span>{keyCount} 把 Key</span></div>
-    <p className="resource-hint">点小图标展开一家供应商：模型从下拉里点选，打勾才进聊天可选。一家可填多把 Key，同一时间只展开一个编辑区；Key 默认「先用备用、再用主号」。</p>
+    <p className="resource-hint">点小图标展开一家：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
     <div className="vendor-icon-grid">
-      {vendors.map(v=><button type="button" className={'vendor-icon-tile'+(editing===v.id?' active':'')} key={v.id} aria-expanded={editing===v.id} onClick={()=>setEditing(t=>t===v.id?'':v.id)}>
+      {vendors.map(v=><button type="button" className={'vendor-icon-tile'+(editing===v.id?' active':'')} key={v.id} aria-expanded={editing===v.id} onClick={()=>openVendor(v.id)}>
         <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
         <span className="vit-text"><b>{v.name}</b><small>{v.models.filter(m=>m.selected).length} 模型 · {v.keys.length} Key</small></span>
       </button>)}
-      <button type="button" className={'vendor-icon-tile add'+(showNew?' active':'')} aria-expanded={showNew} onClick={()=>setEditing(t=>t==='new'?'':'new')}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
+      <button type="button" className={'vendor-icon-tile add'+(showNew?' active':'')} aria-expanded={showNew} onClick={()=>{if(showNew){setEditing('');resetEditUI()}else{setEditing('new');resetEditUI()}}}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
     </div>
-    {showNew&&<form className="vendor-new" onSubmit={addVendor}><b>添加自定义供应商</b><div className="vendor-add-row"><input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/><input aria-label="接口地址" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/><button type="submit">添加</button></div><small>加好后点它的小图标，照样追加模型与 Key。</small></form>}
+
+    {showNew&&<form className="vendor-new" onSubmit={addVendor}>
+      <b>添加自定义供应商</b>
+      <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/></label>
+      <label className="vendor-field">API Key<input aria-label="API Key" type="password" autoComplete="off" value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/></label>
+      <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
+      <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
+      <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
+      <button type="submit" className="vendor-submit">＋ 添加</button>
+      <small>Key 与地址都填好后，到「模型」里点 ⟳ 就能只选这个网址自己的模型；拉取失败也可手动输入模型名。</small>
+    </form>}
+
     {active&&<div className="vendor-card open" key={active.id}>
-      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b><button type="button" aria-label="收起供应商详情" onClick={()=>setEditing('')}>收起 ×</button></div>
-      <div className="vendor-card-body">
-        <label className="vendor-endpoint">接口地址<input value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
-        <div className="vendor-section"><b>模型清单 <small>打勾 = 加入聊天可选</small></b>
-          {active.models.map(m=><label className="vendor-model-row" key={m.id}><input type="checkbox" checked={m.selected} onChange={e=>patch(active.id,x=>({...x,models:x.models.map(y=>y.id===m.id?{...y,selected:e.target.checked}:y)}))}/><span>{m.name}</span>{m.name!==m.id&&<small>{m.id}</small>}</label>)}
-          <select className="vendor-model-select" aria-label="从下拉里添加模型" value="" onChange={e=>{
-            const id=e.target.value
-            if(!id)return
-            if(id==='__custom__'){setCustomModelOpen(d=>({...d,[active.id]:true}));return}
-            pickModel(active.id,id)
-          }}>
-            <option value="">＋ 从列表里点选模型…</option>
-            {catalog.map(g=><optgroup key={g.id} label={g.own?g.label+' · 本家':g.label}>{g.models.map(name=>{
-              const found=active.models.find(m=>m.id===name)
-              return <option key={name} value={name} disabled={!!found?.selected}>{name}{found?(found.selected?' · 已勾选':' · 点选后勾选'):''}</option>
-            })}</optgroup>)}
-            <option value="__custom__">✎ 手动输入模型名…</option>
-          </select>
-          {customModelOpen[active.id]&&<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDrafts[active.id]||''} onChange={e=>setModelDrafts(d=>({...d,[active.id]:e.target.value}))} placeholder="模型名，如 my-model" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomModel(active.id)}}}/><button type="button" onClick={()=>addCustomModel(active.id)}>添加</button><button type="button" onClick={()=>setCustomModelOpen(d=>({...d,[active.id]:false}))}>取消</button></div>}
-        </div>
-        <div className="vendor-section"><b>多 KEY 模式 <small>备用优先 · 主号兜底 · 失败自动换</small></b>
-          {active.keys.length===0&&<p className="muted">还没填 Key；填好才能在聊天里发消息。</p>}
-          {active.keys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><select className="vendor-key-role" aria-label="Key 角色" value={k.role||'backup'} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:e.target.value as 'primary'|'backup'}:y)}))}><option value="backup">备用</option><option value="primary">主号</option></select><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="API Key" type={showKeys[active.id]?'text':'password'} value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="sk-…"/><button type="button" aria-label="删除这把 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
-          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft(active.id).label} onChange={e=>setKeyDrafts(d=>({...d,[active.id]:{...keyDraft(active.id),label:e.target.value}}))} placeholder="备注名（主号 / 备用）"/><input aria-label="新 Key 值" type="password" value={keyDraft(active.id).value} onChange={e=>setKeyDrafts(d=>({...d,[active.id]:{...keyDraft(active.id),value:e.target.value}}))} placeholder="API Key"/><button type="button" onClick={()=>{const d=keyDraft(active.id);if(!d.value.trim())return;patch(active.id,x=>({...x,keys:[...x.keys,{id:crypto.randomUUID(),label:d.label.trim()||('Key '+(x.keys.length+1)),value:d.value.trim(),role:x.keys.length===0?'primary':'backup'}]}));setKeyDrafts(d=>({...d,[active.id]:{label:'',value:''}}))}}>添加 Key</button></div>
-          <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKeys(s=>({...s,[active.id]:!s[active.id]}))}>{showKeys[active.id]?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
-        </div>
-        {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==active.id));setEditing('')}}>删除这家供应商</button>}
+      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b><button type="button" aria-label="收起供应商详情" onClick={()=>{setEditing('');resetEditUI()}}>收起 ×</button></div>
+      <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
+        <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
+        <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型 <small>{active.models.filter(m=>m.selected).length}</small></button>
       </div>
+
+      {tab==='config'&&<div className="vendor-card-body">
+        <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))}/></label>
+        <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
+        <label className="vendor-field">API 路径<input aria-label="API 路径" value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
+        <p className="vendor-url-hint">请求地址 <b>{chatUrl||'填写 Base URL 后显示'}</b></p>
+        <label className="vendor-field vendor-primary-key">API Key<div className="vendor-key-input"><input aria-label="API Key" type={showKey?'text':'password'} autoComplete="off" value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>!s)}>{showKey?'隐藏':'显示'}</button></div></label>
+        <label className="vendor-field">模型列表路径 <small>可选，留空自动推导</small><input aria-label="模型列表路径" value={active.modelsPath||''} onChange={e=>patch(active.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
+        <p className="vendor-url-hint">当前列表地址 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
+        <div className="vendor-section"><b>多 KEY 模式 <small>备用优先 · 主号兜底 · 失败自动换</small></b>
+          {backupKeys.length===0&&<p className="muted">目前只有一把主 Key；可再添加备用 Key，前一把额度或鉴权失败会自动换下一把。</p>}
+          {backupKeys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><select className="vendor-key-role" aria-label="Key 角色" value={k.role||'backup'} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:e.target.value as 'primary'|'backup'}:y)}))}><option value="backup">备用</option><option value="primary">主号</option></select><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="API Key" type={showKey?'text':'password'} value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="sk-…"/><button type="button" aria-label="删除这把 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
+          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(d=>({...d,label:e.target.value}))} placeholder="备用 Key 备注名"/><input aria-label="新 Key 值" type="password" value={keyDraft.value} onChange={e=>setKeyDraft(d=>({...d,value:e.target.value}))} placeholder="API Key"/><button type="button" onClick={addBackupKey}>添加备用 Key</button></div>
+          <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKey(s=>!s)}>{showKey?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
+        </div>
+        {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==active.id));setEditing('');resetEditUI()}}>删除这家供应商</button>}
+      </div>}
+
+      {tab==='model'&&<div className="vendor-card-body">
+        <div className="vendor-section"><b>已选模型 <small>打勾 = 聊天窗口可选</small></b>
+          {active.models.length===0&&<p className="muted">还没有选模型，从下面的网址里点选。</p>}
+          {active.models.map(m=><label className="vendor-model-row" key={m.id}><input type="checkbox" checked={m.selected} onChange={e=>patch(active.id,x=>({...x,models:x.models.map(y=>y.id===m.id?{...y,selected:e.target.checked}:y)}))}/><span>{m.name}</span>{m.name!==m.id&&<small>{m.id}</small>}</label>)}
+        </div>
+        <button type="button" className={'vendor-model-toggle'+(pickerOpen?' open':'')} aria-label="从这个网址选择模型" aria-expanded={pickerOpen} onClick={()=>{const next=!pickerOpen;setPickerOpen(next);if(next&&!remoteModels[active.id]?.length)void fetchRemote(active)}}>＋ 从这个网址选择模型 <span aria-hidden="true">▾</span></button>
+        {pickerOpen&&<div className="vendor-model-picker">
+          <div className="vendor-model-tools">
+            <input aria-label="筛选模型名称" value={modelQuery} onChange={e=>setModelQuery(e.target.value)} placeholder="输入模型名称筛选"/>
+            <button type="button" aria-label="添加筛选出的全部模型" title="添加筛选出的全部模型" onClick={()=>pickModels(active.id,visibleGroups.flatMap(g=>g.models))}>☑</button>
+            <button type="button" aria-label="刷新模型列表" title="从该网址重新拉取模型" onClick={()=>void fetchRemote(active)}>⟳</button>
+          </div>
+          <p className="vendor-url-hint">来源 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
+          {listState.loading&&<p className="muted">正在从这个网址获取模型…</p>}
+          {listState.error&&<p className="mcp-error">{listState.error}</p>}
+          {!listState.loading&&visibleGroups.length===0&&<p className="muted">{remoteIds.length?'没有匹配的模型，换个关键词试试。':'点右上角 ⟳ 从这个网址拉取它自己的模型；拉取失败也可以手动输入模型名。'}</p>}
+          {visibleGroups.map(g=><div className="vendor-model-group" key={g.id}>
+            <button type="button" className="vendor-model-group-head" aria-expanded={!collapsed[g.id]} onClick={()=>setCollapsed(c=>({...c,[g.id]:!c[g.id]}))}><span aria-hidden="true">{collapsed[g.id]?'▸':'▾'}</span> {g.label} <small>{g.models.length}</small></button>
+            {!collapsed[g.id]&&g.models.map(id=>{
+              const found=active.models.find(m=>m.id===id)
+              return <div className="vendor-model-item" key={id}><span>{id}</span><button type="button" aria-label={'添加模型 '+id} disabled={!!found?.selected} onClick={()=>pickModel(active.id,id)}>{found?.selected?'✓':'＋'}</button></div>
+            })}
+          </div>)}
+          {!customModelOpen?<button type="button" className="vendor-model-manual" onClick={()=>setCustomModelOpen(true)}>✎ 手动输入模型名</button>:<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDraft} onChange={e=>setModelDraft(e.target.value)} placeholder="模型名，如 my-model" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
+        </div>}
+      </div>}
     </div>}
   </div>
 }

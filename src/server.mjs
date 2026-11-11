@@ -359,7 +359,10 @@ const apiServer = createServer(async (req, res) => {
       const apiKey = String(b.apiKey || '').trim()
       if (!apiKey) return send(res, 400, { error: '请先填写 API Key' })
       if (!/^https?:\/\//i.test(raw)) return send(res, 400, { error: 'API 地址需以 http:// 或 https:// 开头' })
-      const target = /\/v1$/.test(raw) ? raw + '/models' : raw + '/v1/models'
+      const customModelsUrl = String(b.modelsUrl || '').trim()
+      const target = /^https?:\/\//i.test(customModelsUrl)
+        ? customModelsUrl
+        : /\/v1$/.test(raw) ? raw + '/models' : raw + '/v1/models'
       const upstream = await fetch(target, { headers: { Authorization: `Bearer ${apiKey}` }, redirect: 'error', signal: AbortSignal.timeout(15000) })
       const text = await upstream.text()
       if (!upstream.ok) return send(res, 502, { error: `上游返回 HTTP ${upstream.status}${text ? ' · ' + text.slice(0, 180) : ''}` })
@@ -395,7 +398,9 @@ const apiServer = createServer(async (req, res) => {
       // 流式聊天与工具调用后的续轮都是独立的 /api/chat 请求，因此每轮都拿到当前时间。
       // 前端可在请求体外带 timeZone（IANA 时区名），非法或缺省回退 Asia/Shanghai。
       chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
-      const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
+      const target = /^https?:\/\//i.test(String(b.chatUrl || ''))
+        ? String(b.chatUrl).trim()
+        : /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
       for (let i = 0; i < apiKeys.length; i++) {
         let upstream
         try {

@@ -244,7 +244,9 @@ async function handleChat(init) {
   if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return json(400, { error: '缺少请求体' })
   // 动态时间上下文：与服务端 /api/chat 完全同源（共享纯函数），每轮实时生成。
   chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
-  const target = /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
+  const target = /^https?:\/\//i.test(String(b.chatUrl || ''))
+    ? String(b.chatUrl).trim()
+    : /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
   for (let i = 0; i < apiKeys.length; i++) {
     let upstream
     try {
@@ -281,7 +283,10 @@ async function handleModels(init) {
   const apiKey = String(b.apiKey || '').trim()
   if (!apiKey) return json(400, { error: '请先填写 API Key' })
   if (!/^https?:\/\//i.test(raw)) return json(400, { error: 'API 地址需以 http:// 或 https:// 开头' })
-  const target = /\/v1$/.test(raw) ? raw + '/models' : raw + '/v1/models'
+  const customModelsUrl = String(b.modelsUrl || '').trim()
+  const target = /^https?:\/\//i.test(customModelsUrl)
+    ? customModelsUrl
+    : /\/v1$/.test(raw) ? raw + '/models' : raw + '/v1/models'
   try {
     const upstream = await fetch(target, { headers: { Authorization: 'Bearer ' + apiKey }, redirect: 'error', signal: AbortSignal.timeout(15000) })
     const text = await upstream.text()

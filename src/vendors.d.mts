@@ -4,6 +4,8 @@ export type Vendor = {
   id: string
   name: string
   endpoint: string
+  apiPath?: string
+  modelsPath?: string
   builtin: boolean
   keys: VendorKey[]
   models: VendorModel[]
@@ -15,7 +17,11 @@ export declare function keyRoleLabel(role: string): string
 export declare function orderedKeys(keys: unknown): VendorKey[]
 
 export declare const BUILTIN_VENDORS: { id: string; name: string; endpoint: string; models: string[] }[]
-export declare function modelCatalog(vendorId?: string): { id: string; label: string; own: boolean; models: string[] }[]
+export declare const DEFAULT_API_PATH: string
+export declare function normalizeApiPath(raw?: string): string
+export declare function chatRequestUrl(vendor: Partial<Vendor> | null | undefined): string
+export declare function modelListUrl(vendor: Partial<Vendor> | null | undefined): string
+export declare function groupModels(ids: unknown): { id: string; label: string; models: string[] }[]
 export declare function normalizeVendors(raw: unknown): Vendor[]
 export declare function vendorModelProfileId(vendorId: string, modelId: string): string
 export declare function syncVendorProfiles(vendors: unknown, profiles: unknown): {
