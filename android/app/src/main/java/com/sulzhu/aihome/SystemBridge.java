@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
+import androidx.core.content.ContextCompat;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
@@ -150,6 +151,31 @@ final class SystemBridge {
                 activity.startActivity(fallback);
             } catch (Exception ignored) { }
         }
+    }
+
+    /** Chat generation owns a foreground service while a stream/tool loop is in flight. */
+    @JavascriptInterface
+    public boolean generation(String json) {
+        try {
+            JSONObject body = new JSONObject(json == null ? "{}" : json);
+            String action = body.optString("action", "");
+            Intent intent = new Intent(ctx(), GenerationService.class);
+            if ("start".equals(action)) {
+                intent.setAction(GenerationService.ACTION_START);
+                intent.putExtra("assistantName", body.optString("assistantName", "栖间"));
+                intent.putExtra("assistantId", body.optString("assistantId", ""));
+                intent.putExtra("conversationId", body.optString("conversationId", ""));
+                intent.putExtra("messageId", body.optString("messageId", ""));
+                ContextCompat.startForegroundService(ctx(), intent);
+                return true;
+            }
+            if ("stop".equals(action)) {
+                intent.setAction(GenerationService.ACTION_STOP);
+                ctx().startService(intent);
+                return true;
+            }
+        } catch (Exception ignored) { }
+        return false;
     }
 
     @JavascriptInterface
