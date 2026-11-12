@@ -75,6 +75,21 @@
 
 /* ── 顶栏：头像 34 / 名称 16sp / 状态 11sp / 统一 icon button ───────── */
 .shell .chat-header { gap:6px;padding:8px 10px!important;min-height:52px; }
+/* 顶栏：头像 + 助手名贴左上，操作按钮仍靠右；不再三等分居中。 */
+.shell .fullscreen-chat .chat-header {
+  display:flex;align-items:center;justify-content:space-between;
+  grid-template-columns:none;column-gap:0;gap:6px;
+  padding-top:max(8px,calc(var(--app-safe-top) + 6px));
+}
+.shell .fullscreen-chat .chat-header-spacer { display:none; }
+.shell .fullscreen-chat .chat-header-title {
+  flex:1 1 auto;justify-self:auto;justify-content:flex-start;
+  min-width:0;max-width:calc(100% - 128px);gap:8px;padding-left:0;
+}
+.shell .fullscreen-chat .chat-header-title>b { flex:0 1 auto;text-align:left; }
+.shell .fullscreen-chat .chat-header-actions { flex:0 0 auto;justify-self:auto; }
+/* 顶栏下方那行弱状态跟着左对齐，避免名字靠左、状态居中割裂。 */
+.shell .fullscreen-chat .chat-header-subline { text-align:left!important; }
 /* 侧边抽屉贴边把手保留入口，但只留很淡的一道提示。 */
 .shell .mobile-menu-toggle.sidebar-edge-handle { opacity:.3;box-shadow:none;background:var(--primary-soft)!important;color:var(--text-secondary)!important; }
 .shell .chat-avatar { width:34px;height:34px;border-radius:50%;font-size:var(--type-caption); }

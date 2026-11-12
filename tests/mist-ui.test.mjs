@@ -84,6 +84,16 @@ test('默认不再套像素黑白硬边皮肤，Mist 是开箱基础主题', () 
   assert.match(mist, /\.shell \.fullscreen-chat \.compose-box \.send-button/, '发送按钮规则需压过旧的 4 类选择器')
 })
 
+test('聊天顶栏头像 + 助手名靠左上，不再三等分居中', () => {
+  const css = read('src/mist.css')
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header \{[\s\S]*?display:flex;align-items:center;justify-content:space-between/)
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header-spacer \{ display:none; \}/)
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header-title \{[\s\S]*?justify-content:flex-start/)
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header-title>b \{ flex:0 1 auto;text-align:left; \}/)
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header-actions \{ flex:0 0 auto/)
+  assert.match(css, /\.shell \.fullscreen-chat \.chat-header-subline \{ text-align:left!important; \}/)
+})
+
 test('Android 不再全局禁止系统字体缩放，改为 WebView textZoom 承载', () => {
   const main = read('android/app/src/main/java/com/sulzhu/aihome/MainActivity.java')
   assert.doesNotMatch(main, /config\.fontScale\s*=\s*1\.0f/, '不应再把 fontScale 固定为 1')
