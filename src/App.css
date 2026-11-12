@@ -1409,3 +1409,112 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 .shell #subscription-accounts .account-row-menu{display:flex;justify-content:flex-end;gap:6px;padding:6px 2px 4px}
 .shell #subscription-accounts .account-row-menu button{padding:5px 10px!important;border:1px solid #e6ded2!important;border-radius:8px!important;background:#fffaf5!important;box-shadow:none!important;font-size:11px;color:#8a8378;cursor:pointer}
 .shell #subscription-accounts .account-error{margin:12px 0 0;padding:8px 10px;border-radius:9px;background:#fdeeee;color:#a94442;font-size:11px;line-height:1.5}
+
+/* ── v11 视觉统一：简洁半屏面板 / 页面内下拉 / 账号登录 + 模型选择 ─────────
+   放在文件末尾覆盖早期像素主题和旧半屏样式。白底、细线、小圆角、无粗框。 */
+
+/* 模型选择面板 */
+.shell .model-sheet-backdrop{background:rgba(28,24,20,.38)!important}
+.shell .model-sheet{display:flex;flex-direction:column;width:100%;max-width:480px;height:min(74dvh,620px);padding:0 0 max(10px,var(--app-safe-bottom));border:0!important;border-radius:22px 22px 0 0!important;background:#fff!important;box-shadow:0 -12px 34px rgba(30,24,18,.14)!important;overflow:visible;color:#302b26;animation:modelSheetUp .18s ease-out}
+.shell .model-sheet-handle{flex:0 0 auto;display:block;width:36px;height:4px;margin:9px auto 2px;border-radius:999px;background:#e6e0d8}
+.shell .model-sheet-head{flex:0 0 auto;display:grid;grid-template-columns:40px 1fr 40px;align-items:center;padding:2px 14px 10px}
+.shell .model-sheet-head>b{text-align:center;font-size:15px;font-weight:600;color:#302b26}
+.shell .model-sheet-head button{padding:4px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;font-size:20px;line-height:1;color:#8e867b;cursor:pointer}
+.shell button.model-sheet-setup{font-size:16px}
+.shell .model-sheet-search{height:40px;margin:0 16px 10px;padding:0 12px!important;gap:8px;border:0!important;border-radius:12px!important;background:#f6f4f1!important;color:#9a9186;box-shadow:none!important}
+#model-sheet-search-input{font-size:13px;color:#302b26!important}
+#model-sheet-search-input::placeholder{color:#a9a196}
+.shell .model-sheet-search button{font-size:16px;color:#9a9186}
+/* 密钥：页面内自定义下拉，不再弹系统白方框 */
+.shell .model-sheet-keyrow{position:relative;z-index:6;flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:0 18px 10px}
+.shell .model-sheet-keylabel{flex:0 0 auto;font-size:11px;color:#a0988c}
+.shell .model-sheet-keyselect{position:relative;flex:1;min-width:0}
+.shell button.model-sheet-keytrigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;min-height:30px;padding:5px 12px!important;border:1px solid #eeeae4!important;border-radius:999px!important;background:#fff!important;box-shadow:none!important;font-size:11px;color:#6f665c;text-align:left;cursor:pointer}
+.shell button.model-sheet-keytrigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell button.model-sheet-keytrigger>i{font-style:normal;font-size:13px;color:#a0988c}
+.shell .model-sheet-keymenu{position:absolute;right:0;top:calc(100% + 6px);width:min(300px,86vw);max-height:240px;overflow-y:auto;padding:5px;border:1px solid #eeeae4!important;border-radius:14px!important;background:#fff!important;box-shadow:0 10px 28px rgba(30,24,18,.16)!important;z-index:30}
+.shell button.model-sheet-keyoption{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:9px 10px!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#4b443c;text-align:left;cursor:pointer}
+.shell button.model-sheet-keyoption span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell button.model-sheet-keyoption.active{background:#f8efe9!important;color:#8b593b!important;font-weight:600}
+.shell button.model-sheet-keyoption>b{flex:0 0 auto;color:#8b593b;font-size:13px}
+/* 模型列表 */
+.shell .model-sheet-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 16px 6px}
+.shell .model-sheet-group>h4{display:flex;align-items:center;gap:7px;margin:12px 4px 6px;font-size:11px;font-weight:500;letter-spacing:0;color:#9a9186}
+.shell .model-sheet-group>h4 em{font-style:normal;font-size:9.5px;padding:2px 7px;border-radius:999px;background:#eaf4ee;color:#3f7a5a}
+.shell .model-sheet-row{position:relative;display:flex;align-items:center;gap:2px;margin:2px 0;padding:0 4px;border:0!important;border-radius:12px;transition:background .15s}
+.shell .model-sheet-row.selected{background:#faf4ef!important}
+.shell .model-sheet-row.selected:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:999px;background:#8b593b}
+.shell button.model-sheet-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:9px 6px!important;border:0!important;border-radius:12px!important;background:transparent!important;box-shadow:none!important;text-align:left;color:inherit!important}
+.shell .model-sheet-avatar{flex:0 0 auto;display:grid;place-items:center;width:32px;height:32px;border:0!important;border-radius:10px;background:#f2eee9;color:#6b5b4d;font-size:13px;font-weight:600}
+.shell .model-sheet-avatar.from-sub{background:#eaf4ee;color:#3f7a5a}
+.shell .model-sheet-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.shell .model-sheet-main>b{font-size:13px;font-weight:500;color:#302b26;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .model-sheet-main>small{font-size:10px;color:#a0988c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .model-sheet-badge{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#eaf4ee;color:#3f7a5a;font-size:9.5px}
+.shell .model-sheet-check{flex:0 0 auto;font-size:13px;color:#8b593b}
+.shell button.model-sheet-fav{flex:0 0 auto;width:30px;height:30px;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;color:#c8c0b6;font-size:17px;line-height:1;cursor:pointer}
+.shell button.model-sheet-fav.on{color:#b4644d}
+.shell .model-sheet-filter{flex:0 0 auto;display:flex;gap:7px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:10px 16px 6px;border-top:1px solid #f3efe9}
+.shell .model-sheet-filter::-webkit-scrollbar{display:none}
+.shell .model-sheet-filter button{flex:0 0 auto;padding:6px 13px!important;border:0!important;border-radius:999px!important;background:#f6f4f1!important;box-shadow:none!important;font-size:11px;color:#8e867b;white-space:nowrap;cursor:pointer}
+.shell .model-sheet-filter button.active{background:#8b593b!important;color:#fff!important}
+.shell .model-sheet-empty{margin:34px 8px;text-align:center;font-size:12px;line-height:1.8;color:#9a9186}
+
+/* 统一简洁下拉（替换原生 select） */
+.soft-select{position:relative;display:inline-flex;min-width:0;max-width:100%}
+.soft-select>button.soft-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;min-height:30px;padding:5px 11px!important;border:1px solid #e8e2da!important;border-radius:10px!important;background:#fffdfa!important;box-shadow:none!important;font-size:11.5px;color:#4b443c;text-align:left;cursor:pointer}
+.soft-select>button.soft-select-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.soft-select>button.soft-select-trigger>i{font-style:normal;font-size:13px;color:#a0988c}
+.soft-select-menu{position:absolute;left:0;top:calc(100% + 5px);min-width:100%;max-width:min(300px,86vw);max-height:230px;overflow-y:auto;padding:5px;border:1px solid #eeeae4!important;border-radius:13px!important;background:#fff!important;box-shadow:0 10px 26px rgba(30,24,18,.16)!important;z-index:200}
+.soft-select-menu button.soft-select-option{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:8px 10px!important;border:0!important;border-radius:9px!important;background:transparent!important;box-shadow:none!important;font-size:11.5px;color:#4b443c;text-align:left;white-space:nowrap;cursor:pointer}
+.soft-select-menu button.soft-select-option span{overflow:hidden;text-overflow:ellipsis}
+.soft-select-menu button.soft-select-option.active{background:#f8efe9!important;color:#8b593b!important;font-weight:600}
+.soft-select-menu button.soft-select-option:disabled{opacity:.45;cursor:default}
+.soft-select-menu button.soft-select-option>b{flex:0 0 auto;color:#8b593b}
+.soft-select-menu .soft-select-empty{margin:8px;font-size:11px;color:#9a9186}
+
+/* 账号登录面板：同一套白底细线；新增模型选择区 */
+.account-login-layer{background:rgba(28,24,20,.38)!important}
+.shell #subscription-accounts.account-login-sheet{min-height:auto;max-height:84vh;padding:0 18px calc(20px + var(--native-safe-bottom,0px));border:0!important;border-radius:22px 22px 0 0!important;background:#fff!important;box-shadow:0 -12px 34px rgba(30,24,18,.14)!important}
+.shell #subscription-accounts .account-sheet-head{grid-template-columns:40px 1fr 40px;padding:4px 0 8px}
+.shell #subscription-accounts .account-sheet-head>b{font-size:15px;color:#302b26}
+.shell #subscription-accounts button.account-sheet-close{font-size:22px;color:#8e867b}
+.shell #subscription-accounts .account-sheet-lead{margin:0 0 12px;font-size:11px;line-height:1.6;color:#9a9186;text-align:center}
+.shell #subscription-accounts .account-tabs{gap:6px;padding:0 0 12px}
+.shell #subscription-accounts button.account-tab{padding:6px 13px!important;background:#f6f4f1!important;color:#8e867b!important;font-size:11.5px}
+.shell #subscription-accounts button.account-tab.active{background:#8b593b!important;color:#fff!important;font-weight:600}
+.shell #subscription-accounts .account-rows{gap:9px;padding-top:12px;border-top:1px solid #f3efe9}
+.shell #subscription-accounts .account-row{gap:11px;padding:11px 12px;border:1px solid #eeeae4!important;border-radius:13px!important;background:#fff!important}
+.shell #subscription-accounts .account-mark{width:34px;height:34px;border-radius:10px;background:#f2eee9;color:#6b5b4d;font-size:17px}
+.shell #subscription-accounts .account-mark.mark-gpt{background:#eaf4ee;color:#3f7a5a}
+.shell #subscription-accounts .account-mark.mark-claude{background:#fbeee6;color:#b4644d}
+.shell #subscription-accounts .account-mark.mark-grok{background:#eeeff2;color:#4b443c}
+.shell #subscription-accounts .account-row-text>b{font-size:13.5px;color:#302b26}
+.shell #subscription-accounts .account-row-text>small{font-size:10.5px;color:#a0988c}
+.shell #subscription-accounts button.account-login-btn{min-width:82px;padding:7px 12px!important;border:0!important;border-radius:999px!important;background:#8b593b!important;color:#fff!important;font-size:11.5px;font-weight:500}
+.shell #subscription-accounts button.account-login-btn.done{background:#eaf4ee!important;color:#3f7a5a!important}
+.shell #subscription-accounts .account-row-links{display:flex;align-items:center;gap:6px;padding:6px 2px 0}
+.shell #subscription-accounts .account-row-links button{padding:4px 10px!important;border:0!important;border-radius:999px!important;background:#f6f4f1!important;box-shadow:none!important;font-size:10.5px;color:#8e867b;cursor:pointer}
+.shell #subscription-accounts .account-row-links button.active{background:#f8efe9!important;color:#8b593b!important}
+.shell #subscription-accounts .account-models{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding:11px;border:1px solid #eeeae4!important;border-radius:13px!important;background:#fcfaf8!important}
+.shell #subscription-accounts .account-models-lead{margin:0;font-size:10px;line-height:1.6;color:#9a9186}
+.shell #subscription-accounts .account-model-chips{display:flex;flex-wrap:wrap;gap:6px}
+.shell #subscription-accounts button.account-model-chip{padding:5px 10px!important;border:1px solid #eeeae4!important;border-radius:999px!important;background:#fff!important;box-shadow:none!important;font-size:10.5px;color:#6f665c;cursor:pointer}
+.shell #subscription-accounts button.account-model-chip.on{border-color:#cfe3d6!important;background:#eaf4ee!important;color:#3f7a5a!important}
+.shell #subscription-accounts .account-model-actions{display:flex;gap:6px;margin-top:2px}
+.shell #subscription-accounts .account-model-actions input,.shell #subscription-accounts .account-model-actions button{padding:6px 9px!important;border:1px solid #eeeae4!important;border-radius:9px!important;background:#fff!important;box-shadow:none!important;font-size:10.5px;color:#6f665c;box-sizing:border-box}
+.shell #subscription-accounts .account-model-actions input{flex:1;min-width:0}
+.shell #subscription-accounts .account-model-actions button{flex:0 0 auto;white-space:nowrap;cursor:pointer}
+.shell #subscription-accounts .account-note{margin:12px 2px 0;padding:8px 10px;border-radius:10px;background:#f6f4f1;color:#6f665c;font-size:10.5px;line-height:1.6}
+.shell #subscription-accounts .account-error{margin:10px 2px 0;padding:8px 10px;border-radius:10px;background:#fdeeee;color:#a94442;font-size:10.5px;line-height:1.5}
+.shell #subscription-accounts .account-row-menu button{border:1px solid #eeeae4!important;border-radius:999px!important;background:#fff!important;font-size:10.5px;color:#8e867b}
+
+/* 其余组件里残留的原生 select：控件外观统一，去掉老式粗框 */
+.shell select{appearance:none!important;-webkit-appearance:none!important;padding:6px 28px 6px 10px!important;border:1px solid #e8e2da!important;border-radius:10px!important;background-color:#fffdfa!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%23a0988c' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 9px center!important;box-shadow:none!important;font-size:11.5px;color:#4b443c}
+.shell select:disabled{opacity:.5}
+
+/* 换成 SoftSelect 后，旧规则里针对 select 元素的外框不要再加到外层容器上，避免双框 */
+.shell .room-person-switch .room-person-select.soft-select,
+.shell .connection-person .soft-select,
+.shell .settings-screen .vendor-key-row .soft-select.vendor-key-role{border:0!important;background:transparent!important;padding:0!important;max-width:none!important;box-shadow:none!important}
+.shell .room-person-switch .room-person-select.soft-select>button.soft-select-trigger{max-width:150px}

@@ -133,13 +133,13 @@ function normalizeModels(raw, fallback) {
   )
   const list = (Array.isArray(fallback) ? fallback : []).map((name) => {
     const s = saved.get(name)
-    return { id: name, name: str(s?.name) || name, selected: !!(s && s.selected) }
+    return { id: name, name: str(s?.name) || name, selected: !!(s && s.selected), source: str(s?.source) }
   })
   // 用户自己追加 / 已勾选的模型要保留；旧版本写死、且从未勾选过的预置模型不再出现。
   for (const [id, m] of saved) {
     if (list.some((x) => x.id === id)) continue
     if (!m.selected && LEGACY_PRESET_MODELS.has(id)) continue
-    list.push({ id, name: str(m.name) || id, selected: !!m.selected })
+    list.push({ id, name: str(m.name) || id, selected: !!m.selected, source: str(m.source) })
   }
   return list
 }
@@ -160,6 +160,7 @@ export function normalizeVendors(raw) {
       apiPath: s ? str(s.apiPath) : '',
       modelsPath: s ? str(s.modelsPath) : '',
       builtin: true,
+      subscription: s ? !!s.subscription : false,
       keys: s ? normalizeKeys(s.keys) : [],
       models: s ? normalizeModels(s.models, v.models) : [],
     }
@@ -173,6 +174,7 @@ export function normalizeVendors(raw) {
       apiPath: str(v.apiPath),
       modelsPath: str(v.modelsPath),
       builtin: false,
+      subscription: !!v.subscription,
       keys: normalizeKeys(v.keys),
       models: normalizeModels(v.models, []),
     }))

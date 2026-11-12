@@ -1,5 +1,5 @@
 export type VendorKey = { id: string; label: string; value: string; role: 'primary' | 'backup' }
-export type VendorModel = { id: string; name: string; selected: boolean }
+export type VendorModel = { id: string; name: string; selected: boolean; source?: string }
 export type Vendor = {
   id: string
   name: string
@@ -7,6 +7,7 @@ export type Vendor = {
   apiPath?: string
   modelsPath?: string
   builtin: boolean
+  subscription?: boolean
   keys: VendorKey[]
   models: VendorModel[]
 }
