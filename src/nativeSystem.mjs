@@ -36,6 +36,12 @@ export function openSystemSetting(id, ok = false, sdk = 0) {
   try { b.open(JSON.stringify({ key: String(id), action, ok: !!ok })); return true } catch { return false }
 }
 
+export function setGenerationForeground(payload) {
+  const b = bridge()
+  if (!b || typeof b.generation !== 'function') return false
+  try { return b.generation(JSON.stringify(payload || {})) === true } catch { return false }
+}
+
 export function showSystemNotification(payload) {
   const b = bridge()
   if (!b || typeof b.notify !== 'function' || !payload || !payload.key) return false
