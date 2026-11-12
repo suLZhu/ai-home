@@ -53,6 +53,12 @@ import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFe
 import { pushBackHandler, handleBack as runBackStack } from './backStack.mjs'
 import { App as CapApp } from '@capacitor/app'
 import { loadCustomAssets, saveCustomAssets } from './assetStore.mjs'
+// Android 系统能力：真实状态列表、系统通知、精确闹钟、开机恢复。
+// 桌面没有原生桥时全部静默降级，不影响现有聊天 / 订阅 / 多线路链路。
+import { AndroidSystemSettings } from './AndroidSystemSettings'
+import { channelPlan, notificationPayload, decideNotification, loadNotified, markNotified, routeFromNotificationOpen } from './notificationDispatch.mjs'
+import { buildAlarmPlan } from './taskAlarms.mjs'
+import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered } from './nativeSystem.mjs'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
 
@@ -151,6 +157,11 @@ function useKeyboardViewport(){
 export default function App() {
   useKeyboardViewport()
   const [page, setPage] = useState<Page>('home')
+  // 鉴权状态提前声明：通知点击路由 / 闹钟同步的 effect 依赖数组会立即求值。
+  const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
+  // 冷启动点击通知时会话还没装载：先暂存，等鉴权 / 快照就绪再路由。
+  const authStatusRef = useRef<string>('checking')
+  useEffect(()=>{ authStatusRef.current = authStatus },[authStatus])
   const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>({...DEFAULT_THEME,...read<Partial<ThemePrefs>>('ai-home.themePrefs',DEFAULT_THEME)}))
   const [beautifyPack,setBeautifyPack]=useState<string>(()=>read('ai-home.beautifyPack',DEFAULT_BEAUTIFY_PACK))
   useEffect(()=>{ try{localStorage.setItem('ai-home.beautifyPack',JSON.stringify(beautifyPack))}catch{ /* private mode */ } },[beautifyPack])
@@ -235,6 +246,125 @@ export default function App() {
   // Web 端无 backButton 事件，此 effect 静默不生效，不影响浏览器行为。
   const chatOpenRef = useRef(chatOpen)
   useEffect(()=>{ chatOpenRef.current = chatOpen },[chatOpen])
+  // ── Android 系统能力：通知去重、点击直达会话、原生闹钟同步 ─────────────────
+  const personRef = useRef(person)
+  useEffect(()=>{ personRef.current = person },[person])
+  const pageRef = useRef(page)
+  useEffect(()=>{ pageRef.current = page },[page])
+  const assistantsRef = useRef(assistants)
+  useEffect(()=>{ assistantsRef.current = assistants },[assistants])
+  const charactersRef = useRef(characters)
+  useEffect(()=>{ charactersRef.current = characters },[characters])
+  const pendingNotificationRef = useRef<any>(null)
+  type SystemHandlers = { onOpen:(payload:any)=>void; onTaskFire:(runId:string)=>void; onStatusChanged:()=>void }
+  const systemHandlersRef = useRef<SystemHandlers>({ onOpen:()=>{}, onTaskFire:()=>{}, onStatusChanged:()=>{} })
+  // 原生闹钟触发时，若 WebView 进程还活着就立刻补跑一次本地任务结算。
+  const localTaskTickRef = useRef<()=>void>(()=>{})
+  const [alarmSyncTick, setAlarmSyncTick] = useState(0)
+  // 「成功写入聊天」是唯一允许发通知的入口；重复调用也不会发第二条。
+  const notifyAfterWrite = useCallback((input: Record<string, unknown>) => {
+    const who = String(input.person || '')
+    const payload = notificationPayload({
+      ...input,
+      label: assistantsRef.current.find(a => a.id === who)?.name || '',
+      avatar: charactersRef.current[who]?.avatar || '',
+    })
+    const decision = decideNotification({
+      payload,
+      activePerson: personRef.current,
+      activeConversationId: activeConversationIdsRef.current[who] || '',
+      page: pageRef.current,
+      chatOpen: chatOpenRef.current,
+      visible: typeof document !== 'undefined' && !document.hidden,
+      notified: loadNotified(localStorage),
+      // 锁屏期间原生闹钟已弹过的 runId：恢复前台补写聊天时不再弹第二条。
+      nativeDelivered: readNativeDelivered(),
+    })
+    if (!decision.notify) return false
+    const sent = showSystemNotification(payload)
+    // 去重集合记的是「通知发出的时间」，不是消息产生的时间：补跑几天前的任务
+    // 不会因为这个时间戳过期而在后续轮询里重复弹。
+    if (sent) markNotified(localStorage, payload.key, Date.now())
+    return sent
+  }, [])
+  // 每次渲染后把最新状态灌进处理器引用，避免原生回调拿到过期的会话状态。
+  useEffect(() => {
+    const activateConversation = (personId: string, conversationId: string) => {
+      setPerson(personId); setPage('room'); setChatOpen(true); setActiveTool(''); setToast(null)
+      if (!conversationId) return
+      const target = (conversationsRef.current[personId] || []).find(c => c.id === conversationId)
+      if (!target) return
+      const prevActive = activeConversationIdsRef.current[personId]
+      if (prevActive === target.id) return
+      setConversations(old => ({ ...old, [personId]: (old[personId] || []).map(c => c.id === prevActive ? { ...c, messages: messages[personId] || [], updatedAt: new Date().toISOString() } : c) }))
+      setActiveConversationIds(old => ({ ...old, [personId]: target.id }))
+      setMessages(old => ({ ...old, [personId]: target.messages || [] }))
+    }
+    systemHandlersRef.current = {
+      onOpen: (payload) => {
+        const route = routeFromNotificationOpen(payload, assistantsRef.current.map(a => a.id))
+        if (!route) return
+        if (authStatusRef.current !== 'signedIn') { pendingNotificationRef.current = payload; return }
+        activateConversation(route.person, route.conversationId)
+      },
+      onTaskFire: () => localTaskTickRef.current(),
+      onStatusChanged: () => {},
+    }
+  })
+  useEffect(() => {
+    const unregister = registerSystemHandlers({
+      onOpen: (payload) => systemHandlersRef.current.onOpen(payload),
+      onTaskFire: (runId) => systemHandlersRef.current.onTaskFire(runId),
+      onStatusChanged: () => systemHandlersRef.current.onStatusChanged(),
+    })
+    const pending = consumePendingOpen()
+    if (pending) pendingNotificationRef.current = pending
+    const onVisible = () => { const p = consumePendingOpen(); if (p) systemHandlersRef.current.onOpen(p) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { unregister(); document.removeEventListener('visibilitychange', onVisible) }
+  }, [])
+  // 冷启动时 WebView 尚未装载完会话，等本地/云端状态就绪再跳转。
+  useEffect(() => {
+    if (authStatus !== 'signedIn' || !pendingNotificationRef.current) return
+    const timer = window.setTimeout(() => {
+      const payload = pendingNotificationRef.current
+      pendingNotificationRef.current = null
+      if (payload) systemHandlersRef.current.onOpen(payload)
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [authStatus])
+  // 动态注册通知渠道：每新增一位助手就多一条渠道，原生层不写死人物。
+  useEffect(() => {
+    if (!systemBridgeAvailable()) return
+    const names = Object.fromEntries(assistants.map(a => [a.id, a.name]))
+    syncSystemChannels(channelPlan(assistants.map(a => a.id), id => names[id] || id, id => characters[id]?.avatar || ''))
+  }, [assistants, characters])
+  // 把仍有效的本地定时计划交给原生 AlarmManager（精确权限缺失时原生自动降级）。
+  useEffect(() => {
+    if (authStatus !== 'signedIn' || !systemBridgeAvailable()) return
+    let cancelled = false
+    const sync = async () => {
+      const collected: any[] = []
+      for (const a of assistantsRef.current) {
+        try {
+          const r = await apiFetch('/api/tasks?person=' + encodeURIComponent(a.id))
+          if (!r.ok) continue
+          const data: any = await r.json()
+          if (Array.isArray(data.tasks)) collected.push(...data.tasks)
+        } catch { /* 离线时保留上一份已注册的闹钟计划 */ }
+      }
+      if (cancelled) return
+      // 原生在锁屏 / 后台直接弹提醒，拿不到 React 里的助手名，这里随计划一起下发。
+      const names = Object.fromEntries(assistantsRef.current.map(a => [a.id, a.name]))
+      const plan = buildAlarmPlan(collected, Date.now()).map(p => ({ ...p, assistantName: names[p.assistantId] || '' }))
+      syncSystemAlarms(plan)
+    }
+    void sync()
+    const timer = window.setInterval(() => void sync(), 5 * 60 * 1000)
+    const onFocus = () => void sync()
+    window.addEventListener('focus', onFocus)
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
+  }, [authStatus, assistants, alarmSyncTick])
   useEffect(()=>{
     let cancelled = false
     const listener = CapApp.addListener('backButton', () => {
@@ -277,7 +407,6 @@ export default function App() {
     return ()=>{document.removeEventListener('pointerdown',onDown);unregister()}
   },[sidebarOpen])
   const [funShortcut,setFunShortcut]=useState('')
-  const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   // 云端凭证失效后自动切回本地模式的一次性横幅文案（非空即显示，可手动关闭）。
   const [fallbackNotice, setFallbackNotice] = useState('')
   // 首启动不再弹「连接服务器」向导：没有配置地址时默认进入本地模式
@@ -306,6 +435,12 @@ export default function App() {
         if(inboxInitialized.current){
           const fresh=items.filter(m=>!seenInbox.current.has(m.id))
           if(fresh.length)setToast(fresh[0])
+          // 主动消息成功进入收件箱后发系统通知。任务类走「写回聊天」入口统一发，
+          // 否则同一 runId 会因为 task_notice / task_result 两条收件箱行弹两次。
+          for(const m of fresh){
+            if(m.kind==='task_result'||m.kind==='task_notice')continue
+            notifyAfterWrite({kind:m.kind||'message',person:m.person,messageId:m.id,text:m.content,at:Date.parse(m.created_at)||Date.now()})
+          }
         }
         items.forEach(m=>seenInbox.current.add(m.id))
         inboxInitialized.current=true
@@ -313,9 +448,9 @@ export default function App() {
       }catch{/* offline polling retries */}
     }
     void poll()
-    const timer=window.setInterval(poll,12000)
-    return()=>{alive=false;window.clearInterval(timer)}
-  },[authStatus])
+        const timer=window.setInterval(poll,12000)
+        return()=>{alive=false;window.clearInterval(timer)}
+      },[authStatus,notifyAfterWrite])
   useEffect(()=>{if(!toast)return;const timer=window.setTimeout(()=>setToast(null),6500);return()=>window.clearTimeout(timer)},[toast])
   async function openInboxMessage(message:InboxMessage) {
     setPerson(message.person);setPage('room');setChatOpen(true);setActiveTool('');setToast(null)
@@ -733,18 +868,24 @@ export default function App() {
           const who=String(f.person||''),runId=String(f.runId||''),content=String(f.answer||'')
           if(!ASSISTANT_PEOPLE.includes(who)||!runId||!content)continue
           updateActiveConversationMessages(who,prev=>prev.some(x=>x&&x.taskRunId===runId)?prev:[...prev,{role:'assistant' as const,content,id:'local-task-'+runId,taskRunId:runId,contextNote:'本地主动任务'}])
+          // 只有写回聊天之后才允许发通知；runId 与原生闹钟共用同一个去重键。
+          notifyAfterWrite({kind:'task',person:who,runId,text:content,conversationId:String(f.conversationId||activeConversationIdsRef.current[who]||''),at:Date.parse(f.runAt)||Date.now()})
         }
+        if(fired.length)setAlarmSyncTick(t=>t+1)
         // 提醒要尽快落到本机快照，别等防抖窗口。
         firstDirtyAtRef.current=Date.now()-CLOUD_FLUSH_MAX_MS
       }catch{/* 调度失败不影响聊天，下一个 tick 自动重试 */}
     }
+    // 原生层在 WebView 进程仍存活时可以回调 __aihomeTaskFire 立刻补跑一次结算；
+    // 进程被冻结时则由原生闹钟先发通知，回前台后这里再写回聊天且不重复通知。
+    localTaskTickRef.current=()=>void tick()
     void tick()
     const timer=window.setInterval(()=>void tick(),15000)
     const onVisible=()=>{if(!document.hidden)void tick()}
     document.addEventListener('visibilitychange',onVisible)
     window.addEventListener('focus',onVisible)
-    return()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onVisible)}
-  },[authStatus])
+        return()=>{alive=false;window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onVisible)}
+      },[authStatus,notifyAfterWrite])
   // 定时任务结果消费：kind='task_result' 的收件箱行凭信封里的 conversationId
   // 精确写回原会话——不建新会话、不污染用户当前正看的聊天视图。幂等判定读的是
   // conversations 持久化状态里是否已含该 runId（decideTaskConsumption），不是
@@ -760,6 +901,8 @@ export default function App() {
         const { runId, title, answer } = decision.envelope
         const conversationId = decision.conversationId
         updateActiveConversationMessages(m.person, prev => prev.some(x => x && x.taskRunId === runId) ? prev : [...prev, { role: 'assistant', content: answer, id: 'task-' + runId, taskRunId: runId, contextNote: title ? '定时任务：' + title : '定时任务结果' }], conversationId)
+        // 云端任务结果写回原会话后发通知；runId 与本地任务、原生闹钟是同一个稳定键。
+        notifyAfterWrite({kind:'task',person:m.person,runId,text:answer,conversationId,messageId:m.id,at:Date.parse(m.created_at)||Date.now()})
         pendingTaskAcks.current.set(m.id, { runId, person: m.person, conversationId })
         // 把防抖哨兵拨到已超期：任务结果必须尽快落盘，之后才能确认已读。
         firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
@@ -771,7 +914,7 @@ export default function App() {
       // skip_no_conversation / skip_missing_conversation / skip_invalid：
       // 不写会话（绝不自动建会话）、不确认已读，消息保留在收件箱里可追溯。
     }
-  }, [inbox, cloudReady, authStatus])
+  }, [inbox, cloudReady, authStatus, notifyAfterWrite])
 
   // options.conversationId：缓发 flush 时把回写锁到「队列所在的会话」（用户此刻可能已切走）。
   // options.queuedIds：这些消息的气泡在排队时就已显示；构建请求时把它们从历史中排除，
@@ -1396,7 +1539,7 @@ export default function App() {
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
       {page === 'me' && <MyRoom roomName={roomName} setRoomName={setRoomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} chatPool={chatPool} setChatPool={setChatPool} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
@@ -2470,7 +2613,7 @@ export function ProjectManager({projects,setProjects}:{projects:ProjectRecord[];
  return <div className="project-manager"><div className="project-manager-head"><div><h3>项目管理</h3><p className="muted">把正在推进的事情放在一起，完成后可以归档。</p></div><span>{projects.filter(p=>p.status==='进行中').length} 个进行中</span></div><div className="project-controls"><input className="memory-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索项目名称、描述……"/><div className="library-filter-tabs"><button className={!showArchived?'active':''} onClick={()=>setShowArchived(false)} type="button">进行中</button><button className={showArchived?'active':''} onClick={()=>setShowArchived(true)} type="button">已归档</button></div></div><form className="project-create" onSubmit={add}><h4>新建项目</h4><label>项目名称<input required value={title} onChange={e=>setTitle(e.target.value)} placeholder="例如：AI 小家前端改造"/></label><label>项目分类<SoftSelect value={category} onChange={setCategory} options={['个人项目','前端开发','生活计划','研究与学习','其他'].map(x=>({value:x,label:x}))}/></label><label>项目备注<textarea rows={2} value={description} onChange={e=>setDescription(e.target.value)} placeholder="目标、下一步或需要记住的事项"/></label><button disabled={!title.trim()}>创建项目</button></form><div className="project-list">{visible.length===0?<p className="muted">{showArchived?'还没有归档项目。':'还没有进行中的项目，创建第一张项目卡吧。'}</p>:visible.map(p=><article className="project-card" key={p.id}><div className="project-card-title"><span className="project-dot"/><b>{p.title}</b><small>{p.category}</small><button type="button" className="project-expand" onClick={()=>toggleExpanded(p.id)}>{expanded.includes(p.id)?'收起详情 ↑':'任务与详情 ↓'}</button></div>{p.description&&<p>{p.description}</p>}<div className="project-progress"><div><span>任务进度</span><b>{(p.tasks||[]).filter(t=>t.done).length}/{(p.tasks||[]).length}</b></div><div className="project-progress-track"><span style={{width:((p.tasks||[]).length?((p.tasks||[]).filter(t=>t.done).length/(p.tasks||[]).length)*100:0)+'%'}}/></div></div>{expanded.includes(p.id)&&<div className="project-detail"><div className="project-detail-heading"><b>任务清单</b><small>勾选后自动更新进度</small></div>{(p.tasks||[]).map(t=><label className="project-task" key={t.id}><input type="checkbox" checked={t.done} onChange={e=>patchProject(p.id,{tasks:(p.tasks||[]).map(x=>x.id===t.id?{...x,done:e.target.checked}:x)})}/><span className={t.done?'done':''}>{t.text}</span><button type="button" aria-label="删除任务" onClick={()=>patchProject(p.id,{tasks:(p.tasks||[]).filter(x=>x.id!==t.id)})}>×</button></label>)}<form className="project-add-task" onSubmit={e=>{e.preventDefault();const text=(taskDrafts[p.id]||'').trim();if(!text)return;patchProject(p.id,{tasks:[...(p.tasks||[]),{id:crypto.randomUUID(),text,done:false}]});setTaskDrafts(old=>({...old,[p.id]:''}))}}><input value={taskDrafts[p.id]||''} onChange={e=>setTaskDrafts(old=>({...old,[p.id]:e.target.value}))} placeholder="添加一个具体任务…"/><button disabled={!(taskDrafts[p.id]||'').trim()}>添加</button></form><form className="project-edit-form" onSubmit={e=>{e.preventDefault();patchProject(p.id,{title:editTitle.trim()||p.title,description:editDescription,nextStep:editNextStep});setEditing(null)}}><b>下一步行动</b><input value={editing===p.id?editNextStep:(p.nextStep||'')} onFocus={()=>{if(editing!==p.id){setEditing(p.id);setEditTitle(p.title);setEditDescription(p.description);setEditNextStep(p.nextStep||'')}}} onChange={e=>setEditNextStep(e.target.value)} placeholder="接下来最重要的一步是什么？"/>{editing===p.id&&<><label>项目名称<input value={editTitle} onChange={e=>setEditTitle(e.target.value)}/></label><label>项目备注<textarea rows={2} value={editDescription} onChange={e=>setEditDescription(e.target.value)}/></label><button>保存项目修改</button><button type="button" onClick={()=>setEditing(null)}>取消</button></>}</form></div>}<footer><small>更新于 {new Date(p.updatedAt).toLocaleDateString('zh-CN')}</small><div>{p.status==='进行中'?<button type="button" onClick={()=>patchProject(p.id,{status:'已归档'})}>归档</button>:<button type="button" onClick={()=>patchProject(p.id,{status:'进行中'})}>恢复</button>}<button type="button" onClick={()=>{if(window.confirm('确定删除项目「'+p.title+'」？'))setProjects(old=>old.filter(x=>x.id!==p.id))}}>删除</button></div></footer></article>)}</div></div>
 }
 
-function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,chatPool,setChatPool,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;onApiBaseApplied?:()=>void}) {
+function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,setBeautifyPack,customAssets,setCustomAssets,conversations,modelConfig,setModelConfig,apiKey,setApiKey,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,chatPool,setChatPool,systemPeople,avatarOf,onApiBaseApplied}:{onLogout:()=>void;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;beautifyPack:string;setBeautifyPack:(v:string)=>void;customAssets:CustomAssets;setCustomAssets:(v:CustomAssets)=>void;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>;apiKey:Record<Person,string>;setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;chatPool:ChatPool;setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void}) {
   const [section,setSection]=useState('')
   // Android 返回键：二级页先退回一级，一级页再退回设置首页。
   useEffect(()=>{
@@ -2497,11 +2640,11 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.length):section==='world'?'world':section==='mcp'?'mcp':'') as ''|'model'|'world'|'mcp'
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
-  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onClose={()=>setSection('')}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'system',icon:'◉',title:'Android 系统能力',desc:'通知 / 后台 / 精确定时',meta:'状态与权限'}]
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onClose={()=>setSection('')}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
-// ── Kelivo 风格设置首页：一级只有 5 项，主题美化 / 供应商各自再分二级 ──────────
+// ── Kelivo 风格设置首页：一级 6 项，主题美化 / 供应商各自再分二级 ─────────────
 // 世界书、MCP 直接进对应资源；数据与管理收起用量、名称、日志等低频项。
 type KelivRow = { id:string; icon:string; label:string; keywords?:string; section?:string; classic?:boolean }
 function KelivoSettingsHome({onSelect,onClassic,modelProfiles,worldEntries,cloudStatus}:{
@@ -2515,6 +2658,7 @@ function KelivoSettingsHome({onSelect,onClassic,modelProfiles,worldEntries,cloud
       {id:'world',icon:'▤',label:'世界书',keywords:'设定 条目 关键词 资源库 全局条目 勾选池 001 002',section:'world'},
       {id:'mcp',icon:'⌘',label:'MCP',keywords:'服务 工具 服务器 连接 资源库 工具权限 勾选池 001 002',section:'mcp'},
       {id:'data',icon:'☁',label:'数据与管理',keywords:'云同步 本地 备份 时区 登录 退出 用量 统计 开发者 诊断 黑匣子 日志 关于 主动任务 自主生活 工具调用看板 技能库',section:'data'},
+      {id:'system',icon:'◉',label:'Android 系统能力',keywords:'通知 权限 锁屏 后台 电池优化 悬浮窗 精确定时 闹钟 开机 自启动 系统',section:'system'},
     ]},
     {title:'更多',rows:[
       {id:'classic',icon:'⟲',label:'切换回经典设置',keywords:'卡片 网格 旧界面',classic:true},

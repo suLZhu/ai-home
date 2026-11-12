@@ -2,6 +2,7 @@ package com.sulzhu.aihome;
 
 import android.annotation.SuppressLint;
 import android.app.Dialog;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -77,10 +78,21 @@ public class MainActivity extends BridgeActivity {
     private boolean oauthHandled = false;
     private final ExecutorService oauthExecutor = Executors.newSingleThreadExecutor();
 
+    // Android 系统能力桥：通知 / 渠道 / 精确定时 / 开机恢复 / 权限状态。
+    private SystemBridge systemBridge;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setupEdgeToEdge();
+        if (systemBridge != null) systemBridge.handleOpenIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (systemBridge != null) systemBridge.handleOpenIntent(intent);
     }
 
     @Override
@@ -88,6 +100,14 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         // 从后台回来 / 切主题后重新灌一次，防止页面重建丢失内联变量。
         injectSafeArea();
+        if (systemBridge != null) systemBridge.onResume();
+    }
+
+    /** 供 SystemBridge 复用：主 WebView 存在时同步执行一小段 JS。 */
+    void evalJs(String js) {
+        WebView webView = (getBridge() != null) ? getBridge().getWebView() : null;
+        if (webView == null) return;
+        webView.post(() -> webView.evaluateJavascript(js, null));
     }
 
     @SuppressLint("AddJavascriptInterface")
@@ -127,6 +147,9 @@ public class MainActivity extends BridgeActivity {
         webView.addJavascriptInterface(new BarBridge(), "AiHomeBars");
         // 账号登录弹层：只对主 WebView 注入；授权页跑在另一个独立 WebView 里。
         webView.addJavascriptInterface(new OAuthBridge(), "AiHomeOAuth");
+        // 系统能力：状态检测、通知、渠道、精确定时、开机恢复共用同一个桥。
+        systemBridge = new SystemBridge(this);
+        webView.addJavascriptInterface(systemBridge, "AiHomeSystem");
         // 页面每次加载完成都补一次变量，避免首次 insets 回调早于文档创建。
         getBridge().addWebViewListener(new WebViewListener() {
             @Override
