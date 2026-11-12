@@ -25,6 +25,7 @@ import { injectTimeContext } from './timeContext.mjs'
 import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 import { performSubscriptionLogin } from './subscriptionLogin.mjs'
 import { exchangeOAuthCode } from './subscriptionOAuth.mjs'
+import { runRouteChat } from './chatRouteRunner.mjs'
 
 const password = process.env.AI_HOME_PASSWORD
 if (!password || password.length < 16) {
@@ -416,6 +417,37 @@ const apiServer = createServer(async (req, res) => {
     try {
       // 聊天请求可携带图片 base64，上限放宽到 32 MB。
       const b = await readBody(req, 32 * 1024 * 1024)
+      // 线路模式：前端给同一个逻辑模型配了多条线路时，走共享执行器
+      // （主线路优先 → 只对网络/超时/429/部分 5xx 自动 fallback → 最多 3 次）。
+      // 没有 routes 时沿用下面的老链路，多 KEY 行为与旧客户端完全一致。
+      if (Array.isArray(b.routes) && b.routes.length) {
+        const result = await runRouteChat({
+          routes: b.routes, body: b.body, timeZone: b.timeZone,
+          signal: controller.signal, fetchImpl: fetch,
+        })
+        if (!result.ok) {
+          finished = true
+          return send(res, result.status || 502, { error: result.error, routeReport: result.report })
+        }
+        const upstream = result.upstream
+        res.writeHead(upstream.status, {
+          'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+          'Cache-Control': 'no-cache, no-store',
+          'X-Accel-Buffering': 'no',
+          'X-Route-Used': String(result.routeId || ''),
+          'X-Route-Label': encodeURIComponent(String(result.routeLabel || '')),
+        })
+        if (upstream.body) {
+          try {
+            for await (const chunk of upstream.body) { if (!res.write(chunk)) await new Promise(r => res.once('drain', r)) }
+          } catch {
+            // 流式正文已写出：只结束连接，绝不换线路重生成，避免聊天里出现两遍答案。
+          }
+        }
+        finished = true
+        res.end()
+        return
+      }
       const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
       if (!raw) return send(res, 400, { error: '请先填写 API 地址' })
       if (!/^https?:\/\//i.test(raw)) return send(res, 400, { error: 'API 地址需以 http:// 或 https:// 开头' })

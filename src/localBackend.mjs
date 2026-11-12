@@ -20,6 +20,7 @@ import { readKeyCandidates, isRetryableKeyStatus } from './vendors.mjs'
 import { normalizeLocalTask, makeLocalTask, dueLocalTasks, advanceLocalTask } from './localTasks.mjs'
 import { performSubscriptionLogin } from './subscriptionLogin.mjs'
 import { exchangeOAuthCode } from './subscriptionOAuth.mjs'
+import { runRouteChat } from './chatRouteRunner.mjs'
 
 // ── localStorage 存储层 ─────────────────────────────────────────────────────
 const K = {
@@ -236,9 +237,29 @@ function searchLocalMemory({ person, query, exclude, limit = 5 }) {
 }
 
 // ── /api/chat：直连 OpenAI 兼容接口（CORS 预检已实测放行）─────────────────
+// 线路模式：前端显式配了多条线路时走共享执行器（主线路 → fallback）；
+// 没有 routes 时下面这段老逻辑一个字都不变，老配置零影响。
+async function handleRouteChat(b, init) {
+  const result = await runRouteChat({
+    routes: b.routes,
+    body: b.body,
+    timeZone: b.timeZone,
+    signal: (init && init.signal) || null,
+    fetchImpl: fetch,
+  })
+  if (!result.ok) return json(result.status || 502, { error: result.error, routeReport: result.report })
+  const upstream = result.upstream
+  const headers = new Headers(upstream.headers)
+  headers.set('X-Route-Used', String(result.routeId || ''))
+  headers.set('X-Route-Label', encodeURIComponent(String(result.routeLabel || '')))
+  // 成功即锁定线路：这里开始流式透传，正文写出后不会再回头换线重新生成。
+  return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers })
+}
+
 async function handleChat(init) {
   let b
   try { b = await readBody(init) } catch { return json(400, { error: '请求无效' }) }
+  if (Array.isArray(b.routes) && b.routes.length) return handleRouteChat(b, init)
   const raw = String(b.endpoint || '').trim().replace(/\/+$/, '')
   if (!raw) return json(400, { error: '请先填写 API 地址' })
   if (!/^https?:\/\//i.test(raw)) return json(400, { error: 'API 地址需以 http:// 或 https:// 开头' })

@@ -35,8 +35,14 @@ import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, 
 // 订阅账号：本地持久化归一化；极简账号登录面板单独放一个文件。
 import { SUBSCRIPTION_STORAGE_KEY, normalizeSubscriptions, type SubscriptionAccount } from './subscriptionChannels.mjs'
 import { SubscriptionAccounts } from './SubscriptionAccounts'
+// 统一模型线路层：一个逻辑模型可挂多条线路，主线路优先 + 自动 fallback。
+// 线路配置（可能含内联 Key）只存本机，整包不进云端快照。
+import { logicalModelId, buildRoutePlan, MAX_ROUTE_ATTEMPTS } from './modelRoutes.mjs'
+import { ROUTE_STATE_KEY, normalizeRouteState, activeLogicalId, fixedRouteId, type RouteState } from './routeState.mjs'
+import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
+import { ModelPickerSheet } from './ModelPickerSheet'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
@@ -214,6 +220,10 @@ export default function App() {
   // 订阅账号含 API Key，只存本机；云端快照里永远不含这一项。
   const [subscriptions, setSubscriptions] = useState<SubscriptionAccount[]>(() => normalizeSubscriptions(read<unknown>(SUBSCRIPTION_STORAGE_KEY, [])))
   const [chatPool, setChatPool] = useState<ChatPool>(() => normalizePool(read<unknown>(CHAT_POOL_KEY, null)))
+  // 线路层：线路配置 + 当前选中的逻辑模型 + 按助手手动固定的线路。
+  // 独立于 modelProfiles / bindings 存放，老快照与老配置完全不受影响。
+  const [routeState, setRouteState] = useState<RouteState>(() => normalizeRouteState(read<unknown>(ROUTE_STATE_KEY, null)))
+  const [lastRouteInfo, setLastRouteInfo] = useState('')
   const [projects,setProjects]=useState<ProjectRecord[]>(()=>read('ai-home.projects',[]))
   // 用户配置的 IANA 时区：只影响服务端生成的时间上下文（日期/星期/时间/时段），
   // 不发起任何网络请求。非法或空值由 normalizeTimeZone 回退到 Asia/Shanghai。
@@ -682,6 +692,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('ai-home.worldbook', JSON.stringify(worldbook)), [worldbook])
   useEffect(() => localStorage.setItem('ai-home.mcpConnections', JSON.stringify(mcpConnections)), [mcpConnections])
   useEffect(() => localStorage.setItem(MODEL_PROFILES_KEY, JSON.stringify(modelProfiles)), [modelProfiles])
+  useEffect(() => { try { localStorage.setItem(ROUTE_STATE_KEY, JSON.stringify(routeState)) } catch { /* 私密模式忽略 */ } }, [routeState])
   useEffect(() => localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings)), [bindings])
   useEffect(() => { try { localStorage.setItem(VENDORS_KEY, JSON.stringify(vendors)) } catch { /* 私密模式忽略 */ } }, [vendors])
   useEffect(() => { try { localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(subscriptions)) } catch { /* 私密模式忽略 */ } }, [subscriptions])
@@ -785,7 +796,17 @@ export default function App() {
     const activeChatUrl = activeVendor ? chatRequestUrl(activeVendor) : ''
     const apiKeyCandidates = resolveKeyCandidates(vendors, bindings[target]?.keyId || '', apiKey[target] || '', activeModel.vendorId || '')
     const activeApiKey = apiKeyCandidates[0] || resolveVendorKey(vendors, bindings[target]?.keyId || '') || apiKey[target] || ''
-    if (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim()) {
+    // 统一模型线路层：当前逻辑模型挂了显式线路时，改走「主线路 → 自动 fallback」。
+    // 没有线路就完全沿用上面的老链路（订阅登录 / 模型预设 / 多 KEY 零影响）。
+    const logicalId = activeLogicalId(routeState, target, logicalModelId(activeModel.model || ''))
+    const routePlan = buildRoutePlan({
+      routes: routeState.routes, logicalId, vendors,
+      fallbackKeys: [],
+      binding: { fixedRouteId: fixedRouteId(routeState, target) },
+      maxAttempts: MAX_ROUTE_ATTEMPTS,
+    })
+    const routeMode = routePlan.length > 0
+    if (!routeMode && (!activeModel.endpoint.trim() || !activeModel.model.trim() || !activeApiKey.trim())) {
       setChatError('请先在「设置 → 资源库」添加模型并在聊天窗口「配置」里选用，然后填写 API Key。')
       return 'fail'
     }
@@ -944,9 +965,10 @@ export default function App() {
           // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
           requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
         }))
-        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody})})
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(routeMode?{routes:routePlan}:{})})})
         let response=await chatProxy()
-        if(!response.ok){const detail=await response.text();if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
+        if(!response.ok){const detail=await response.text();if(routeMode){try{const parsed=JSON.parse(detail);if(parsed?.routeReport)setLastRouteInfo(summarizeRouteReport(parsed.routeReport)||String(parsed.error||''))}catch{setLastRouteInfo(detail.slice(0,160))}}if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
+        if(routeMode){const used=response.headers.get('X-Route-Used')||'';const usedLabel=(()=>{try{return decodeURIComponent(response.headers.get('X-Route-Label')||'')}catch{return ''}})();if(used)setLastRouteInfo('实际使用线路：'+(usedLabel||used))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
         while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=thinkPiece;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
@@ -1360,6 +1382,7 @@ export default function App() {
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
          modelProfiles={modelProfiles} bindings={bindings} setBindings={setBindings}
          vendors={vendors} chatPool={chatPool} setChatPool={setChatPool}
+         routeState={routeState} setRouteState={setRouteState} lastRouteInfo={lastRouteInfo}
          activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
@@ -1474,6 +1497,7 @@ function Room(props: {
   conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
   modelProfiles:ModelProfile[], bindings:Record<Person,PersonBinding>, setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>,
   vendors:Vendor[], chatPool:ChatPool, setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>,
+  routeState:RouteState, setRouteState:React.Dispatch<React.SetStateAction<RouteState>>, lastRouteInfo:string,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
   memory: Record<Person,string>, setMemory: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
   prompt: Record<Person,string>, setPrompt: React.Dispatch<React.SetStateAction<Record<Person,string>>>,
@@ -1955,111 +1979,6 @@ const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
   { id:'task', label:'主动任务', desc:'定时任务与工作流', icon:'◷' },
 ]
 
-// ── 模型选择：半屏 bottom sheet ──────────────────────────────────────────
-// 微信 / Kelivo 式简洁面板：标题栏 + 搜索 + 一行密钥 + 按供应商分组的模型行。
-// 全部用页面内自定义控件，不再用原生 <select>（Android WebView 会弹系统白方框）。
-type ModelSheetKey = { id:string; vendorName?:string; label?:string; role?:string }
-function vendorInitial(name:string){
-  const s=(name||'').trim()
-  if(/gpt|openai|chatgpt/i.test(s))return 'G'
-  if(/claude|anthropic/i.test(s))return 'C'
-  if(/grok|xai|x\.ai/i.test(s))return 'X'
-  if(/aeon/i.test(s))return 'A'
-  return s?s.slice(0,1).toUpperCase():'AI'
-}
-function ModelPickerSheet({profiles,activeId,vendorKeys,binding,onPatchBinding,onPick,onClose,onOpenConfig,subscriptionVendorIds}:{
-  profiles:ModelProfile[];activeId:string;vendorKeys:ModelSheetKey[];binding:PersonBinding;
-  onPatchBinding:(b:PersonBinding)=>void;onPick:(id:string)=>void;onClose:()=>void;onOpenConfig:()=>void;
-  subscriptionVendorIds?:string[]
-}){
-  const [query,setQuery]=useState('')
-  const [vendor,setVendor]=useState('')
-  const [keyOpen,setKeyOpen]=useState(false)
-  const keyRef=useRef<HTMLDivElement>(null)
-  const [favorites,setFavorites]=useState<string[]>(()=>read<string[]>('ai-home.favoriteModels',[]))
-  useEffect(()=>{try{localStorage.setItem('ai-home.favoriteModels',JSON.stringify(favorites))}catch{ /* private mode */ }},[favorites])
-  useEffect(()=>pushBackHandler(()=>{onClose();return true}),[onClose])
-  useEffect(()=>{
-    if(!keyOpen)return
-    const close=(e:PointerEvent)=>{if(!keyRef.current?.contains(e.target as Node))setKeyOpen(false)}
-    document.addEventListener('pointerdown',close)
-    return ()=>document.removeEventListener('pointerdown',close)
-  },[keyOpen])
-  const subIds=useMemo(()=>new Set(subscriptionVendorIds||[]),[subscriptionVendorIds])
-  const vendors=useMemo(()=>[...new Set(profiles.map(m=>m.vendor||'手动添加的模型'))],[profiles])
-  const groups=useMemo(()=>{
-    const q=query.trim().toLowerCase()
-    const picked=profiles.filter(m=>{
-      if(vendor&&(m.vendor||'手动添加的模型')!==vendor)return false
-      return !q||[m.name,m.model,m.vendor||''].some(x=>x.toLowerCase().includes(q))
-    })
-    const map=new Map<string,ModelProfile[]>()
-    for(const m of picked){const g=m.vendor||'手动添加的模型';if(!map.has(g))map.set(g,[]);map.get(g)!.push(m)}
-    for(const list of map.values())list.sort((a,b)=>Number(favorites.includes(b.id))-Number(favorites.includes(a.id)))
-    return [...map.entries()]
-  },[profiles,query,vendor,favorites])
-  const toggleFav=(id:string)=>setFavorites(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id])
-  const currentKey=vendorKeys.find(k=>k.id===(binding.keyId||''))
-  const keyLabel=currentKey?`${currentKey.vendorName||''} · ${currentKey.label||''}`:'自动 · 先备用再主号'
-  return <div className="model-sheet-backdrop" onClick={onClose}>
-    <section className="model-sheet" role="dialog" aria-label="选择模型" onClick={e=>e.stopPropagation()}>
-      <span className="model-sheet-handle" aria-hidden="true"/>
-      <div className="model-sheet-head">
-        <button type="button" className="model-sheet-close" aria-label="关闭模型面板" onClick={onClose}>×</button>
-        <b>选择模型</b>
-        <button type="button" className="model-sheet-setup" aria-label="完整绑定设置" title="完整绑定设置" onClick={onOpenConfig}>⚙</button>
-      </div>
-      <div className="model-sheet-search">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.5 15.5 4.3 4.3"/></g></svg>
-        <input id="model-sheet-search-input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索模型或服务商" aria-label="搜索模型或服务商"/>
-        {query&&<button type="button" className="model-sheet-clear" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}
-      </div>
-      {vendorKeys.length>0&&<div className="model-sheet-keyrow">
-        <span className="model-sheet-keylabel">密钥</span>
-        <div className="model-sheet-keyselect" ref={keyRef}>
-          <button type="button" className="model-sheet-keytrigger" aria-expanded={keyOpen} aria-label="选择 API Key" onClick={()=>setKeyOpen(v=>!v)}>
-            <span>{keyLabel}</span><i aria-hidden="true">⌄</i>
-          </button>
-          {keyOpen&&<div className="model-sheet-keymenu" role="listbox" aria-label="选择 API Key">
-            <button type="button" role="option" aria-selected={!binding.keyId} className={'model-sheet-keyoption'+(!binding.keyId?' active':'')}
-              onClick={()=>{onPatchBinding({...binding,keyId:''});setKeyOpen(false)}}><span>自动 · 先备用再主号</span>{!binding.keyId&&<b aria-hidden="true">✓</b>}</button>
-            {vendorKeys.map(k=><button type="button" role="option" aria-selected={binding.keyId===k.id} key={k.id}
-              className={'model-sheet-keyoption'+(binding.keyId===k.id?' active':'')}
-              onClick={()=>{onPatchBinding({...binding,keyId:k.id});setKeyOpen(false)}}>
-              <span>{k.vendorName} · {k.label}</span>{binding.keyId===k.id&&<b aria-hidden="true">✓</b>}
-            </button>)}
-          </div>}
-        </div>
-      </div>}
-      <div className="model-sheet-list">
-        {groups.length===0&&<p className="model-sheet-empty">{profiles.length?'没有匹配的模型，换个关键词，或点下面的供应商重新筛选。':'还没有可用模型。到「设置 → 供应商」填 Key 或登录订阅账号，再回来这里选。'}</p>}
-        {groups.map(([group,list])=>{
-          const isSub=list.some(m=>subIds.has(String(m.vendorId||'')))
-          return <section className="model-sheet-group" key={group}>
-            <h4>{group}{isSub&&<em>订阅账号</em>}</h4>
-            {list.map(m=><div className={'model-sheet-row'+(activeId===m.id?' selected':'')} key={m.id}>
-              <button type="button" className="model-sheet-pick" aria-pressed={activeId===m.id} onClick={()=>onPick(m.id)}>
-                <span className={'model-sheet-avatar'+(subIds.has(String(m.vendorId||''))?' from-sub':'')}>{vendorInitial(group)}</span>
-                <span className="model-sheet-main"><b>{m.name}</b>{m.name!==m.model&&<small>{m.vendor||'手动添加'} · {m.model}</small>}</span>
-                {subIds.has(String(m.vendorId||''))&&<span className="model-sheet-badge">订阅</span>}
-                {activeId===m.id&&<span className="model-sheet-check" aria-hidden="true">✓</span>}
-              </button>
-              <button type="button" className={'model-sheet-fav'+(favorites.includes(m.id)?' on':'')}
-                aria-label={favorites.includes(m.id)?'取消收藏':'收藏这个模型'} title="收藏后置顶" onClick={()=>toggleFav(m.id)}>
-                {favorites.includes(m.id)?'♥':'♡'}
-              </button>
-            </div>)}
-          </section>
-        })}
-      </div>
-      <div className="model-sheet-filter" aria-label="按供应商筛选">
-        <button type="button" className={!vendor?'active':''} onClick={()=>setVendor('')}>全部</button>
-        {vendors.map(v=><button type="button" key={v} className={vendor===v?'active':''} onClick={()=>setVendor(vendor===v?'':v)}>{v}</button>)}
-      </div>
-    </section>
-  </div>
-}
-
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
@@ -2517,7 +2436,7 @@ function Chat(p: any) {
       {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
     </form>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
-    {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)}/>}
+    {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
   </div>
 }

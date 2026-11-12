@@ -1518,3 +1518,53 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 .shell .connection-person .soft-select,
 .shell .settings-screen .vendor-key-row .soft-select.vendor-key-role{border:0!important;background:transparent!important;padding:0!important;max-width:none!important;box-shadow:none!important}
 .shell .room-person-switch .room-person-select.soft-select>button.soft-select-trigger{max-width:150px}
+
+/* v12 统一模型 + 线路面板：沿用「选择模型 / 账号登录」半屏白底细线视觉 */
+.shell .model-sheet-row{flex-wrap:wrap}
+.shell .model-sheet-routeinfo{margin:0 16px 8px;padding:7px 10px;border-radius:10px;background:#f6f4f1;color:#6f665c;font-size:10.5px;line-height:1.5}
+.shell .model-sheet-badge.routes{background:#f8efe9;color:#8b593b}
+.shell button.model-sheet-route-toggle{flex:0 0 auto;width:28px;height:28px;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important;color:#c2b9ad;font-size:16px;line-height:1;cursor:pointer}
+.shell button.model-sheet-route-toggle.active{background:#f8efe9!important;color:#8b593b!important}
+
+.shell .route-panel{flex:0 0 100%;box-sizing:border-box;display:flex;flex-direction:column;gap:9px;margin:2px 2px 10px;padding:11px;border:1px solid #eeeae4!important;border-radius:13px!important;background:#fcfaf8!important}
+.shell .route-panel-head{display:flex;flex-direction:column;gap:3px}
+.shell .route-panel-head>b{font-size:12px;font-weight:500;color:#4b443c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .route-panel-head>small{font-size:10px;color:#a0988c}
+.shell .route-list{display:flex;flex-direction:column;gap:7px}
+.shell .route-empty{margin:0;font-size:10.5px;line-height:1.6;color:#9a9186}
+.shell .route-item{display:flex;flex-direction:column;gap:5px;padding:9px 10px;border:1px solid #eeeae4!important;border-radius:11px!important;background:#fff!important}
+.shell .route-item.primary{border-color:#d8c3b1!important;background:#fffaf5!important}
+.shell .route-item.off{opacity:.55}
+.shell .route-item-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.shell .route-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#d9d2c8}
+.shell .route-item.primary .route-dot{background:#8b593b}
+.shell .route-item-top>b{font-size:11.5px;font-weight:500;color:#302b26}
+.shell .route-item-top>em{font-style:normal;padding:2px 7px;border-radius:999px;background:#f8efe9;color:#8b593b;font-size:9.5px}
+.shell .route-item-top>em.fixed{background:#eaf4ee;color:#3f7a5a}
+.shell .route-item-top>em.muted{background:#f1efec;color:#9a9186}
+.shell .route-item>small{font-size:10px;color:#a0988c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .route-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.shell .route-actions button{padding:4px 9px!important;border:1px solid #eeeae4!important;border-radius:999px!important;background:#fff!important;box-shadow:none!important;font-size:10px;color:#6f665c;cursor:pointer}
+.shell .route-actions button.active{border-color:#cfe3d6!important;background:#eaf4ee!important;color:#3f7a5a!important}
+.shell .route-actions button.route-remove{color:#a94442}
+.shell .route-add{display:flex;flex-direction:column;gap:7px;padding-top:9px;border-top:1px solid #f0ebe5}
+.shell .route-add>b{font-size:11.5px;font-weight:500;color:#4b443c}
+.shell .route-add-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.shell .route-add-grid>input,.shell .route-add-grid .soft-select>button.soft-select-trigger{width:100%;box-sizing:border-box;min-height:30px;padding:6px 9px!important;border:1px solid #e8e2da!important;border-radius:9px!important;background:#fff!important;box-shadow:none!important;font-size:10.5px;color:#4b443c}
+.shell .route-add-grid>.soft-select{min-width:0}
+.shell .route-add-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.shell .route-add-foot>small{flex:1;min-width:0;font-size:9.5px;line-height:1.5;color:#a0988c}
+.shell button.route-add-btn{flex:0 0 auto;padding:6px 12px!important;border:0!important;border-radius:999px!important;background:#8b593b!important;box-shadow:none!important;color:#fff!important;font-size:10.5px;cursor:pointer}
+.shell .route-error{margin:0;font-size:10.5px;color:#a94442}
+
+/* pixel 皮肤会给所有 input / button 套 2px 黑粗框；线路面板用 ID 权重覆盖回细线圆角 */
+.shell #model-routes-panel input,
+.shell #model-routes-panel .soft-select>button.soft-select-trigger{
+  border:1px solid #e8e2da!important;border-radius:9px!important;
+  background:#fff!important;box-shadow:none!important;color:#4b443c!important;
+  font-size:10.5px;min-height:30px;
+}
+.shell #model-routes-panel .route-item,
+.shell #model-routes-panel .route-panel{border-radius:12px!important}
+.shell #model-routes-panel .route-actions button,
+.shell #model-routes-panel button.route-add-btn{border-radius:999px!important;box-shadow:none!important}
