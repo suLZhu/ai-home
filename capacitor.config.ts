@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.sulzhu.aihome',
-  appName: 'AI 小家',
+  appName: '栖间',
   webDir: 'dist',
   android: {
     // WebView 页面源是 https://localhost，局域网后端是纯 http://192.168.x.x:4180；

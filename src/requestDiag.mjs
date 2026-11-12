@@ -192,7 +192,7 @@ export function formatDiagSummary(s) {
     ? Object.entries(s.params).map(([k, v]) => k + '=' + (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ')
     : '（未设置任何采样/补全参数）'
   const lines = [
-    '【AI 小家 · 模型请求诊断摘要】',
+    '【栖间 · 模型请求诊断摘要】',
     '时间：' + (s.at || ''),
     '助手：' + (s.assistantId || '') + '  会话：' + (s.conversationId || ''),
     '触发：' + (s.trigger || '') + (s.round > 1 ? '（第 ' + s.round + ' 轮工具续轮）' : ''),

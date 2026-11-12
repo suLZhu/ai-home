@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#ECE7E0</color>
+    <color name="ic_launcher_background">#FDF8F2</color>
+    <color name="qijian_brand_background">#FDF8F2</color>
 </resources>

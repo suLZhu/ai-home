@@ -145,7 +145,7 @@ final class SystemNotifier {
         String body = payload.optString("body", "");
         String summary = payload.optString("summary", "");
         if (summary.isEmpty()) summary = body.length() > 110 ? body.substring(0, 110) + "…" : body;
-        if (title.isEmpty()) title = "AI 小家";
+        if (title.isEmpty()) title = "栖间";
         long at = payload.optLong("at", System.currentTimeMillis());
 
         Intent click = new Intent(c, MainActivity.class);

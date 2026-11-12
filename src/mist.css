@@ -227,3 +227,31 @@
 .shell .bubble { height:auto;max-width:min(80vw,320px)!important;overflow-x:hidden; }
 .shell .message-stack { min-width:0; }
 .shell .chat-header-title>b { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+
+/* ── 栖间品牌展示：首页只占一小行，关于页放主 Logo；仍走 Mist tokens ──── */
+.shell .home-brand {
+  display:flex;align-items:center;gap:8px;
+  padding:max(10px,calc(var(--app-safe-top) + 4px)) 14px 0;
+}
+.shell .home-brand img { width:28px;height:28px;border-radius:8px;object-fit:cover; }
+.shell .home-brand b {
+  font-size:var(--type-title);font-weight:600;
+  color:var(--text-primary);letter-spacing:.04em;
+}
+/* 顶部安全区已由 home-brand 承担，房间入口不再叠一层大留白。 */
+.shell .home-people { padding-top:14px; }
+.shell .brand-about {
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 4px;
+}
+.shell .brand-about-primary { width:min(58%,220px);height:auto;border-radius:var(--radius-lg); }
+.shell .brand-about>b {
+  font-size:var(--type-display);font-weight:600;
+  color:var(--text-primary);letter-spacing:.08em;
+}
+.shell .brand-about>small { font-size:var(--type-caption);color:var(--text-secondary); }
+.shell .brand-about-ornamental {
+  width:100%;margin-top:14px;padding-top:14px;border-top:1px solid var(--divider);
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+}
+.shell .brand-about-ornamental>span { font-size:var(--type-caption);color:var(--text-secondary); }
+.shell .brand-about-ornamental img { width:min(48%,180px);height:auto;border-radius:var(--radius-md); }
