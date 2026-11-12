@@ -197,7 +197,7 @@ export function syncVendorProfiles(vendors, profiles) {
         id: vendorModelProfileId(v.id, m.id),
         name: str(m.name) || m.id,
         endpoint: str(v.endpoint),
-        model: str(m.name) || m.id,
+        model: m.id,
         vendor: str(v.name) || v.id,
         vendorId: v.id,
         inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2',
