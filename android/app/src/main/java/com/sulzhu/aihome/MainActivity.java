@@ -148,6 +148,9 @@ public class MainActivity extends BridgeActivity {
             injectSafeArea();
             return insets;
         });
+        // Listener 安装后主动请求一次。部分 ROM 首帧不会再次派发 insets，
+        // safeTopDp 会一直停在 0，Web 层因此直接顶进状态栏。
+        ViewCompat.requestApplyInsets(decor);
 
         if (getBridge() == null) return;
         WebView webView = getBridge().getWebView();
