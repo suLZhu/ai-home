@@ -26,6 +26,7 @@ import org.json.JSONObject;
 final class SystemNotifier {
     static final String SYSTEM_CHANNEL_ID = "aihome.system";
     static final String SYSTEM_CHANNEL_NAME = "定时任务 / 系统消息";
+    static final String GENERATION_CHANNEL_ID = "aihome.generation";
     static final String EXTRA_PAYLOAD = "aihome.notification.payload";
     static final String EXTRA_FROM_NOTIFICATION = "aihome.notification.open";
 
@@ -90,6 +91,19 @@ final class SystemNotifier {
         channel.enableVibration(true);
         channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
         channel.setDescription("主动消息与定时任务");
+        nm.createNotificationChannel(channel);
+    }
+
+    static void ensureGenerationChannel(Context c) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || nm.getNotificationChannel(GENERATION_CHANNEL_ID) != null) return;
+        NotificationChannel channel = new NotificationChannel(
+            GENERATION_CHANNEL_ID, "正在回复", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("助手在后台继续生成回复");
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+        channel.setSound(null, null);
+        channel.enableVibration(false);
         nm.createNotificationChannel(channel);
     }
 
