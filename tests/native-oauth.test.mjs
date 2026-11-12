@@ -41,14 +41,12 @@ test('原生回传错误会变成可读提示，不会假装登录成功', async
   delete globalThis.AiHomeOAuth
 })
 
-test('电脑浏览器没有原生桥：打开授权页，结果由同一个回调收口', async () => {
+test('没有原生桥：不打开外部页面，明确提示要在 App 内登录', async () => {
   delete globalThis.AiHomeOAuth
-  let opened = ''
-  globalThis.open = (u) => { opened = String(u); return {} }
-  const pending = startOAuthLogin(cfg)
-  assert.equal(opened, cfg.url)
-  globalThis.__aihomeOAuthResult('{"ok":true,"token":"sk-browser-1"}')
-  assert.equal((await pending).token, 'sk-browser-1')
+  let opened = false
+  globalThis.open = () => { opened = true; return {} }
+  await assert.rejects(() => startOAuthLogin(cfg), /App 内/)
+  assert.equal(opened, false)
   delete globalThis.open
 })
 

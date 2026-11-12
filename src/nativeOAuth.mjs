@@ -1,7 +1,8 @@
 // Android 原生网页授权弹层的 JS 侧通道。
 // MainActivity.java 用 App 内可控 WebView 打开官方授权页，拦截 localhost:1455 等回调，
 // 原生代发 code→token，再通过全局 __aihomeOAuthResult 把令牌交回来。
-// 电脑浏览器没有原生桥时退化为 window.open + 同一个回调（探针可注入模拟）。
+// 电脑浏览器没有原生桥时不会打开任何外部页面，避免出现 localhost 报错页
+// （390×844 探针会注入 mock 桥来验证完整登录链路）。
 const CALLBACK = '__aihomeOAuthResult'
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -42,10 +43,9 @@ export function startOAuthLogin(config) {
       if (nativeOAuthAvailable()) {
         globalThis.AiHomeOAuth.login(JSON.stringify(config))
       } else {
-        const win = typeof globalThis.open === 'function'
-          ? globalThis.open(config.url, '_blank', 'noopener,noreferrer')
-          : null
-        if (!win) finish(new Error('登录页被拦截了，请在 App 内打开'))
+        // 电脑浏览器没有原生层，绝不再把官方授权页丢给外部浏览器——
+        // 那样只会又跳到 localhost:1455 并报连接被拒绝。
+        finish(new Error('网页授权登录需要在 App 内完成，请安装最新版 APK'))
       }
     } catch (e) {
       finish(e instanceof Error ? e : new Error('无法打开登录页'))
