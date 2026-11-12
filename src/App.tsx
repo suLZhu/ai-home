@@ -32,16 +32,13 @@ import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiag
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
 import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, keyRoleLabel, chatRequestUrl, modelListUrl, groupModels, orderedKeys, DEFAULT_API_PATH, type Vendor } from './vendors.mjs'
-// 订阅账号：渠道目录 / 搜索 / 凭据归一化。凭据只存本机，不进云端快照。
-import { SUBSCRIPTION_STORAGE_KEY, SUBSCRIPTION_QUICK_TERMS, channelById, searchSubscriptionChannels, normalizeSubscriptions, blankSubscription, type SubscriptionAccount } from './subscriptionChannels.mjs'
-// 订阅号账号密码登录：地址推导 / 预览；真正的换令牌请求走 /api/subscription/login。
-import { DEFAULT_LOGIN_PATH, DEFAULT_TOKEN_PATH, subscriptionLoginUrl, subscriptionTokenUrl } from './subscriptionLogin.mjs'
+// 订阅账号：本地持久化归一化；极简账号登录面板单独放一个文件。
+import { SUBSCRIPTION_STORAGE_KEY, normalizeSubscriptions, type SubscriptionAccount } from './subscriptionChannels.mjs'
+import { SubscriptionAccounts } from './SubscriptionAccounts'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
 import { fileToAvatar, isAvatarDataUrl } from './avatarImage.mjs'
-// 订阅账号网页登录：官方 OAuth / 设备码授权页与回调解析。
-import { GATEWAY_REFERENCES, oauthProfile, oauthLoginUrl, makePkce, buildAuthorizeUrl, parseOAuthCallback } from './subscriptionOAuth.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -2537,7 +2534,7 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
   const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2><p>{simpleMode?'按分组查找，点一行即可进入。':'把常用设置分成小模块，需要时再打开。'}</p></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><small>{card.desc}</small><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onClose={()=>setSection('')}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 AI 小家</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。世界书 / MCP / 模型预设在「资源库」一次添加，聊天窗口用「配置」按助手选用。</p><p className="muted">设置首页与输入栏快捷开关参考 Kelivo / RikkaHub 的分组列表布局，仅借鉴交互思路，未使用其代码。</p></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：一级只有 5 项，主题美化 / 供应商各自再分二级 ──────────
@@ -2624,246 +2621,6 @@ const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '
 
 // 设置页统一放 API Key 与默认接口：复用原来的模型设置面板，按助手切换。
 // 工作区不再陈列「模型设置」工具，聊天窗口也不放 Key，只负责选用与绑定。
-// ── 订阅账号：搜索渠道 → 接入 → 填账号密码登录 → 选模型进聊天 ──────────
-// 登录后换到的访问令牌同步进 vendors.keys，模型列表与聊天都复用已有链路，
-// 直接消耗订阅账号自己的额度。账号 / 密码 / 令牌只落本机，不进云端快照。
-function SubscriptionAccounts({vendors,setVendors,setModelProfiles,subscriptions,setSubscriptions}:{
-  vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
-  setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
-  subscriptions:SubscriptionAccount[]; setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>
-}) {
-  const [query,setQuery]=useState('')
-  const [openId,setOpenId]=useState('')
-  const [showKey,setShowKey]=useState<Record<string,boolean>>({})
-  const [modelsOpen,setModelsOpen]=useState<Record<string,boolean>>({})
-  const [advanced,setAdvanced]=useState<Record<string,boolean>>({})
-  const [modelQuery,setModelQuery]=useState('')
-  const [verify,setVerify]=useState<Record<string,{loading:boolean;error:string}>>({})
-  type WebState={url:string;state:string;verifier:string;callback:string;error:string}
-  const blankWeb=():WebState=>({url:'',state:'',verifier:'',callback:'',error:''})
-  const [web,setWeb]=useState<Record<string,WebState>>({})
-  const patchWeb=(id:string,part:Partial<WebState>)=>setWeb(w=>({...w,[id]:{...blankWeb(),...w[id],...part}}))
-  const results=searchSubscriptionChannels(query)
-  const commit=(next:SubscriptionAccount[])=>setSubscriptions(next)
-  const patch=(id:string,fn:(a:SubscriptionAccount)=>SubscriptionAccount)=>commit(subscriptions.map(a=>a.id===id?fn(a):a))
-  const channelOf=(a:SubscriptionAccount)=>channelById(a.channelId)
-  // Key 只有一份：真实值永远以 vendors.keys 为准。订阅账号页输入时同步写回供应商，
-  // 供应商页改了同一把 Key 这里也会立刻显示新值，避免两处各改各的。
-  const readKey=(a:SubscriptionAccount)=>{
-    const v=vendors.find(x=>x.id===a.vendorId)
-    const found=v?.keys.find(k=>k.id===a.vendorKeyId)?.value
-    return typeof found==='string'?found:a.apiKey
-  }
-  const changeKey=(a:SubscriptionAccount,value:string)=>{
-    const vid=a.vendorId
-    const keyId=a.vendorKeyId||crypto.randomUUID()
-    patch(a.id,x=>({...x,apiKey:'',vendorKeyId:x.vendorKeyId||keyId}))
-    const current=vendors.find(v=>v.id===vid)
-    const label='订阅号 · '+(a.label||'我的账号')
-    if(!current){
-      setVendors([...vendors,{id:vid,name:channelOf(a)?.name||a.label,endpoint:a.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,builtin:false,keys:[{id:keyId,label,value,role:'primary' as const}],models:[]} as Vendor])
-    }else{
-      setVendors(vendors.map(v=>v.id===vid?{...v,keys:v.keys.some(k=>k.id===keyId)?v.keys.map(k=>k.id===keyId?{...k,label,value}:k):[...v.keys,{id:keyId,label,value,role:'primary' as const}]}:v))
-    }
-  }
-  // 把订阅凭据写进供应商体系：多 KEY 队列、模型分组、聊天请求都复用已有链路。
-  // dropModels 只在「移除渠道」时用，避免聊天里还留着已移除渠道的模型。
-  const writeVendor=(a:SubscriptionAccount,keyValue:string,dropModels=false)=>{
-    const vid=a.vendorId
-    const current=vendors.find(v=>v.id===vid)
-    const base=current||{id:vid,name:channelOf(a)?.name||a.label,endpoint:a.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,builtin:false,keys:[],models:[]} as Vendor
-    const keys=base.keys.filter(k=>k.id!==a.vendorKeyId)
-    let keyId=''
-    if(keyValue){keyId=a.vendorKeyId||crypto.randomUUID();keys.push({id:keyId,label:'订阅号 · '+(a.label||'我的账号'),value:keyValue,role:'primary' as const})}
-    const models=dropModels?[]:base.models
-    const next={...base,endpoint:a.endpoint||base.endpoint,apiPath:a.apiPath,modelsPath:a.modelsPath,keys,models} as Vendor
-    const emptyShell=!keyValue&&!current?.builtin&&keys.length===0&&models.length===0
-    const finalVendors=emptyShell?vendors.filter(v=>v.id!==vid):(current?vendors.map(v=>v.id===vid?next:v):[...vendors,next])
-    setVendors(finalVendors)
-    setModelProfiles(old=>syncVendorProfiles(finalVendors,old))
-    return keyId
-  }
-  const writeModels=(a:SubscriptionAccount,models:Vendor['models'])=>{
-    const finalVendors=vendors.map(v=>v.id===a.vendorId?{...v,models}:v)
-    setVendors(finalVendors)
-    setModelProfiles(old=>syncVendorProfiles(finalVendors,old))
-  }
-  const addChannel=(ch:(typeof results)[number])=>{
-    const present=subscriptions.find(s=>s.channelId===ch.id)
-    if(present){setOpenId(present.id);return}
-    const a=blankSubscription(ch)
-    commit([...subscriptions,a]);setOpenId(a.id);setModelsOpen(o=>({...o,[a.id]:false}))
-  }
-  // 网页登录：生成 PKCE → 打开官方授权页 → 用户把回调地址 / 令牌粘回来。
-  // 拿到授权码时由后端代发 code→token（浏览器直连官方 token 接口会被 CORS 挡住），
-  // 后端不可用时用户仍可直接粘贴现成令牌，两条路都不碰用户密码。
-  const startWebLogin=async(a:SubscriptionAccount)=>{
-    try{
-      const pkce=await makePkce()
-      const url=buildAuthorizeUrl(a.channelId,pkce)||oauthLoginUrl(a.channelId)
-      patchWeb(a.id,{...blankWeb(),url,state:pkce.state,verifier:pkce.verifier})
-      const win=window.open(url,'_blank','noopener,noreferrer')
-      if(!win)patchWeb(a.id,{error:'新窗口被拦截了，点「复制登录地址」后手动粘到浏览器打开。'})
-    }catch(e){patchWeb(a.id,{error:e instanceof Error?e.message:'无法生成登录地址'})}
-  }
-  const copyLoginUrl=async(a:SubscriptionAccount)=>{
-    const url=web[a.id]?.url||oauthLoginUrl(a.channelId)
-    if(!url)return
-    try{await navigator.clipboard.writeText(url);patchWeb(a.id,{error:'登录地址已复制，粘贴到浏览器打开即可。'})}
-    catch{patchWeb(a.id,{error:'复制失败，请手动打开官方登录页。'})}
-  }
-  // 三种方式最终都落到同一个 token 上，后面 /models 与聊天完全一致。
-  const acquireToken=async(a:SubscriptionAccount):Promise<{token:string;source:string}>=>{
-    if(a.loginMode==='web'){
-      const w=web[a.id]||blankWeb()
-      const parsed=parseOAuthCallback(w.callback,w.state)
-      if(!parsed.ok)throw new Error(parsed.error||'请先完成网页登录')
-      if(parsed.token)return {token:parsed.token,source:'网页登录 · 粘贴令牌'}
-      const r=await apiFetch('/api/subscription/oauth/exchange',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channelId:a.channelId,code:parsed.code,codeVerifier:w.verifier,state:parsed.state})})
-      const d=await r.json().catch(()=>({}))
-      if(!r.ok||!d?.token)throw new Error(d?.error||'授权码换令牌失败：官方 token 接口不允许网页直连。请直接粘贴登录拿到的访问令牌，或把订阅地址换成自建网关。')
-      return {token:String(d.token),source:'网页登录 · OAuth 授权码'}
-    }
-    if(a.loginMode==='token'){
-      const key=readKey(a).trim()
-      if(!key)throw new Error('请先填写订阅令牌。')
-      return {token:key,source:'手动填写'}
-    }
-    if(!a.username.trim()||!a.password.trim())throw new Error('请先填写订阅账号和密码。')
-    const r=await apiFetch('/api/subscription/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),loginPath:a.loginPath,tokenPath:a.tokenPath,username:a.username.trim(),password:a.password})})
-    const d=await r.json().catch(()=>({}))
-    if(!r.ok)throw new Error(d?.error||('登录接口返回 HTTP '+r.status))
-    const token=String(d?.token||'').trim()
-    if(!token)throw new Error('登录接口没有返回访问令牌。')
-    return {token,source:String(d?.source||'订阅号登录')}
-  }
-  const verifyLogin=async(a:SubscriptionAccount)=>{
-    if(!a.endpoint.trim()){setVerify(v=>({...v,[a.id]:{loading:false,error:'请先填写订阅地址。'}}));return}
-    setVerify(v=>({...v,[a.id]:{loading:true,error:''}}))
-    try{
-      const {token,source}=await acquireToken(a)
-      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:a.endpoint.trim(),apiKey:token,modelsUrl:modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})})})
-      const d=await r.json().catch(()=>({}))
-      if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
-      const ids:string[]=Array.isArray(d?.models)?d.models.filter((x:unknown)=>typeof x==='string'&&x.trim()).map((x:string)=>x.trim()):[]
-      if(!ids.length)throw new Error('这个地址没有返回可用模型，检查一下订阅地址或模型列表路径。')
-      const keyId=writeVendor(a,token)
-      patch(a.id,x=>({...x,apiKey:'',vendorKeyId:keyId,tokenSource:source,loggedIn:true,modelCount:ids.length,availableModels:[...new Set(ids)],lastVerified:new Date().toISOString()}))
-      setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
-      setModelsOpen(o=>({...o,[a.id]:true}))
-    }catch(e){setVerify(v=>({...v,[a.id]:{loading:false,error:e instanceof Error?e.message:'登录失败'}}))}
-  }
-  const logout=(a:SubscriptionAccount)=>{
-    writeVendor(a,'')
-    // 退出只注销访问令牌，账号密码留着方便下次一键登录。
-    patch(a.id,x=>({...x,vendorKeyId:'',apiKey:'',tokenSource:'',loggedIn:false,modelCount:0,availableModels:[],pickedModels:[],lastVerified:''}))
-    setVerify(v=>({...v,[a.id]:{loading:false,error:''}}))
-  }
-  const remove=(a:SubscriptionAccount)=>{
-    writeVendor(a,'',true)
-    commit(subscriptions.filter(s=>s.id!==a.id))
-    if(openId===a.id)setOpenId('')
-  }
-  const toggleModel=(a:SubscriptionAccount,id:string)=>{
-    const picked=a.pickedModels.includes(id)
-    const current=vendors.find(v=>v.id===a.vendorId)
-    if(!current)return
-    writeModels(a,picked?current.models.filter(m=>m.id!==id):[...current.models,{id,name:id,selected:true}])
-    patch(a.id,x=>({...x,pickedModels:picked?x.pickedModels.filter(m=>m!==id):[...x.pickedModels,id]}))
-  }
-  return <div id="subscription-accounts" className="subscription-accounts">
-    <div className="sub-head"><b>订阅账号</b><small>GPT / Claude / Grok · 网页登录自己的账号 → 聊天用这个账号的额度</small></div>
-    <p className="sub-policy">只保留 GPT / Claude / Grok 三家。默认「网页登录」：弹出官方授权页 → 登录自己的账号 → 把回调地址或令牌粘回来。也可切「账号密码」（订阅号 / 中转站）或「令牌」。凭据只存本机，不进云端快照。注意：官方网页会员的 OAuth 令牌不是 API Key，「订阅地址」要填能把订阅额度转成兼容接口的网关地址。</p>
-    <details className="sub-refs"><summary>▸ 订阅登录的开源实现参考（GitHub）</summary>{GATEWAY_REFERENCES.map(r=><a key={r.url} href={r.url} target="_blank" rel="noreferrer">{r.name}</a>)}<p className="muted">Kelivo 在 Accounts 页直接用 ChatGPT(Codex) / Grok 账号登录；CLIProxyAPI 把各家 CLI 的 OAuth 令牌转成 OpenAI / Claude 兼容端点，本应用把它的地址填进「订阅地址」即可。</p></details>
-    <div className="sub-search"><input aria-label="搜索订阅渠道" value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索渠道：GPT / Claude / Grok …"/>{query&&<button type="button" aria-label="清空搜索" onClick={()=>setQuery('')}>×</button>}</div>
-    <div className="sub-quick">{SUBSCRIPTION_QUICK_TERMS.map(t=><button type="button" key={t} className={query.toLowerCase()===t.toLowerCase()?'active':''} onClick={()=>setQuery(q=>q.toLowerCase()===t.toLowerCase()?'':t)}>{t}</button>)}</div>
-    <div className="sub-results">
-      <div className="sub-section-head"><b>渠道</b><small>{results.length} 个可接入</small></div>
-      {results.length===0&&<p className="muted">没有匹配的渠道。这里只保留 GPT / Claude / Grok 三家。</p>}
-      {results.map(ch=>{
-        const present=subscriptions.find(s=>s.channelId===ch.id)
-        return <div className="sub-result-row" key={ch.id} data-channel-id={ch.id}>
-          <span className="sub-channel-icon" aria-hidden="true">{ch.short}</span>
-          <span className="sub-result-text"><b>{ch.name}</b><small>{ch.hint}</small></span>
-          <button type="button" className={'sub-add'+(present?' added':'')} onClick={()=>addChannel(ch)}>{present?'已接入':'＋ 接入'}</button>
-        </div>
-      })}
-    </div>
-    <div className="sub-accounts">
-      <div className="sub-section-head"><b>我的订阅账号</b><small>{subscriptions.length} 个</small></div>
-      {subscriptions.length===0&&<p className="muted">还没有接入渠道。点上面任一渠道的「＋ 接入」，再点「打开登录页」用自己的账号授权。</p>}
-      {subscriptions.map(a=>{
-        const ch=channelOf(a),open=openId===a.id,state=verify[a.id]
-        const mq=modelQuery.trim().toLowerCase()
-        const groups=groupModels(a.availableModels.filter(id=>!mq||id.toLowerCase().includes(mq)))
-        return <div className={'sub-account'+(open?' open':'')} key={a.id} data-account-id={a.id}>
-          <button type="button" className="sub-account-head" aria-expanded={open} onClick={()=>setOpenId(open?'':a.id)}>
-            <span className="sub-channel-icon" aria-hidden="true">{ch?.short||'＋'}</span>
-            <span className="sub-account-text"><b>{a.label}</b><small>{a.loggedIn?'已登录 · 使用订阅额度 · '+a.modelCount+' 个模型':'未登录 · 网页登录后用额度'}</small></span>
-            <span className={'sub-status'+(a.loggedIn?' on':'')}>{a.loggedIn?'已登录':'未登录'}</span><span aria-hidden="true">{open?'▴':'▾'}</span>
-          </button>
-          {open&&<div className="sub-account-body">
-            {ch?.needsCompatibleUrl&&<p className="sub-warn">这个渠道需要 OpenAI 兼容地址：请填你的订阅号 / 聚合平台提供的 Base URL，官方网页版地址不能直接用。</p>}
-            <div className="sub-mode-row" role="group" aria-label="登录方式">
-              <button type="button" className={a.loginMode==='web'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'web'}))}>网页登录</button>
-              <button type="button" className={a.loginMode==='password'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'password'}))}>账号密码</button>
-              <button type="button" className={a.loginMode==='token'?'active':''} onClick={()=>patch(a.id,x=>({...x,loginMode:'token'}))}>令牌</button>
-            </div>
-            <label className="sub-field">账号备注<input aria-label="订阅账号备注" value={a.label} onChange={e=>patch(a.id,x=>({...x,label:e.target.value}))} placeholder="如我的主号"/></label>
-            <label className="sub-field">订阅地址 Base URL<input aria-label="订阅地址 Base URL" value={a.endpoint} onChange={e=>patch(a.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
-            <p className="sub-url-hint">请求地址 <b>{chatRequestUrl({endpoint:a.endpoint,apiPath:a.apiPath})||'填写订阅地址后显示'}</b></p>
-            {a.loginMode==='web'
-              ? <div className="sub-web">
-                  <p className="sub-web-lead">{oauthProfile(a.channelId)?.label} · 点「打开登录页」弹出官方授权页，用你自己的账号登录并授权。</p>
-                  <div className="sub-web-actions"><button type="button" onClick={()=>void startWebLogin(a)}>打开登录页</button><button type="button" onClick={()=>void copyLoginUrl(a)}>复制登录地址</button></div>
-                  {web[a.id]?.url&&<p className="sub-url-hint">登录页 <b>{web[a.id].url.split('?')[0]}</b></p>}
-                  <label className="sub-field">登录后的回调地址 / 令牌<textarea rows={2} aria-label="登录回调地址" value={web[a.id]?.callback||''} onChange={e=>patchWeb(a.id,{callback:e.target.value,error:''})} placeholder="粘贴浏览器地址栏整条链接，或直接粘贴访问令牌"/></label>
-                  <small className="sub-web-hint">{oauthProfile(a.channelId)?.callbackHint}</small>
-                  <small className="sub-web-hint">{oauthProfile(a.channelId)?.note}</small>
-                  {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天走「{a.label}」的订阅额度（{a.tokenSource||'网页登录'}）</p>}
-                  {web[a.id]?.error&&<p className="sub-error">{web[a.id].error}</p>}
-                </div>
-              : a.loginMode==='password'
-                ? <>
-                  <label className="sub-field">订阅账号<input aria-label="订阅账号" autoComplete="username" value={a.username} onChange={e=>patch(a.id,x=>({...x,username:e.target.value}))} placeholder="手机号 / 邮箱 / 用户名"/></label>
-                  <label className="sub-field">订阅密码<div className="sub-key-row"><input aria-label="订阅密码" type={showKey[a.id]?'text':'password'} autoComplete="off" value={a.password} onChange={e=>patch(a.id,x=>({...x,password:e.target.value}))} placeholder="订阅号登录密码"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>
-                  {a.loggedIn&&<p className="sub-login-note">已登录 · 聊天直接消耗「{a.username||a.label}」的额度（令牌来源：{a.tokenSource||'订阅号登录'}）</p>}
-                </>
-                : <label className="sub-field">订阅令牌 / API Key<div className="sub-key-row"><input aria-label="订阅账号 API Key" type={showKey[a.id]?'text':'password'} autoComplete="off" value={readKey(a)} onChange={e=>changeKey(a,e.target.value)} placeholder="sk-…"/><button type="button" onClick={()=>setShowKey(s=>({...s,[a.id]:!s[a.id]}))}>{showKey[a.id]?'隐藏':'显示'}</button></div></label>}
-            <details className="sub-advanced" open={!!advanced[a.id]}><summary onClick={e=>{e.preventDefault();setAdvanced(s=>({...s,[a.id]:!s[a.id]}))}}>{advanced[a.id]?'▾':'▸'} 高级 · 接口路径</summary>
-              <label className="sub-field">模型列表路径 <small>留空自动推导</small><input aria-label="模型列表路径" value={a.modelsPath} onChange={e=>patch(a.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
-              <p className="sub-url-hint">列表地址 <b>{modelListUrl({endpoint:a.endpoint,modelsPath:a.modelsPath})||'填写订阅地址后显示'}</b></p>
-              {a.loginMode==='password'&&<>
-                <label className="sub-field">登录接口路径 <small>留空用 {DEFAULT_LOGIN_PATH}</small><input aria-label="登录接口路径" value={a.loginPath} onChange={e=>patch(a.id,x=>({...x,loginPath:e.target.value}))} placeholder={DEFAULT_LOGIN_PATH}/></label>
-                <p className="sub-url-hint">登录地址 <b>{subscriptionLoginUrl(a.endpoint,a.loginPath)||'填写订阅地址后显示'}</b></p>
-                <label className="sub-field">令牌接口路径 <small>登录没返回令牌时自动再取一次</small><input aria-label="令牌接口路径" value={a.tokenPath} onChange={e=>patch(a.id,x=>({...x,tokenPath:e.target.value}))} placeholder={DEFAULT_TOKEN_PATH}/></label>
-                <p className="sub-url-hint">令牌地址 <b>{subscriptionTokenUrl(a.endpoint,a.tokenPath)||'填写订阅地址后显示'}</b></p>
-              </>}
-            </details>
-            <div className="sub-actions">
-              <button type="button" className="sub-primary" disabled={!!state?.loading} onClick={()=>void verifyLogin(a)}>{state?.loading?'登录中…':a.loginMode==='web'?'完成登录':a.loggedIn?'重新登录':'登录并使用额度'}</button>
-              {a.loggedIn&&<button type="button" onClick={()=>logout(a)}>退出登录</button>}
-              <button type="button" className="sub-remove" onClick={()=>remove(a)}>移除</button>
-            </div>
-            {state?.error&&<p className="sub-error">{state.error}</p>}
-            {a.loggedIn&&<div className="sub-models">
-              <button type="button" className={'sub-model-toggle'+(modelsOpen[a.id]?' open':'')} aria-expanded={!!modelsOpen[a.id]} onClick={()=>setModelsOpen(o=>({...o,[a.id]:!o[a.id]}))}>＋ 选模型进聊天 <span>{a.pickedModels.length} 个已选</span></button>
-              {modelsOpen[a.id]&&<div className="sub-model-picker">
-                <input aria-label="筛选可用模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)} placeholder="输入模型名称筛选"/>
-                {groups.length===0&&<p className="muted">没有匹配的模型，换个关键词试试。</p>}
-                {groups.map(g=><div className="sub-model-group" key={g.id}><b>{g.label}</b>{g.models.map(id=>{
-                  const picked=a.pickedModels.includes(id)
-                  return <div className={'sub-model-item'+(picked?' picked':'')} key={id}><span>{id}</span><button type="button" aria-label={(picked?'移出聊天模型 ':'加入聊天模型 ')+id} onClick={()=>toggleModel(a,id)}>{picked?'✓':'＋'}</button></div>
-                })}</div>)}
-              </div>}
-            </div>}
-          </div>}
-        </div>
-      })}
-    </div>
-  </div>
-}
-
 function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName}:{
   modelConfig:Record<Person,ModelConfig>; setModelConfig:React.Dispatch<React.SetStateAction<Record<Person,ModelConfig>>>
   apiKey:Record<Person,string>; setApiKey:React.Dispatch<React.SetStateAction<Record<Person,string>>>

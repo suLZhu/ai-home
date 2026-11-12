@@ -1385,3 +1385,27 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 #subscription-accounts textarea{width:100%;min-width:0;box-sizing:border-box;padding:7px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;font-size:11px;line-height:1.5;resize:vertical}
 /* 面板底部留白，别被底部导航压住 */
 .shell #user-settings-panel{padding-bottom:22px}
+/* 账号登录：半屏极简面板（Kelivo 风格）。背景变暗，面板里没有任何输入框。 */
+.account-login-layer{position:fixed;inset:0;z-index:9000;display:flex;align-items:flex-end;justify-content:center;background:rgba(38,32,27,.46)}
+.shell #subscription-accounts.account-login-sheet{display:flex;flex-direction:column;width:100%;max-width:520px;min-height:74vh;max-height:82vh;overflow-y:auto;box-sizing:border-box;margin:0;padding:0 18px calc(20px + var(--native-safe-bottom,0px));border:0!important;border-radius:20px 20px 0 0!important;background:#fffaf5!important;box-shadow:0 -10px 30px rgba(40,30,20,.16)!important}
+.account-sheet-handle{flex:0 0 auto;display:block;width:36px;height:4px;margin:9px auto 2px;border-radius:999px;background:#e3d8cc}
+.shell #subscription-accounts .account-sheet-head{flex:0 0 auto;display:grid;grid-template-columns:40px 1fr 40px;align-items:center;padding:6px 0 14px}
+.shell #subscription-accounts .account-sheet-head>b{text-align:center;font-size:16px;font-weight:600;color:#403b35}
+.shell #subscription-accounts button.account-sheet-close{padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;font-size:25px;line-height:1;color:#5b5248;text-align:left;cursor:pointer}
+.shell #subscription-accounts .account-tabs{flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:0 0 12px;overflow-x:auto;scrollbar-width:none}
+.shell #subscription-accounts .account-tabs::-webkit-scrollbar{display:none}
+.shell #subscription-accounts button.account-tab{flex:0 0 auto;padding:7px 13px!important;border:0!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#8a8378;white-space:nowrap;cursor:pointer}
+.shell #subscription-accounts button.account-tab.active{background:#f6e6db!important;color:#8b593b!important;font-weight:600}
+.shell #subscription-accounts .account-rows{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid #f0e7dc}
+.shell #subscription-accounts .account-row-wrap{display:flex;flex-direction:column}
+.shell #subscription-accounts .account-row{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #f0e5d9!important;border-radius:12px!important;background:#fffdfa!important;box-shadow:none!important}
+.shell #subscription-accounts .account-mark{flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:#f3ece4;color:#4a423a;font-size:19px;line-height:1}
+.shell #subscription-accounts .account-row-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.shell #subscription-accounts .account-row-text>b{font-size:14px;font-weight:600;color:#403b35}
+.shell #subscription-accounts .account-row-text>small{font-size:11px;color:#9a9085}
+.shell #subscription-accounts button.account-login-btn{flex:0 0 auto;min-width:88px;padding:8px 12px!important;border:1px solid #dcc0ad!important;border-radius:10px!important;background:#fffaf5!important;box-shadow:none!important;font-size:12px;color:#8b593b;white-space:nowrap;cursor:pointer}
+.shell #subscription-accounts button.account-login-btn.done{background:#f6e6db!important;border-color:#e7d2c2!important;color:#7a5a44!important}
+.shell #subscription-accounts button.account-login-btn:disabled{opacity:.6}
+.shell #subscription-accounts .account-row-menu{display:flex;justify-content:flex-end;gap:6px;padding:6px 2px 4px}
+.shell #subscription-accounts .account-row-menu button{padding:5px 10px!important;border:1px solid #e6ded2!important;border-radius:8px!important;background:#fffaf5!important;box-shadow:none!important;font-size:11px;color:#8a8378;cursor:pointer}
+.shell #subscription-accounts .account-error{margin:12px 0 0;padding:8px 10px;border-radius:9px;background:#fdeeee;color:#a94442;font-size:11px;line-height:1.5}

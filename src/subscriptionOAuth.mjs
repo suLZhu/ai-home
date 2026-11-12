@@ -1,12 +1,13 @@
 // 订阅账号「网页登录」：GitHub 上 Kelivo / Codex CLI / Claude Code CLI 的公开做法。
 // 只放官方公开的 OAuth 端点与开源实现里公开的参数，不硬编码任何来路不明的中转站。
 //
-// 边界（一定要如实告诉用户）：
-// 1) ChatGPT Plus / Claude Pro / Grok 这类「网页订阅」不是 API Key，授权后拿到的是 OAuth 令牌。
-// 2) 这些令牌对应的后端协议（Codex Responses / Anthropic Messages / Grok 内部接口）
-//    不是本应用的 OpenAI 兼容 /v1/chat/completions，纯前端 WebView 也无法直接跨域换令牌。
-// 3) 真正「登录后直接用额度」需要一层网关（如 CLIProxyAPI，把 CLI OAuth 令牌转成兼容端点），
-//    或由 App 自带的服务端做 code→token 与协议适配。本模块负责「弹页面登录 → 拿回码/令牌」。
+// v10：回调不再交给系统浏览器加载。Android 侧用可控 WebView 打开授权页，
+// 一旦跳到 callbackPrefixes 里的地址就拦截并原地换令牌（见 MainActivity.java），
+// 所以不会出现 localhost:1455 连接被拒绝，也不需要用户复制地址或填任何网址。
+//
+// 边界（如实说明）：ChatGPT Plus / Claude Pro / Grok 这类「网页订阅」不是 API Key，
+// 授权后拿到的是 OAuth 令牌，对应后端协议不是标准 /v1/chat/completions；
+// 纯前端要把订阅额度稳定用于聊天仍需一层协议适配 / 兼容网关。
 
 const str = (v) => String(v ?? '')
 
@@ -25,8 +26,10 @@ export const OAUTH_PROFILES = {
     clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
     redirectUri: 'http://localhost:1455/auth/callback',
     scope: 'openid profile email offline_access',
-    callbackHint: '登录后浏览器会跳到 localhost:1455/auth/callback?code=…（页面打不开是正常的），把地址栏整条链接复制回来。',
-    note: '取自开源 Codex OAuth 实现；client_id / 回调地址可能随官方 CLI 变更，官方随时可能调整。',
+    // 拦截规则（不是请求地址）：官方 CLI 注册的回调，App 内 WebView 在这里接住授权码。
+    callbackPrefixes: ['http://localhost:1455/auth/callback'],
+    callbackHint: '授权后自动回到 App，不用复制地址。',
+    note: '取自开源 Codex OAuth 实现；client_id / 回调地址可能随官方 CLI 变更。',
   },
   claude: {
     channelId: 'claude',
@@ -37,17 +40,19 @@ export const OAUTH_PROFILES = {
     clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
     redirectUri: 'https://console.anthropic.com/oauth/code/callback',
     scope: 'org:create_api_key user:profile user:inference',
-    callbackHint: '授权后停在 console.anthropic.com/oauth/code/callback?code=…，把地址栏整条链接复制回来。',
+    callbackPrefixes: ['https://console.anthropic.com/oauth/code/callback'],
+    callbackHint: '授权后自动回到 App，不用复制地址。',
     note: 'Claude Code 的 OAuth 流程；官方对第三方客户端使用订阅额度有限制，随时可能失效。',
   },
   grok: {
     channelId: 'grok',
     label: 'Grok / X 订阅',
-    flow: 'device',
+    flow: 'web',
     loginUrl: 'https://accounts.x.ai/',
-    deviceUrl: 'https://accounts.x.ai/',
-    callbackHint: '官方 Grok CLI 走设备码登录（grok login --device-auth）：网页里确认后把拿到的令牌 / 授权码粘回来；也可以直接填 xAI 控制台的 API Key。',
-    note: 'xAI 未公开 OAuth 授权端点，这里不编造地址；推荐用官方 CLI 设备码或自建网关。',
+    // 仅作为「如果官方跳回来就接住」的匹配规则，不发起任何请求、不编造授权端点。
+    callbackPrefixes: ['https://accounts.x.ai/oauth/callback', 'https://auth.x.ai/oauth2/callback'],
+    callbackHint: '打开 xAI 官方账户页登录；若官方没有回传授权码会明确提示，不会假装登录成功。',
+    note: 'xAI 未公开第三方网页授权端点，这里不编造地址；官方 CLI 走设备码或浏览器 OAuth。',
   },
 }
 
@@ -93,8 +98,36 @@ export function buildAuthorizeUrl(channelId, opts = {}) {
   return u.toString()
 }
 
-// 授权码 → 令牌。浏览器直连官方 token 接口会被 CORS 拦住，所以由服务端调用；
-// 本地模式（纯浏览器）会失败并给出明确提示，让用户直接粘贴令牌或改用网关。
+// 交给 Android 原生登录弹层的一份完整配置：打开哪个页面、拦截哪些回调、
+// 拿到 code 后往哪里换令牌。前端不再出现任何 URL / 回调 / 令牌输入框。
+export function buildLoginConfig(channelId, pkce = {}) {
+  const p = oauthProfile(channelId)
+  if (!p) return null
+  const isPkce = p.flow === 'pkce'
+  // makePkce() 给的字段叫 challenge，而 buildAuthorizeUrl 收的是 codeChallenge；
+  // 这里显式对齐，免得授权页把 code_challenge 发成空值。
+  const cfg = {
+    channelId,
+    url: isPkce ? buildAuthorizeUrl(channelId, {
+      codeChallenge: str(pkce.challenge),
+      state: str(pkce.state),
+    }) : (p.loginUrl || ''),
+    callbackPrefixes: (p.callbackPrefixes || (p.redirectUri ? [p.redirectUri] : [])).slice(),
+    state: isPkce ? str(pkce.state) : '',
+    tokenUrl: isPkce ? (p.tokenUrl || '') : '',
+    tokenBody: isPkce ? {
+      grant_type: 'authorization_code',
+      client_id: p.clientId || '',
+      redirect_uri: p.redirectUri || '',
+      code_verifier: str(pkce.verifier),
+    } : {},
+    tokenHeaders: {},
+  }
+  return cfg.url ? cfg : null
+}
+
+// 授权码 → 令牌。浏览器直连官方 token 接口会被 CORS 拦住；
+// Android 走原生 HttpURLConnection（MainActivity），服务端仍保留这个代发函数。
 export async function exchangeOAuthCode({ channelId, code, codeVerifier, state, userAgent = '', fetchImpl = fetch }) {
   const p = oauthProfile(channelId)
   if (!p || p.flow !== 'pkce') throw new Error('这个渠道没有公开的 OAuth 令牌接口，请改用设备码或直接粘贴令牌。')

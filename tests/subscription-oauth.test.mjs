@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  OAUTH_PROFILES, GATEWAY_REFERENCES, oauthProfile, oauthLoginUrl,
-  buildAuthorizeUrl, parseOAuthCallback, looksLikeToken, exchangeOAuthCode,
+  OAUTH_PROFILES, GATEWAY_REFERENCES, oauthProfile, oauthLoginUrl, buildAuthorizeUrl,
+  buildLoginConfig, parseOAuthCallback, looksLikeToken, exchangeOAuthCode,
 } from '../src/subscriptionOAuth.mjs'
 
 test('只有 GPT / Claude / Grok 三家，且端点都是官方域名', () => {
@@ -34,6 +34,28 @@ test('PKCE 授权页：参数齐全、state 与 challenge 都带上、Claude 带
   assert.equal(c.searchParams.get('scope')?.includes('user:inference'), true)
   assert.equal(buildAuthorizeUrl('grok', { codeChallenge: 'c', state: 's' }), '')
   assert.equal(buildAuthorizeUrl('不存在', {}), '')
+})
+
+test('一键登录配置：授权页 + 回调拦截前缀 + 原生换令牌参数齐全', () => {
+  const pkce = { challenge: 'ch-1', state: 'st-1', verifier: 'vr-1' }
+  const gpt = buildLoginConfig('gpt', pkce)
+  assert.ok(gpt.url.startsWith('https://auth.openai.com/oauth/authorize'))
+  assert.ok(gpt.url.includes('code_challenge=ch-1'))
+  assert.deepEqual(gpt.callbackPrefixes, ['http://localhost:1455/auth/callback'])
+  assert.equal(gpt.tokenUrl, 'https://auth.openai.com/oauth/token')
+  assert.equal(gpt.state, 'st-1')
+  assert.equal(gpt.tokenBody.code_verifier, 'vr-1')
+  assert.equal(gpt.tokenBody.client_id, OAUTH_PROFILES.gpt.clientId)
+  assert.equal(gpt.tokenBody.redirect_uri, 'http://localhost:1455/auth/callback')
+  assert.equal(gpt.tokenBody.code, undefined)
+  const claude = buildLoginConfig('claude', pkce)
+  assert.ok(claude.callbackPrefixes[0].startsWith('https://console.anthropic.com/oauth/code/callback'))
+  assert.equal(claude.tokenUrl, 'https://console.anthropic.com/v1/oauth/token')
+  const grok = buildLoginConfig('grok', pkce)
+  assert.equal(grok.url, 'https://accounts.x.ai/')
+  assert.equal(grok.tokenUrl, '')
+  assert.deepEqual(grok.tokenBody, {})
+  assert.equal(buildLoginConfig('不存在', pkce), null)
 })
 
 test('回调解析：完整地址 / fragment / 裸授权码 / 现成令牌 / state 校验 / 错误', () => {
