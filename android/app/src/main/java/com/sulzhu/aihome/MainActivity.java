@@ -46,18 +46,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends BridgeActivity {
-    // Android 系统「字体大小 / 显示大小」会传导进 WebView，把页面里所有 CSS px
-    // 一起放大，聊天一句话没几个字就换行。App 自带 --font-scale 与密度适配规则，
-    // 这里把本 Activity 的 fontScale 固定为 1，让任何系统字体设置下排版都一致。
-    // 用 createConfigurationContext 而非已废弃的 Resources.updateConfiguration，
-    // 只影响本 Activity 的 Context，不改系统或其它 App。
+    // 不再把本 Activity 的 fontScale 固定为 1（那等于全局禁止用户放大字体）。
+    // 改为读取真实系统字体设置，显式写进主 WebView 的 textZoom：
+    //   - setTextZoom 是绝对值，不会与系统默认值叠加；
+    //   - 夹在 [0.85, 1.30] 只防极端档位把布局撑破，默认 / 较大字体都真实生效；
+    //   - Web 层用 min-height、允许换行、百分比气泡宽度承接放大，不靠禁止缩放换稳定。
+    private void applyFontScaleToWebView() {
+        WebView webView = (getBridge() != null) ? getBridge().getWebView() : null;
+        if (webView == null) return;
+        float scale = Resources.getSystem().getConfiguration().fontScale;
+        if (scale < 0.85f) scale = 0.85f;
+        if (scale > 1.30f) scale = 1.30f;
+        final int zoom = Math.round(100 * scale);
+        webView.post(() -> webView.getSettings().setTextZoom(zoom));
+    }
+
     @Override
-    public Resources getResources() {
-        Resources res = super.getResources();
-        Configuration config = new Configuration(res.getConfiguration());
-        if (config.fontScale == 1.0f) return res;
-        config.fontScale = 1.0f;
-        return createConfigurationContext(config).getResources();
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        applyFontScaleToWebView();
+        injectSafeArea();
     }
 
     // ── 全面屏（edge-to-edge）──────────────────────────────────────────────
@@ -100,6 +108,7 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         // 从后台回来 / 切主题后重新灌一次，防止页面重建丢失内联变量。
         injectSafeArea();
+        applyFontScaleToWebView();
         if (systemBridge != null) systemBridge.onResume();
     }
 
@@ -154,7 +163,7 @@ public class MainActivity extends BridgeActivity {
         getBridge().addWebViewListener(new WebViewListener() {
             @Override
             public void onPageLoaded(WebView view) {
-                view.post(() -> injectSafeArea());
+                view.post(() -> { injectSafeArea(); applyFontScaleToWebView(); });
             }
         });
     }

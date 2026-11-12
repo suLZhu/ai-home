@@ -21,4 +21,6 @@ export const BEAUTIFY_PACKS: BeautifyPack[] = [
   { id: 'plain', name: '简洁风', description: '原生奶灰浅紫，干净轻量无附加装饰', cssClass: '' },
 ]
 
-export const DEFAULT_BEAUTIFY_PACK = 'pixel'
+// 第一版基础主题是「薄雾 Mist」：默认走简洁风，不再默认套像素黑白硬边皮肤。
+// 像素风保留在注册表里，用户仍可在设置 → 主题美化手动开启。
+export const DEFAULT_BEAUTIFY_PACK = 'plain'

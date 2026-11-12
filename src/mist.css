@@ -1,0 +1,214 @@
+/* ═══════════ 薄雾 Mist · 第一版基础主题 ═══════════
+   Theme Tokens(theme.ts / index.css) → Components(本文件) → Pages(App.tsx)。
+   纯视觉收尾层：不改任何业务状态、消息结构、API 链路。
+   所有颜色 / 圆角 / 阴影 / 字号只引用语义变量，未来换主题只替换 tokens。
+   加载顺序在 App.css / pixel.css 之后；像素美化包内的控件保留自己的黑白皮肤。 */
+
+/* ── 页面底层：奶灰背景、深灰黑文字、极淡描边 ───────────────────────── */
+.shell { background:var(--page-bg); color:var(--text-primary); }
+.shell .chat-body { background:transparent; }
+.shell .chat-header { border-bottom:1px solid var(--divider)!important; }
+
+/* ── Typography：按信息层级收敛，禁止各页散落任意 font-size ──────────── */
+.shell .settings-screen h2,
+.shell .fun-screen h2 { font-size:var(--type-display)!important; }
+.shell .chat-header-title>b,
+.shell .chat-header>b { font-size:var(--type-title)!important; font-weight:600; }
+.shell .bubble,
+.shell .fullscreen-chat .compose-box .compose-text { font-size:var(--type-body)!important; line-height:var(--type-body-line)!important; }
+.shell .kelivo-row,
+.shell .syscap-row,
+.shell .settings-detail b { font-size:var(--type-item)!important; }
+.shell .chat-header-subline,
+.shell .message-tech,
+.shell .message-tech>summary,
+.shell .message-tech-body,
+.shell .msg-tool-calls-head,
+.shell .model-sheet-key,
+.shell .syscap-foot>span { font-size:var(--type-meta)!important; }
+.shell .syscap-hint,
+.shell .soft-select-option.active b,
+.shell .model-sheet-check { font-size:var(--type-caption)!important; }
+
+/* ── 统一 Button variants：primary / secondary / ghost / danger / icon ─ */
+.shell:not(.beautify-pixel) .btn {
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:38px;padding:0 14px;border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);
+  font-size:var(--type-button);line-height:1.3;white-space:normal;
+  box-shadow:none;cursor:pointer;
+}
+.shell:not(.beautify-pixel) .btn:hover { background:var(--primary-soft); }
+.shell .btn-primary { background:var(--primary)!important;color:#fff!important;border-color:transparent!important; }
+.shell .btn-secondary { background:var(--primary-soft)!important;color:var(--text-primary)!important;border-color:transparent!important; }
+.shell .btn-ghost { background:transparent!important;color:var(--text-secondary)!important;border-color:transparent!important; }
+.shell .btn-ghost:hover { background:var(--primary-soft)!important; }
+.shell .btn-danger { background:var(--danger-soft)!important;color:var(--danger)!important;border-color:transparent!important; }
+.shell .btn-icon {
+  width:36px;min-width:36px;height:36px;padding:0!important;border:0!important;
+  border-radius:50%!important;background:transparent!important;box-shadow:none!important;
+  display:inline-grid;place-items:center;font-size:var(--type-button)!important;
+}
+.shell .btn-icon:hover { background:var(--primary-soft)!important; }
+.shell.theme-night .btn-primary { color:#1b1f2b!important; }
+
+/* ── 聊天气泡：16sp 正文 / 24sp 行高 / 80% 宽 / 短消息自然收缩 ─────── */
+.shell .bubble {
+  /* 80% 视口（390dp → 312px），桌面宽屏再夹到 320px，避免长消息被嵌套列压得过窄。 */
+  width:fit-content;max-width:min(80vw,320px)!important;
+  padding:10px 13px!important;border:0!important;
+  border-radius:17px!important;
+  background:var(--bubble-assistant)!important;color:var(--text-primary)!important;
+  box-shadow:var(--shadow-sm)!important;
+  overflow-wrap:anywhere;white-space:pre-wrap;
+}
+.shell .bubble.user { background:var(--bubble-user)!important; }
+.shell .bubble.assistant { background:var(--bubble-assistant)!important; }
+.shell.bubble-outlined .bubble { background:transparent!important;border:1px solid var(--line)!important;box-shadow:none!important; }
+.shell .message-stack .bubble:has(.sent-attachment) { max-width:100%!important; }
+.shell .message-row .bubble { max-width:min(80vw,320px)!important; }
+.shell .message-avatar { width:32px;height:32px;border-radius:50%;font-size:var(--type-caption);border:0!important; }
+/* 我的头像仍是进入用户设置的入口，但降低权重，不与气泡抢视觉。 */
+.shell .message-avatar-me { width:28px;height:28px;background:transparent!important;border:0!important;opacity:.5; }
+.shell .message-row { align-items:flex-start; }
+.shell .message-stack { max-width:calc(100% - 42px); }
+
+/* ── 顶栏：头像 34 / 名称 16sp / 状态 11sp / 统一 icon button ───────── */
+.shell .chat-header { gap:6px;padding:8px 10px!important;min-height:52px; }
+/* 侧边抽屉贴边把手保留入口，但只留很淡的一道提示。 */
+.shell .mobile-menu-toggle.sidebar-edge-handle { opacity:.3;box-shadow:none;background:var(--primary-soft)!important;color:var(--text-secondary)!important; }
+.shell .chat-avatar { width:34px;height:34px;border-radius:50%;font-size:var(--type-caption); }
+.shell .chat-header-title { gap:8px; }
+.shell .chat-header-actions { gap:4px; }
+.shell .chat-header-actions button {
+  width:36px;height:36px;min-width:36px;padding:0!important;
+  border:0!important;border-radius:50%!important;
+  background:transparent!important;box-shadow:none!important;
+  color:var(--text-secondary)!important;font-size:var(--type-button)!important;
+  display:inline-grid;place-items:center;white-space:normal;
+}
+.shell .chat-header-actions button:hover,
+.shell .chat-header-actions button.tool-active { background:var(--primary-soft)!important;color:var(--primary)!important; }
+.shell .chat-header-actions button:last-child,
+.shell .chat-header-actions .chat-config-toggle,
+.shell .chat-header-actions button.select-toggle { min-width:36px;width:36px;padding:0!important;border-radius:50%!important; }
+.shell .chat-header-subline,
+.shell .fullscreen-chat .chat-header-subline {
+  border:0!important;border-bottom:1px solid var(--divider)!important;
+  border-radius:0!important;background:transparent!important;box-shadow:none!important;
+  color:var(--text-secondary)!important;font-size:var(--type-meta)!important;line-height:1.5;
+}
+.shell .fullscreen-chat .chat-header-subline:hover { background:var(--primary-soft)!important; }
+
+/* ── 输入区：低高度单行起步、自动增长、超过上限内部滚动 ─────────────── */
+.shell .fullscreen-chat .compose.compose-box {
+  margin:8px 10px 10px!important;padding:8px 10px 6px!important;gap:2px;
+  border:1px solid var(--border-subtle)!important;border-radius:var(--radius-lg)!important;
+  background:var(--surface-elevated)!important;box-shadow:var(--shadow-sm)!important;
+}
+.shell .fullscreen-chat .compose-box .compose-text {
+  min-height:var(--type-body-line)!important;max-height:120px!important;
+  padding:4px 2px!important;border:0!important;border-radius:0!important;
+  background:transparent!important;color:var(--text-primary)!important;
+  box-shadow:none!important;resize:none;overflow-y:auto;
+  font-size:var(--type-body)!important;line-height:var(--type-body-line)!important;
+}
+.shell .compose-toolbar { min-height:36px;gap:4px; }
+.shell .compose-tool-icon,
+.shell .compose-attach {
+  width:34px;height:34px;min-width:34px;padding:0!important;
+  border:0!important;border-radius:50%!important;background:transparent!important;
+  box-shadow:none!important;color:var(--text-secondary)!important;opacity:.78;
+  display:inline-grid;place-items:center;
+}
+.shell .compose-tool-icon.active,
+.shell .compose-tool-icon:hover,
+.shell .compose-attach:hover { background:var(--primary-soft)!important;color:var(--primary)!important;opacity:1; }
+.shell .compose-send { gap:6px; }
+.shell .fullscreen-chat .compose-box .send-button {
+  height:auto;min-height:38px;padding:0 16px!important;border:0!important;
+  border-radius:var(--radius-md)!important;background:var(--primary)!important;
+  color:#fff!important;font-weight:600;font-size:var(--type-button)!important;
+  white-space:normal;box-shadow:none!important;
+}
+.shell .fullscreen-chat .compose-box .send-button:disabled { opacity:.5; }
+.shell.theme-night .fullscreen-chat .compose-box .send-button { color:#1b1f2b!important; }
+.shell .compose-more-actions button { border:1px solid var(--border-subtle)!important;background:var(--field)!important;color:var(--text-primary)!important;font-size:var(--type-button)!important; }
+
+/* ── 消息操作：默认隐藏，桌面 hover / Android 长按 / 键盘聚焦才出现 ─── */
+.shell .message-stack .message-actions { opacity:0;pointer-events:none;transition:opacity .15s ease; }
+.shell .message-row:hover .message-actions,
+.shell .message-row.actions-open .message-actions,
+.shell .message-actions:focus-within { opacity:1;pointer-events:auto; }
+@media (hover:none) {
+  .shell .message-row:hover:not(.actions-open) .message-actions { opacity:0;pointer-events:none; }
+}
+.shell .message-action { color:var(--text-secondary)!important; }
+
+/* ── 技术信息：默认只留一行弱状态，展开后才是完整数据 ───────────────── */
+.shell .message-usage { display:none!important; }
+.shell .message-tech { margin:4px 3px 0;color:var(--text-secondary); }
+.shell .message-tech>summary {
+  list-style:none;display:inline-flex;align-items:center;gap:6px;
+  cursor:pointer;opacity:.62;line-height:1.5;user-select:none;
+}
+.shell .message-tech>summary::-webkit-details-marker { display:none; }
+.shell .message-tech>summary::after { content:'›';font-size:var(--type-caption); }
+.shell .message-tech[open]>summary { opacity:.9; }
+.shell .message-tech-body { display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:5px;line-height:1.5; }
+.shell .message-tech-body span { white-space:normal;overflow-wrap:anywhere; }
+.shell .msg-tool-calls {
+  margin:4px 2px 0!important;padding:0!important;border:0!important;
+  background:transparent!important;box-shadow:none!important;
+}
+.shell .msg-tool-calls-head { color:var(--text-secondary)!important;opacity:.72;padding:2px 0!important; }
+.shell .msg-tool-calls-head b { font-weight:500; }
+.shell .msg-tool-calls-list { border-top:1px solid var(--divider)!important;margin-top:6px; }
+
+/* ── Sheet / 选择面板：同一套大圆角、轻阴影、浅紫选中 + 小 check ────── */
+.shell .model-sheet-backdrop { background:rgba(40,34,52,.30); }
+.shell .model-sheet {
+  border:1px solid var(--border-subtle)!important;border-bottom:0!important;
+  border-radius:var(--radius-sheet) var(--radius-sheet) 0 0!important;
+  background:var(--surface-elevated)!important;box-shadow:var(--shadow-md)!important;
+}
+.shell .model-sheet-row.selected { background:var(--primary-soft)!important; }
+.shell .model-sheet-check { color:var(--primary)!important; }
+.shell .model-sheet-filter button {
+  border:1px solid var(--border-subtle)!important;background:var(--surface)!important;
+  color:var(--text-secondary)!important;font-size:var(--type-caption)!important;
+}
+.shell .model-sheet-filter button.active {
+  background:var(--primary-soft)!important;color:var(--primary)!important;border-color:transparent!important;
+}
+.shell .model-sheet-empty { font-size:var(--type-caption)!important;color:var(--text-secondary)!important; }
+.shell .model-sheet-routeinfo { background:var(--field)!important;color:var(--text-secondary)!important;font-size:var(--type-meta)!important; }
+.shell .soft-select-trigger { border:1px solid var(--border-subtle)!important;background:var(--surface)!important;color:var(--text-primary)!important;font-size:var(--type-item)!important; }
+.shell .soft-select-menu {
+  border:1px solid var(--border-subtle)!important;border-radius:var(--radius-md)!important;
+  background:var(--surface-elevated)!important;box-shadow:var(--shadow-md)!important;
+}
+.shell .soft-select-option.active { background:var(--primary-soft)!important;color:var(--text-primary)!important; }
+.shell .soft-select-option.active b { color:var(--primary)!important;font-size:var(--type-caption)!important; }
+.shell .chat-config-panel,
+.shell .compose-tray { border:1px solid var(--border-subtle)!important;border-radius:var(--radius-sheet)!important;background:var(--surface-elevated)!important;box-shadow:var(--shadow-md)!important; }
+
+/* ── 设置页：标题 + 状态即可，不再重复解释 ──────────────────────────── */
+.shell .settings-heading p { display:none; }
+.shell .settings-module-card small { display:none; }
+.shell .kelivo-row { min-height:48px; }
+.shell .kelivo-row-label { white-space:normal;overflow-wrap:anywhere;line-height:1.35; }
+.shell .kelivo-row-chevron { color:var(--text-secondary); }
+.shell .syscap-row { min-height:46px; }
+.shell .syscap-label,
+.shell .syscap-status { white-space:normal;overflow-wrap:anywhere;line-height:1.35; }
+.shell .syscap-status.ok { color:var(--text-secondary); }
+.shell .syscap-status.bad { color:var(--danger); }
+.shell .syscap-foot button { font-size:var(--type-button)!important; }
+
+/* ── 系统字体放大安全网：不固定高度、允许换行、气泡按视口比例收缩 ──── */
+.shell :is(button,.kelivo-row,.syscap-row,.soft-select-trigger):not(.message-action):not(.btn-icon) { height:auto;min-height:36px; }
+.shell :is(button,label,.kelivo-row-label,.syscap-label,.syscap-status,.message-tech-body span) { overflow-wrap:anywhere; }
+.shell .bubble { height:auto;max-width:min(80vw,320px)!important;overflow-x:hidden; }
+.shell .message-stack { min-width:0; }
+.shell .chat-header-title>b { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }

@@ -77,8 +77,8 @@ export function AndroidSystemSettings({
     <div className="syscap-foot">
       <span>{caps.available ? '已登记 ' + caps.alarm.registered + ' 条定时提醒' + (caps.alarm.degraded ? ' · 非精确调度' : ' · 精确定时') : '当前为电脑预览'}</span>
       <div>
-        <button type="button" onClick={refresh}>刷新</button>
-        <button type="button" onClick={testNotification}>测试通知</button>
+        <button type="button" className="btn btn-ghost" onClick={refresh}>刷新</button>
+        <button type="button" className="btn btn-secondary" onClick={testNotification}>测试通知</button>
       </div>
     </div>
     {note && <p className="syscap-note" role="status">{note}</p>}
