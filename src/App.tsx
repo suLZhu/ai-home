@@ -58,7 +58,7 @@ import { loadCustomAssets, saveCustomAssets } from './assetStore.mjs'
 import { AndroidSystemSettings } from './AndroidSystemSettings'
 import { channelPlan, notificationPayload, decideNotification, loadNotified, markNotified, routeFromNotificationOpen } from './notificationDispatch.mjs'
 import { buildAlarmPlan } from './taskAlarms.mjs'
-import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered } from './nativeSystem.mjs'
+import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground } from './nativeSystem.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
@@ -1022,6 +1022,12 @@ export default function App() {
         : [...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
     if(options.insertUser!==false)setDraft('')
     setChatError('');setSending(true)
+    // Android: generation is a user-initiated long-running operation. Keep the app
+    // in foreground-service priority while the existing JS stream/tool loop runs.
+    setGenerationForeground({
+      action:'start', assistantId:target, assistantName:displayName(target),
+      conversationId:sendConversationId, messageId:assistantMessageId,
+    })
     // 用户消息一入列就要求立刻落盘（把防抖哨兵标记为已超期），堵住「发送后 700ms 内刷新丢消息」。
     firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
     // Recall older original messages from this assistant's own conversations.
@@ -1220,6 +1226,7 @@ export default function App() {
     } finally {
       if(sendAbortRef.current&&sendAbortRef.current.id===assistantMessageId)sendAbortRef.current=null
       setSending(false)
+      setGenerationForeground({action:'stop', messageId:assistantMessageId})
     }
   }
 
