@@ -9,8 +9,9 @@ import androidx.core.app.NotificationCompat;
 
 /**
  * Keeps an in-flight assistant generation alive when the WebView is backgrounded.
- * The actual HTTP/SSE worker is attached to this service in the next step; this
- * first layer deliberately owns process priority independently from MainActivity.
+ * The existing WebView stream/tool loop remains the single execution path; this
+ * foreground service raises process priority so switching apps or locking the
+ * screen does not intentionally tear down that in-flight generation.
  */
 public final class GenerationService extends Service {
     public static final String ACTION_START = "com.sulzhu.aihome.generation.START";
