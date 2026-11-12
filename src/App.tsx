@@ -1207,6 +1207,13 @@ export default function App() {
         updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:'（接口已响应，但没有收到文本内容。请检查模型名称、工具调用兼容性或接口的流式支持。）',usage:finalUsage}:m),sendConversationId)
       }
       else if(finalUsage) updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,usage:finalUsage}:m),sendConversationId)
+      // Ordinary replies now use the same deduplicated native notification path as
+      // proactive/task messages. The decision layer suppresses it only while the
+      // exact conversation is visibly open; background/lock-screen/other-chat gets it.
+      if(answer) notifyAfterWrite({
+        kind:'message', person:target, messageId:assistantMessageId,
+        conversationId:sendConversationId, text:answer, at:Date.now(),
+      })
       return 'ok'
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
