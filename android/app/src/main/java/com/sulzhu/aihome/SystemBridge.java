@@ -170,8 +170,8 @@ final class SystemBridge {
                 return true;
             }
             if ("stop".equals(action)) {
-                intent.setAction(GenerationService.ACTION_STOP);
-                ctx().startService(intent);
+                // Do not start a background service just to stop it: Android O+ can reject that.
+                ctx().stopService(intent);
                 return true;
             }
         } catch (Exception ignored) { }
