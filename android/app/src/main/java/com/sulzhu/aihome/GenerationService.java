@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
+import android.os.PowerManager;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
@@ -17,15 +18,38 @@ public final class GenerationService extends Service {
     public static final String ACTION_START = "com.sulzhu.aihome.generation.START";
     public static final String ACTION_STOP = "com.sulzhu.aihome.generation.STOP";
     private static final int FOREGROUND_ID = 73001;
+    private PowerManager.WakeLock wakeLock;
+
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock == null) return;
+            if (!wakeLock.isHeld()) wakeLock.acquire();
+        } catch (Exception ignored) { }
+    }
+
+    private void releaseWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) { }
+    }
 
     @Override public void onCreate() {
         super.onCreate();
         SystemNotifier.ensureGenerationChannel(this);
+        // 锁屏后 CPU 可能休眠：partial wake lock 只阻止深度休眠，不点亮屏幕、不改后台网络架构。
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "aihome:generation");
+                wakeLock.setReferenceCounted(false);
+            }
+        } catch (Exception ignored) { }
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? "" : intent.getAction();
         if (ACTION_STOP.equals(action)) {
+            releaseWakeLock();
             stopForeground(true);
             stopSelf();
             return START_NOT_STICKY;
@@ -42,10 +66,12 @@ public final class GenerationService extends Service {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build();
         startForeground(FOREGROUND_ID, n);
+        acquireWakeLock();
         return START_REDELIVER_INTENT;
     }
 
     @Override public void onDestroy() {
+        releaseWakeLock();
         stopForeground(true);
         super.onDestroy();
     }

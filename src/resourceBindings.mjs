@@ -74,7 +74,8 @@ export function normalizeBindings(raw, people) {
 // 聊天请求用哪套模型：优先助手绑定的全局预设；未绑定或预设已删除则回退旧的 modelConfig[person]。
 export function resolveModelConfig(profileId, profiles, fallback) {
   const found = normalizeProfiles(profiles).find((p) => p.id === profileId)
-  if (!found) return fallback
+  // 显示名绝不能当请求 model id：预设缺 model 时回退旧配置，而不是拿 name 顶替。
+  if (!found || !found.model.trim()) return fallback
   return {
     endpoint: found.endpoint,
     model: found.model,

@@ -59,6 +59,8 @@ import { AndroidSystemSettings } from './AndroidSystemSettings'
 import { channelPlan, notificationPayload, decideNotification, loadNotified, markNotified, routeFromNotificationOpen } from './notificationDispatch.mjs'
 import { buildAlarmPlan } from './taskAlarms.mjs'
 import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground } from './nativeSystem.mjs'
+import { friendlyHttpError, routeInfoFromError } from './chatHttpError.mjs'
+import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
 import './pixel.css'
@@ -290,6 +292,22 @@ export default function App() {
     if (sent) markNotified(localStorage, payload.key, Date.now())
     return sent
   }, [])
+  const sendingRef = useRef(false)
+  useEffect(() => { sendingRef.current = sending }, [sending])
+  // 切后台/锁屏期间 WebView 若被系统回收，快照里会残留一条空内容的助手占位气泡。
+  // 回前台或冷启动状态就绪后，只把它标成「上次回复未完成」，不覆盖已写出的内容。
+  const recoverStaleGeneration = useCallback(() => {
+    const active = readActiveGeneration(localStorage)
+    if (!active || !needsGenerationRecovery(active, sendingRef.current)) return false
+    const personId = String(active.person || '')
+    const convId = String(active.conversationId || '')
+    const messageId = String(active.messageId || '')
+    finishGeneration(localStorage, messageId)
+    const patch = (list: any[]) => recoverInterruptedMessages(list, messageId).messages
+    if (convId) setConversations(old => ({ ...old, [personId]: (old[personId] || []).map(c => c.id === convId ? { ...c, messages: patch(c.messages || []) } : c) }))
+    if (!convId || activeConversationIdsRef.current[personId] === convId) setMessages(old => ({ ...old, [personId]: patch(old[personId] || []) }))
+    return true
+  }, [])
   // 每次渲染后把最新状态灌进处理器引用，避免原生回调拿到过期的会话状态。
   useEffect(() => {
     const activateConversation = (personId: string, conversationId: string) => {
@@ -322,20 +340,27 @@ export default function App() {
     })
     const pending = consumePendingOpen()
     if (pending) pendingNotificationRef.current = pending
-    const onVisible = () => { const p = consumePendingOpen(); if (p) systemHandlersRef.current.onOpen(p) }
+    const onVisible = () => {
+      if (document.hidden) return
+      // 回到前台先恢复上次被中断的生成状态，再处理通知点击的会话跳转。
+      recoverStaleGeneration()
+      const p = consumePendingOpen(); if (p) systemHandlersRef.current.onOpen(p)
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => { unregister(); document.removeEventListener('visibilitychange', onVisible) }
-  }, [])
+  }, [recoverStaleGeneration])
   // 冷启动时 WebView 尚未装载完会话，等本地/云端状态就绪再跳转。
   useEffect(() => {
-    if (authStatus !== 'signedIn' || !pendingNotificationRef.current) return
+    if (authStatus !== 'signedIn') return
     const timer = window.setTimeout(() => {
+      // 冷启动：等本地/云端会话状态装载完，再判断上次生成是否被系统中断。
+      recoverStaleGeneration()
       const payload = pendingNotificationRef.current
       pendingNotificationRef.current = null
       if (payload) systemHandlersRef.current.onOpen(payload)
     }, 500)
     return () => window.clearTimeout(timer)
-  }, [authStatus])
+  }, [authStatus, recoverStaleGeneration])
   // 动态注册通知渠道：每新增一位助手就多一条渠道，原生层不写死人物。
   useEffect(() => {
     if (!systemBridgeAvailable()) return
@@ -1022,6 +1047,8 @@ export default function App() {
         : [...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
     if(options.insertUser!==false)setDraft('')
     setChatError('');setSending(true)
+    // 进程被系统回收时靠这条标记恢复「上次未完成的生成」，不丢空白占位气泡。
+    startGeneration(localStorage,{person:target,conversationId:sendConversationId,messageId:assistantMessageId},Date.now())
     // Android: generation is a user-initiated long-running operation. Keep the app
     // in foreground-service priority while the existing JS stream/tool loop runs.
     setGenerationForeground({
@@ -1119,7 +1146,20 @@ export default function App() {
         }))
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(routeMode?{routes:routePlan}:{})})})
         let response=await chatProxy()
-        if(!response.ok){const detail=await response.text();if(routeMode){try{const parsed=JSON.parse(detail);if(parsed?.routeReport)setLastRouteInfo(summarizeRouteReport(parsed.routeReport)||String(parsed.error||''))}catch{setLastRouteInfo(detail.slice(0,160))}}if(response.status===400&&/stream_options|include_usage/i.test(detail)){delete requestBody.stream_options;response=await chatProxy();if(!response.ok)throw new Error('接口返回 HTTP '+response.status+'：'+(await response.text()).slice(0,300))}else throw new Error('接口返回 HTTP '+response.status+'：'+detail.slice(0,300))}
+        if(!response.ok){
+          const detail=await response.text()
+          // 上游原始报文（JSON / HTML / 堆栈）只进控制台，绝不直接显示在聊天气泡或错误条里。
+          console.warn('[chat] upstream HTTP error',response.status,detail.slice(0,2000))
+          if(routeMode){
+            let report:any=null
+            try{report=JSON.parse(detail)?.routeReport}catch{report=null}
+            setLastRouteInfo(report?(summarizeRouteReport(report)||routeInfoFromError(response.status,detail)):routeInfoFromError(response.status,detail))
+          }
+          if(response.status===400&&/stream_options|include_usage/i.test(detail)){
+            delete requestBody.stream_options;response=await chatProxy()
+            if(!response.ok){const retryDetail=await response.text();console.warn('[chat] retry upstream HTTP error',response.status,retryDetail.slice(0,2000));throw new Error(friendlyHttpError(response.status,retryDetail))}
+          }else throw new Error(friendlyHttpError(response.status,detail))
+        }
         if(routeMode){const used=response.headers.get('X-Route-Used')||'';const usedLabel=(()=>{try{return decodeURIComponent(response.headers.get('X-Route-Label')||'')}catch{return ''}})();if(used)setLastRouteInfo('实际使用线路：'+(usedLabel||used))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
@@ -1233,6 +1273,7 @@ export default function App() {
     } finally {
       if(sendAbortRef.current&&sendAbortRef.current.id===assistantMessageId)sendAbortRef.current=null
       setSending(false)
+      finishGeneration(localStorage, assistantMessageId)
       setGenerationForeground({action:'stop', messageId:assistantMessageId})
     }
   }

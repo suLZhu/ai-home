@@ -25,7 +25,12 @@
 
         </activity>
 
-        <service\n            android:name=".GenerationService"\n            android:exported="false"\n            android:foregroundServiceType="dataSync" />\n\n        <!-- 精确定时到点触发；不导出，只接受本 App 的 AlarmManager PendingIntent。 -->
+        <service
+            android:name=".GenerationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- 精确定时到点触发；不导出，只接受本 App 的 AlarmManager PendingIntent。 -->
         <receiver
             android:name=".AlarmReceiver"
             android:exported="false" />
@@ -67,5 +72,7 @@
     <!-- 悬浮窗：本阶段只检测状态 / 跳转授权，暂不做悬浮聊天 UI。 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 </manifest>

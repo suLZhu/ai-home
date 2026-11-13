@@ -110,3 +110,12 @@ test('Android 不再全局禁止系统字体缩放，改为 WebView textZoom 承
   assert.match(mist, /溢出|overflow-wrap:anywhere/)
   assert.match(mist, /min-height:36px/)
 })
+
+test('Mist 顶栏保留 Android 状态栏安全区与可点击热区', () => {
+  const mist = read('src/mist.css')
+  assert.match(mist, /\.shell \.chat-header \{[^}]*padding-top:max\(8px,calc\(var\(--app-safe-top\) \+ 6px\)\)!important/)
+  assert.match(mist, /\.shell \.fullscreen-chat \.chat-header \{[\s\S]*?padding-top:max\(8px,calc\(var\(--app-safe-top\) \+ 6px\)\)!important/)
+  assert.match(mist, /\.shell \.chat-header-actions button::after \{[^}]*inset:-5px/)
+  const appCss = read('src/App.css')
+  assert.match(appCss, /--app-safe-top:max\(env\(safe-area-inset-top/)
+})

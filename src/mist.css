@@ -74,12 +74,14 @@
 .shell .message-stack { max-width:calc(100% - 42px); }
 
 /* ── 顶栏：头像 34 / 名称 16sp / 状态 11sp / 统一 icon button ───────── */
-.shell .chat-header { gap:6px;padding:8px 10px!important;min-height:52px; }
+/* 状态栏安全区：padding 简写带 !important 会压掉 App.css 的 padding-top，
+   必须用同等优先级把顶部内边距写回来，否则顶栏被状态栏盖住、按钮点不到。 */
+.shell .chat-header { gap:6px;padding:8px 10px!important;padding-top:max(8px,calc(var(--app-safe-top) + 6px))!important;min-height:52px; }
 /* 顶栏：头像 + 助手名贴左上，操作按钮仍靠右；不再三等分居中。 */
 .shell .fullscreen-chat .chat-header {
   display:flex;align-items:center;justify-content:space-between;
   grid-template-columns:none;column-gap:0;gap:6px;
-  padding-top:max(8px,calc(var(--app-safe-top) + 6px));
+  padding-top:max(8px,calc(var(--app-safe-top) + 6px))!important;
 }
 .shell .fullscreen-chat .chat-header-spacer { display:none; }
 .shell .fullscreen-chat .chat-header-title {
@@ -102,6 +104,9 @@
   color:var(--text-secondary)!important;font-size:var(--type-button)!important;
   display:inline-grid;place-items:center;white-space:normal;
 }
+/* icon 按钮视觉 36px，点击热区补到 46px，避免状态栏下方点不中。 */
+.shell .chat-header-actions button { position:relative; }
+.shell .chat-header-actions button::after { content:"";position:absolute;inset:-5px; }
 .shell .chat-header-actions button:hover,
 .shell .chat-header-actions button.tool-active { background:var(--primary-soft)!important;color:var(--primary)!important; }
 .shell .chat-header-actions button:last-child,

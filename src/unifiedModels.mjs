@@ -28,13 +28,14 @@ export function buildModelCatalog({ profiles = [], vendors = [], routes = [], su
 
   for (const p of Array.isArray(profiles) ? profiles : []) {
     if (!p || typeof p !== 'object') continue
-    const id = logicalModelId(p.model || p.name)
+    // 请求 model id 只能来自显式 model 字段；显示名绝不参与请求，也不做目录主键。
+    const id = logicalModelId(p.model)
     if (!id) continue
     const source = sourceOfProfile(p, subIds)
     const entry = map.get(id) || {
       id,
       name: str(p.name) || str(p.model) || id,
-      model: str(p.model) || id,
+      model: str(p.model),
       profileIds: [],
       primaryProfileId: str(p.id),
       vendorIds: [],
@@ -66,7 +67,7 @@ export function buildModelCatalog({ profiles = [], vendors = [], routes = [], su
     const id = logicalModelId(r.logicalId || r.model)
     if (!id) continue
     const entry = map.get(id) || {
-      id, name: str(r.model) || id, model: str(r.model) || id,
+      id, name: str(r.name) || str(r.model) || id, model: str(r.model) || str(r.logicalId) || '',
       profileIds: [], primaryProfileId: '', vendorIds: [], vendorNames: [], sources: [],
       endpoint: str(r.baseUrl), routeCount: 0, hasExplicitRoutes: false,
     }
