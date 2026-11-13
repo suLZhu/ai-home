@@ -5,6 +5,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
@@ -52,6 +53,7 @@ public final class GenerationService extends Service {
             releaseWakeLock();
             stopForeground(true);
             stopSelf();
+            Log.i("AiHome:gen", "fgs_stopped");
             return START_NOT_STICKY;
         }
         String assistant = intent == null ? "" : intent.getStringExtra("assistantName");
@@ -67,6 +69,8 @@ public final class GenerationService extends Service {
             .build();
         startForeground(FOREGROUND_ID, n);
         acquireWakeLock();
+        // 真机证据：FGS 实际启动 / 停止。adb logcat -s AiHome:gen 可见。
+        Log.i("AiHome:gen", "fgs_started assistant=" + assistant + " wakelock=" + (wakeLock != null && wakeLock.isHeld()));
         return START_REDELIVER_INTENT;
     }
 

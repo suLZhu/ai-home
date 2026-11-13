@@ -9,6 +9,8 @@ import {
   useMemoryRecords, transitionMemoryRecord, createMemoryRecord,
   LIFECYCLE_LABEL, SCOPE_LABEL, type MemoryLifecycle, type MemoryRecord,
 } from './memoryGovernance'
+// P1-8：权限页面显示中文化；内部 mode / 工具 ID 不变。
+import { POLICY_MODES, policyLabel, POLICY_HELP, toolPurpose } from './toolPolicyLabels.mjs'
 
 type ToolLogStatus = 'queued' | 'awaiting_confirmation' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 type ToolLog = {
@@ -317,17 +319,17 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
     {/* ── 工具权限策略 ── */}
     <section className="tool-dash-policies" aria-label="工具权限策略">
       <header className="tool-dash-runs-head">
-        <div><b>工具权限</b><small>auto 立即执行 · ask 每次执行前审批 · deny 永久拒绝（服务端强制，模型无法绕过）。</small></div>
+        <div><b>工具权限</b><small>{POLICY_HELP}</small></div>
       </header>
       {policyError && <p className="tool-dash-error" role="alert">{policyError}</p>}
       <ul className="tool-dash-policy-list">{policyTools.map(tool => {
         const mode = policies[tool] || 'auto'
         return <li className="tool-dash-policy" key={tool}>
-          <code>{tool}</code>
-          <div className="tool-dash-chip-row" role="group" aria-label={tool + ' 权限模式'}>
-            {['auto', 'ask', 'deny'].map(m =>
+          <div className="tool-dash-policy-name"><code>{tool}</code>{toolPurpose(tool)&&<small>{toolPurpose(tool)}</small>}</div>
+          <div className="tool-dash-chip-row" role="group" aria-label={tool + ' 的权限设置'}>
+            {POLICY_MODES.map(m =>
               <button type="button" key={m} className={'tool-dash-chip' + (mode === m ? ' active' : '')}
-                aria-pressed={mode === m} onClick={() => void handlePolicyChange(tool, m)}>{m}</button>)}
+                aria-pressed={mode === m} onClick={() => void handlePolicyChange(tool, m)}>{policyLabel(m)}</button>)}
           </div>
         </li>
       })}</ul>

@@ -233,17 +233,13 @@
 .shell .message-stack { min-width:0; }
 .shell .chat-header-title>b { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 
-/* ── 栖间品牌展示：首页只占一小行，关于页放主 Logo；仍走 Mist tokens ──── */
-.shell .home-brand {
-  display:flex;align-items:center;gap:8px;
-  padding:max(10px,calc(var(--app-safe-top) + 4px)) 14px 0;
+/* ── P2-1：首页删除品牌 Header，仅保留系统状态栏安全区留白 ────
+   品牌资源仍用于 launcher / splash / 关于页 / 系统通知身份，此处不删除资源本身。 */
+.shell .home-safe-spacer {
+  height:max(10px,calc(var(--app-safe-top) + 4px));
+  flex:0 0 auto;
 }
-.shell .home-brand img { width:28px;height:28px;border-radius:8px;object-fit:cover; }
-.shell .home-brand b {
-  font-size:var(--type-title);font-weight:600;
-  color:var(--text-primary);letter-spacing:.04em;
-}
-/* 顶部安全区已由 home-brand 承担，房间入口不再叠一层大留白。 */
+/* 顶部安全区已由 home-safe-spacer 承担，房间入口不再叠一层大留白。 */
 .shell .home-people { padding-top:14px; }
 .shell .brand-about {
   display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0 4px;

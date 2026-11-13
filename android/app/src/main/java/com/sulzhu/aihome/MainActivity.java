@@ -75,6 +75,12 @@ public class MainActivity extends BridgeActivity {
     // 机型上常返回 0，只靠 viewport-fit=cover 会让内容被状态栏压住。
     private int safeTopDp = 0;
     private int safeBottomDp = 0;
+    // 键盘高度（来自 ime inset），独立量取，不与系统栏混算。
+    private int imeBottomDp = 0;
+    // 最近一次非零值兜底：某些 ROM 在 IME 过渡帧会把 systemBars inset 暂报 0，
+    // 若直接采用会把顶栏顶进状态栏、底部留白丢失；用 last-good 过滤瞬零，连开关不漂移。
+    private int lastGoodTop = 0;
+    private int lastGoodBottom = 0;
 
     // ── 账号登录：App 内可控 WebView ────────────────────────────────────────
     // 官方 Codex / Claude Code OAuth 的回调是 http://localhost:1455/auth/callback
@@ -139,12 +145,23 @@ public class MainActivity extends BridgeActivity {
 
         View decor = window.getDecorView();
         ViewCompat.setOnApplyWindowInsetsListener(decor, (v, insets) -> {
+            // 系统栏（状态栏 / 导航条 / 刘海）的内边距只来自 systemBars + displayCutout，
+            // 绝不能混入 ime：否则键盘开合瞬间这些 inset 在某些 ROM 会被暂报 0，顶栏会被顶进状态栏。
             Insets bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
             );
+            // 键盘高度独立量取，单独写成 --native-ime-bottom 供前端兜底
+            // （Android 11+ edge-to-edge 下窗口不再随 IME 缩小，visualViewport 量不到键盘）。
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
             float density = getResources().getDisplayMetrics().density;
-            safeTopDp = Math.round(bars.top / density);
-            safeBottomDp = Math.round(bars.bottom / density);
+            int top = Math.round(bars.top / density);
+            int bottom = Math.round(bars.bottom / density);
+            // 取最近一次非零值做兜底，过滤 IME 过渡帧的瞬零，避免顶栏在键盘连开关时漂移。
+            if (top > 0) lastGoodTop = top;
+            if (bottom > 0) lastGoodBottom = bottom;
+            safeTopDp = lastGoodTop;
+            safeBottomDp = lastGoodBottom;
+            imeBottomDp = Math.round(ime.bottom / density);
             injectSafeArea();
             return insets;
         });
@@ -176,7 +193,12 @@ public class MainActivity extends BridgeActivity {
         if (webView == null) return;
         String js = "(function(){var r=document.documentElement;if(!r)return;"
             + "r.style.setProperty('--native-safe-top','" + safeTopDp + "px');"
-            + "r.style.setProperty('--native-safe-bottom','" + safeBottomDp + "px');})();";
+            + "r.style.setProperty('--native-safe-bottom','" + safeBottomDp + "px');"
+            + "r.style.setProperty('--native-ime-bottom','" + imeBottomDp + "px');"
+            // inset 重分发：键盘开合 / 切后台回前台 / 页面重新聚焦 / WebView resize 后，
+            // 前端监听此事件重新应用安全区与键盘高度，不依赖某一帧的 visualViewport。
+            + "try{window.dispatchEvent(new Event('aihome:insets'));}catch(e){}"
+            + "})();";
         webView.post(() -> webView.evaluateJavascript(js, null));
     }
 

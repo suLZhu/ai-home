@@ -3,6 +3,7 @@
 // 390×844 探针可以注入同名 mock 桥来验证完整链路。
 
 import { systemSettingTarget } from './systemCapabilities.mjs'
+import { genDebug } from './generationDebug.mjs'
 
 const BRIDGE = 'AiHomeSystem'
 const CALLBACKS = {
@@ -39,6 +40,8 @@ export function openSystemSetting(id, ok = false, sdk = 0) {
 export function setGenerationForeground(payload) {
   const b = bridge()
   if (!b || typeof b.generation !== 'function') return false
+  // 真机证据：FGS 请求（实际启动由原生 onStartCommand 记 Log.i "AiHome:gen"）。
+  if (payload && payload.action === 'start') genDebug('fgs_requested', { assistantId: payload.assistantId, conversationId: payload.conversationId, messageId: payload.messageId })
   try { return b.generation(JSON.stringify(payload || {})) === true } catch { return false }
 }
 

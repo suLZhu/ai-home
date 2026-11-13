@@ -84,19 +84,19 @@ test('图片删除：无人引用时才真正删掉', () => {
 
 // ───────────────────────── 引用扫描（删除安全） ─────────────────────────
 
-test('图片删除：其他助手/会话/缓发队列仍引用时绝不释放', () => {
+test('图片删除：其他助手/会话/待发送队列仍引用时绝不释放', () => {
   const id = '11111111-1111-4111-8111-111111111111'
   const convs = {
     ywx: [{ id: 'c1', messages: [{ id: 'm1', attachments: [att({ assetId: id })] }] }],
     ys: [{ id: 'c2', messages: [{ id: 'm2', attachments: [att({ assetId: id })] }] }],
   }
-  const batches = { 'ywx|c1': { status: 'pending', messages: [{ id: 'q1', attachments: [att({ assetId: id })] }] } }
-  // 删掉 ywx/c1 的 m1，但 ys 的 m2 和缓发队列都还在用
-  const still = collectReferencedAssetIds({ conversations: convs, messages: {}, deferredBatches: batches, excludeMessageIds: new Set(['m1']) })
+  const pendingSends = { 'ywx|c1': { id: 'p1', assistantId: 'ywx', conversationId: 'c1', status: 'pending', attachments: [att({ assetId: id })] } }
+  // 删掉 ywx/c1 的 m1，但 ys 的 m2 和待发送队列都还在用
+  const still = collectReferencedAssetIds({ conversations: convs, messages: {}, pendingSends, excludeMessageIds: new Set(['m1']) })
   assert.ok(still.has(id), '其他来源仍引用')
   assert.deepEqual(releasedAssetIds([id], still), [], '不得释放')
   // 全部移除后才释放
-  const none = collectReferencedAssetIds({ conversations: convs, messages: {}, deferredBatches: batches, excludeMessageIds: new Set(['m1', 'm2', 'q1']) })
+  const none = collectReferencedAssetIds({ conversations: convs, messages: {}, pendingSends, excludeMessageIds: new Set(['m1', 'm2', 'p1']) })
   assert.deepEqual(releasedAssetIds([id], none), [id])
 })
 

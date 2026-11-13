@@ -63,7 +63,9 @@ test('App 内字体大小写进 --font-scale，形状/间距 tokens 与颜色解
 test('聊天技术信息默认折叠、操作栏默认隐藏、输入框单行起步', () => {
   const app = read('src/App.tsx')
   assert.match(app, /<details className="message-tech">/)
-  assert.match(app, /<summary>\{m\.usage\.elapsedMs/)
+  // P1-6：默认只显示「Token 644 ›」轻量入口，展开明细由纯函数汇总（无缓存不显示缓存行）。
+  assert.match(app, /<summary>\{tokenSummary\.label\}/)
+  assert.match(app, /summarizeTokenUsage\(m\.usage\)/)
   assert.match(app, /message-tech-body/)
   assert.match(app, /p\.lastRouteInfo&&<span>\{p\.lastRouteInfo\}<\/span>/, '线路信息保留在详情里')
   assert.match(app, /actionsOpenId===m\.id\?' actions-open'/, '长按展开操作栏')

@@ -4,6 +4,8 @@ import { syncVendorProfiles, type Vendor, type VendorModel } from './vendors.mjs
 import type { ModelProfile } from './resourceBindings.mjs'
 import { makePkce, buildLoginConfig } from './subscriptionOAuth.mjs'
 import { startOAuthLogin } from './nativeOAuth.mjs'
+// P1-9：上游原始 JSON / 错误码统一转成中文短句，原文只在「查看详情」里展开。
+import { formatLoginError, type LoginErrorInfo } from './loginError.mjs'
 import { apiFetch } from './apiBase.mjs'
 import {
   mergeAvailableModels, normalizeModelIds, buildSubscriptionModels,
@@ -15,6 +17,16 @@ import {
 // Android 侧由 MainActivity 的可控 WebView 拦截 localhost:1455 这类回调并原地换令牌。
 // 登录后优先用令牌拉该账号真实模型列表；官方订阅端点不提供 /models 时列出可增删的
 // 常用模型，勾进池子后聊天窗口的模型面板就能像填 API 一样选到它们。
+//
+// P1-9 功能调查（与「显示问题」分开，不能靠错误文案修复）：
+// 1) unsupported_country_region_territory 来自 OpenAI 官方授权页 auth.openai.com
+//    按「发起请求的出口 IP / 地区」拒绝，与账号密码、redirect_uri、endpoint 配置无关：
+//    callbackPrefixes 只是 App 内 WebView 的拦截规则，不会真的去请求 localhost。
+// 2) GPT 渠道 endpoint 是 https://api.openai.com/v1（subscriptionChannels.mjs），
+//    但 ChatGPT/Codex 订阅 OAuth 拿到的是会话令牌，对应 chatgpt.com/backend-api 协议，
+//    并非 /v1/chat/completions 的 API Key。即使登录成功，本实现目前也不能稳定把
+//    subscription 额度用于聊天，仍需一层协议适配 / 兼容网关（见 subscriptionOAuth.mjs 头部）。
+// 本文件只完成显示层中文化；上述功能限制需在报告中如实说明。
 type Props = {
   vendors: Vendor[]
   setVendors: Dispatch<SetStateAction<Vendor[]>>
@@ -61,7 +73,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   const [tab, setTab] = useState('all')
   const [busy, setBusy] = useState('')
   const [menu, setMenu] = useState('')
-  const [error, setError] = useState('')
+  const [errorInfo, setErrorInfo] = useState<LoginErrorInfo | null>(null)
+  const [showErrorDetail, setShowErrorDetail] = useState(false)
   const [modelOpen, setModelOpen] = useState('')
   const [customModel, setCustomModel] = useState('')
   const [modelNote, setModelNote] = useState('')
@@ -106,7 +119,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   }
 
   const login = async (id: string) => {
-    setBusy(id); setError(''); setMenu(''); setModelNote('')
+    setBusy(id); setErrorInfo(null); setShowErrorDetail(false); setMenu(''); setModelNote('')
     try {
       const pkce = await makePkce()
       const config = buildLoginConfig(id, pkce)
@@ -136,7 +149,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
         : '官方订阅接口不返回模型列表，已列出常用模型；可在「选择模型」里增删。')
       setModelOpen(id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '登录失败，请再试一次')
+      setErrorInfo(formatLoginError(e))
+      setShowErrorDetail(false)
     } finally {
       setBusy('')
     }
@@ -193,7 +207,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
       <div className="account-tabs" role="tablist" aria-label="账号登录渠道">
         {TABS.map(t => <button type="button" role="tab" aria-selected={tab === t.id} key={t.id}
           className={'account-tab' + (tab === t.id ? ' active' : '')}
-          onClick={() => { setTab(t.id); setError(''); setMenu(''); setModelOpen('') }}>{t.label}</button>)}
+          onClick={() => { setTab(t.id); setErrorInfo(null); setShowErrorDetail(false); setMenu(''); setModelOpen('') }}>{t.label}</button>)}
       </div>
       <div className="account-rows">
         {rows.map(r => {
@@ -262,7 +276,14 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
         })}
       </div>
       {modelNote && <p className="account-note">{modelNote}</p>}
-      {error && <p className="account-error">{error}</p>}
+      {errorInfo && <div className="account-error" role="alert">
+        <p>{errorInfo.title}</p>
+        {errorInfo.hint && <small>{errorInfo.hint}</small>}
+        {errorInfo.detail && <>
+          <button type="button" className="account-error-toggle" aria-expanded={showErrorDetail} onClick={() => setShowErrorDetail(v => !v)}>{showErrorDetail ? '收起详情' : '查看详情'}</button>
+          {showErrorDetail && <pre className="account-error-detail">{errorInfo.detail}</pre>}
+        </>}
+      </div>}
     </div>
   </div>
 }

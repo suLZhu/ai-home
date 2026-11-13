@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 
 import org.json.JSONArray;
@@ -220,6 +221,8 @@ final class SystemBridge {
         if (intent == null || !intent.getBooleanExtra(SystemNotifier.EXTRA_FROM_NOTIFICATION, false)) return;
         String raw = intent.getStringExtra(SystemNotifier.EXTRA_PAYLOAD);
         if (raw == null || raw.isEmpty()) return;
+        // 真机证据：通知被点击，原生层最先捕获（JS 侧的 notification_tapped 由 onOpen 补记）。
+        Log.i("AiHome:gen", "notification_tapped");
         try {
             SystemStore.setPendingOpen(ctx(), new JSONObject(raw));
         } catch (Exception ignored) { }

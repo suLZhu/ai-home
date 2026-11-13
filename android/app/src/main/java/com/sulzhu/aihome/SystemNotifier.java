@@ -11,6 +11,7 @@ import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -193,6 +194,8 @@ final class SystemNotifier {
         try {
             NotificationManagerCompat.from(c).notify(notificationId(key), n);
             if (!test) SystemStore.addDelivered(c, key);
+            // 真机证据：通知实际投递。adb logcat -s AiHome:gen 可见。
+            Log.i("AiHome:gen", "notification_posted key=" + key + " channel=" + channelId);
             return true;
         } catch (SecurityException e) {
             return false;

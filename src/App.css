@@ -618,6 +618,28 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .msg-tool-call-detail{margin-top:4px}
 .msg-tool-call-detail summary{font-size:11px;color:var(--muted);cursor:pointer;user-select:none}
 .msg-tool-call-detail pre{margin:6px 0 0;padding:8px;border-radius:8px;background:var(--field,#f6f3f7);font-size:11px;line-height:1.5;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+/* P1-4：工具卡移入气泡内部——去掉独立卡片外框，只留一条轻分隔线，避免开发者控制台观感。 */
+.message-stack .bubble .msg-tool-calls{margin:8px 0 0;padding:7px 0 0;border:0;border-top:1px solid var(--line,#e5dfe5);border-radius:0;background:transparent;box-shadow:none}
+.message-stack .bubble .msg-tool-calls-head{font-size:calc(11px * var(--font-scale,1));color:var(--muted,#8b858b)}
+.message-stack .bubble .msg-tool-calls-list{margin:6px 0 0;padding:6px 0 0;border-top:0;gap:6px}
+.message-stack .bubble .msg-tool-call-detail pre{background:transparent;padding:6px 0;max-height:180px}
+.msg-tool-outcome{flex-shrink:0;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--muted,#8b858b)}
+.msg-tool-outcome.failed,.msg-tool-outcome.timed_out,.msg-tool-outcome.cancelled{color:var(--danger,#c0453f)}
+.msg-tool-outcome.succeeded{color:#4f7d62}
+/* P1-5：思考过程默认折叠，非中文时才出现「翻译」，译文与原文明确分区。 */
+.fold-chevron{display:inline-block;margin-left:5px;color:var(--muted,#8b858b);font-size:12px;transition:transform .15s ease}
+details[open]>summary .fold-chevron{transform:rotate(90deg)}
+.reasoning-original{white-space:pre-wrap}
+.reasoning-translate{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line,#e5dfe5)}
+.reasoning-translate button{border:1px solid var(--line,#e5dfe5);background:transparent;color:var(--accent,#7a5cd0);border-radius:999px;padding:3px 12px;font-size:11px;cursor:pointer;min-height:28px}
+.reasoning-translate button:disabled{opacity:.5;cursor:default}
+.reasoning-translated{margin-top:8px;padding:8px 10px;border-left:2px solid var(--accent,#7a5cd0);background:var(--accent-soft,#f1ecfb);border-radius:0 8px 8px 0;white-space:pre-wrap;line-height:1.6}
+.reasoning-translated b{display:block;margin-bottom:4px;font-size:10px;font-weight:600;color:var(--accent,#7a5cd0);letter-spacing:.04em}
+/* P1-6：Token 只留一个轻量入口，展开才是中文明细。 */
+.message-tech{margin:4px 3px 0;font-size:10px;color:var(--muted,#8b858b)}
+.message-tech summary{list-style:none;cursor:pointer;user-select:none}
+.message-tech summary::-webkit-details-marker{display:none}
+.message-tech-body{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;color:var(--muted,#8b858b);font-size:10px;line-height:1.5}
 .message-context-note{flex-basis:100%;max-width:82%;margin:3px 0 0 auto;padding:0 5px;font-size:10px;line-height:1.6;color:var(--muted,#8b858b);text-align:right;white-space:pre-wrap;overflow-wrap:anywhere}
 
 /* ═══════════ 20 秒缓发：开关 / 倒计时状态条 / 气泡待发标记 ═══════════
@@ -940,6 +962,24 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .shell .fullscreen-chat button.compose-attach:hover,.shell .fullscreen-chat button.compose-attach.active{background:var(--accent-soft,#f3e9dc)!important}
 .shell .fullscreen-chat .compose-box .send-button{height:30px;padding:0 14px!important;border:0!important;border-radius:9px!important;background:var(--accent,#8b593b)!important;color:#fff!important;box-shadow:none!important;font-size:12px;font-weight:600}
 .shell .fullscreen-chat .compose-box .send-button:disabled{opacity:.45}
+/* 生成态「停止」按钮：与发送同形，但用警示色，提示它会在中途中断当前回复。 */
+.shell .fullscreen-chat .compose-box .send-button.stop{background:var(--danger,#c0492f)!important}
+.shell .fullscreen-chat .compose-box .send-button.stop:hover{filter:brightness(.95)}
+/* 待发送卡片：当前内容 ↓ 待发送卡片 ↓ 输入框。强绑定当前（助手+会话），刷新/切后台不丢。 */
+.pending-card{margin:0 10px 8px;padding:9px 11px;border:1px solid var(--accent-soft,#e9ddcf);border-radius:12px;background:var(--accent-wash,#fffaf4);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.pending-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted,#8a7d6d)}
+.pending-card-badge{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent,#8b593b);color:#fff;font-weight:600;font-size:11px;letter-spacing:.04em}
+.pending-card-warn{color:var(--danger,#c0492f);font-weight:600}
+.pending-card-meta{color:var(--muted,#8a7d6d)}
+.pending-card-text{margin:6px 0 8px;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.5;color:var(--ink,#3a342d);max-height:7.5em;overflow:auto;cursor:text}
+.pending-card-edit textarea{width:100%;border:1px solid var(--line,#e0d6c8);border-radius:8px;padding:7px 9px;font:inherit;font-size:14px;resize:vertical;background:var(--card,#fff);color:var(--ink,#3a342d)}
+.pending-card-edit-actions,.pending-card-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.pending-card-actions .pending-send{border:0;background:var(--accent,#8b593b);color:#fff;font-weight:600;border-radius:8px;padding:5px 14px;font-size:12.5px}
+.pending-card-actions .pending-send:disabled{opacity:.5}
+.pending-card-actions .ghost{border:1px solid var(--line,#e0d6c8);background:transparent;color:var(--muted,#6f675b);border-radius:8px;padding:5px 12px;font-size:12.5px}
+.pending-card-actions .ghost:hover{border-color:var(--accent-soft,#e9ddcf);background:var(--accent-wash,#fffaf4)}
+.pending-card-actions .ghost.danger{color:var(--danger,#c0492f);border-color:#f0c9bf}
+.pending-card-actions .ghost.danger:hover{background:#fdeeea}
 .shell .fullscreen-chat .compose-tray-head button.compose-tray-config{font-size:13px;color:var(--muted,#8a7d6d)}
 /* 面板底部提示条已删除：没配置时 body 直接留白，完整绑定收进头部 ⚙ */
 
@@ -1258,7 +1298,9 @@ html:has(.model-sheet-backdrop) .shell .mobile-menu-toggle.sidebar-edge-handle{o
    100dvh 不跟着变，消息区就被推出屏幕。用 visualViewport 量到的
    --app-visual-height 重新封顶聊天锁，输入区收紧，消息区贴底显示最新一条。 */
 html[data-keyboard="open"] .shell.shell-chat-lock{height:var(--app-visual-height)!important;max-height:var(--app-visual-height)!important;min-height:0!important}
-html[data-keyboard="open"] .shell .fullscreen-chat .chat-header{padding-top:4px!important;padding-bottom:6px!important}
+/* 键盘打开时收一收顶栏，但绝不能丢掉状态栏安全区：原 4px 会把顶栏顶进状态栏。
+   用 max 保底：至少留出 --app-safe-top（含状态栏高度），再叠加 4px 内缩。 */
+html[data-keyboard="open"] .shell .fullscreen-chat .chat-header{padding-top:max(4px,calc(var(--app-safe-top) + 4px))!important;padding-bottom:6px!important}
 html[data-keyboard="open"] .shell .fullscreen-chat .chat-body{padding-top:6px!important;padding-bottom:6px!important}
 html[data-keyboard="open"] .shell .fullscreen-chat .compose.compose-box{margin:3px 8px 4px!important;padding:6px 10px 5px!important}
 html[data-keyboard="open"] .shell .fullscreen-chat .compose-box .compose-text{min-height:34px!important;max-height:68px!important}
@@ -1268,6 +1310,10 @@ html[data-keyboard="open"] .shell .mobile-menu-toggle.sidebar-edge-handle{opacit
 html[data-keyboard="open"] .model-sheet{height:min(56dvh,430px)}
 html[data-keyboard="open"] .model-sheet-backdrop,
 html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-height,0px)}
+/* Android 11+ edge-to-edge：窗口不随 IME 缩小，键盘高度来自原生 --native-ime-bottom。
+   此时不重设整体高度（window 未缩小），只在聊天锁底部留出键盘高度，把输入区顶到键盘上沿。
+   仅在原生兜底路径（data-keyboard-native）下生效，不影响 visualViewport resize 路径。 */
+html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--app-keyboard-height,0px)}
 
 /* 订阅账号：渠道搜索 → 接入 → 填凭据登录 → 选模型进聊天。高权重压像素主题粗框。 */
 .shell .subscription-accounts{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
@@ -1507,6 +1553,11 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 .shell #subscription-accounts .account-model-actions button{flex:0 0 auto;white-space:nowrap;cursor:pointer}
 .shell #subscription-accounts .account-note{margin:12px 2px 0;padding:8px 10px;border-radius:10px;background:#f6f4f1;color:#6f665c;font-size:10.5px;line-height:1.6}
 .shell #subscription-accounts .account-error{margin:10px 2px 0;padding:8px 10px;border-radius:10px;background:#fdeeee;color:#a94442;font-size:10.5px;line-height:1.5}
+/* P1-9：中文友好错误 + 可折叠的原始详情，原始 JSON 不再整段铺在登录页。 */
+.shell #subscription-accounts .account-error p{margin:0;font-size:12px;font-weight:600}
+.shell #subscription-accounts .account-error small{display:block;margin-top:4px;color:#8c5a58;line-height:1.5}
+.shell #subscription-accounts .account-error-toggle{margin-top:6px;padding:2px 0;border:0;background:transparent;color:inherit;font-size:10.5px;text-decoration:underline;cursor:pointer;min-height:28px}
+.shell #subscription-accounts .account-error-detail{margin:6px 0 0;padding:8px;border-radius:8px;background:rgba(0,0,0,.05);font-size:10px;line-height:1.5;white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto}
 .shell #subscription-accounts .account-row-menu button{border:1px solid #eeeae4!important;border-radius:999px!important;background:#fff!important;font-size:10.5px;color:#8e867b}
 
 /* 其余组件里残留的原生 select：控件外观统一，去掉老式粗框 */
@@ -1598,3 +1649,29 @@ html[data-keyboard="open"] .chat-config-backdrop{bottom:var(--app-keyboard-heigh
 .shell #android-system-panel .syscap-foot button{border:0!important;border-radius:999px!important;box-shadow:none!important;outline:none!important}
 .shell #android-system-panel .syscap-row{border-radius:0!important}
 .shell #android-system-panel .syscap-list{border:1px solid var(--line,#e5e0d8)!important;border-radius:14px!important;box-shadow:none!important}
+
+/* ── P2-2：输入栏瘦身 ──
+   视觉图标缩小到 17px，但按钮触摸热区保持 42dp（约 40–44dp 要求）。
+   高权重覆盖 mist.css 的 34px 与旧版 27/31px 规则。 */
+.shell .fullscreen-chat .compose-box button.compose-tool-icon,
+.shell .fullscreen-chat .compose-box button.compose-attach{
+  width:42px!important;height:42px!important;min-width:42px!important;border-radius:12px!important;
+}
+.shell .fullscreen-chat .compose-box button.compose-tool-icon svg{width:17px!important;height:17px!important}
+.shell .fullscreen-chat .compose-box button.compose-attach{font-size:20px!important;line-height:1!important}
+.shell .fullscreen-chat .compose-box .send-button{min-height:40px!important;padding:0 14px!important}
+.shell .fullscreen-chat .compose-box .compose-icons{gap:2px;flex:0 0 auto}
+/* 「+」Bottom Sheet：低频功能集中在这里，带遮罩与顶部把手。 */
+.compose-sheet-backdrop{position:fixed;inset:0;z-index:90;background:rgba(30,24,38,.34);display:flex;align-items:flex-end}
+.compose-sheet{width:100%;max-height:72vh;overflow-y:auto;background:var(--surface,#fff);border-radius:18px 18px 0 0;box-shadow:0 -8px 28px rgba(40,30,55,.18);padding:10px 14px calc(14px + var(--app-safe-bottom,0px))}
+.compose-sheet-head{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 10px;border-bottom:1px solid var(--line,#e5dfe5)}
+.compose-sheet-head b{font-size:14px;font-weight:600;color:var(--ink,#39342e)}
+.compose-sheet-head button{border:0;background:transparent;color:var(--muted,#8b858b);font-size:22px;line-height:1;min-width:40px;min-height:40px;cursor:pointer}
+.compose-sheet-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px 0 2px}
+.compose-sheet-grid>button{display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border:1px solid var(--line,#e5dfe5);border-radius:12px;background:var(--field,#f8f5fa);color:var(--ink,#39342e);min-height:56px;cursor:pointer}
+.compose-sheet-grid>button:hover{background:var(--accent-soft,#f1ecfb)}
+.compose-sheet-icon{display:inline-grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:var(--surface,#fff);color:var(--accent,#7a5cd0);font-size:17px}
+.compose-sheet-icon svg{width:19px;height:19px}
+.compose-sheet-label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.compose-sheet-label b{font-size:12.5px;font-weight:600}
+.compose-sheet-label small{font-size:10px;color:var(--muted,#8b858b);line-height:1.35}

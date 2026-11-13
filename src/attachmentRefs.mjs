@@ -48,11 +48,11 @@ export function assetIdsOfMessages(list) {
   return ids
 }
 
-// 全局引用扫描：会话（含全部助手）+ 视图镜像 + 缓发队列，三者并集。
+// 全局引用扫描：会话（含全部助手）+ 视图镜像 + 待发送队列，三者并集。
 // 删除前必须以「全局仍被引用」为准，否则会误删其他消息还在用的文件。
 // excludeMessageIds：这些消息即将被删除，它们持有的引用不算数——否则会把
 // 「只有待删消息在用」的文件误判成仍被引用而漏删，或反过来。
-export function collectReferencedAssetIds({ conversations, messages, deferredBatches, excludeMessageIds } = {}) {
+export function collectReferencedAssetIds({ conversations, messages, pendingSends, excludeMessageIds } = {}) {
   const used = new Set()
   const skip = excludeMessageIds instanceof Set ? excludeMessageIds : new Set(excludeMessageIds || [])
   const visit = (list) => {
@@ -66,9 +66,10 @@ export function collectReferencedAssetIds({ conversations, messages, deferredBat
     for (const conv of convs || []) visitKeeping(conv && conv.messages)
   }
   for (const list of Object.values(messages || {})) visitKeeping(list)
-  for (const batch of Object.values(deferredBatches || {})) {
-    if (!batch || !Array.isArray(batch.messages)) continue
-    visitKeeping(batch.messages)
+  for (const item of Object.values(pendingSends || {})) {
+    if (!item || !Array.isArray(item.attachments)) continue
+    // 待发送卡片尚未进聊天记录：把它当一条带附件的虚拟消息纳入引用扫描。
+    visitKeeping([{ id: item.id, attachments: item.attachments }])
   }
   return used
 }

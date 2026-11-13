@@ -3,6 +3,7 @@ package com.sulzhu.aihome;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.util.Log;
 
 import org.json.JSONObject;
 
@@ -23,6 +24,11 @@ public class AlarmReceiver extends BroadcastReceiver {
             if (runId.isEmpty()) return;
             String key = "task:" + runId;
             if (SystemStore.wasDelivered(context, key)) return; // 重复广播 / 重启重放
+
+            // 真机证据：原生闹钟到点（App 可不在前台、可锁屏）。firedAt 即本次真实触发时刻。
+            // adb logcat -s AiHome:gen 可见；与 JS 侧 task_exec_started 对照即可判断
+            // 「通知已弹但执行迟迟没发生」是否因为执行链路在等 WebView 回前台。
+            Log.i("AiHome:gen", "task_alarm_fired runId=" + runId + " assistant=" + item.optString("assistantId", "") + " firedAt=" + System.currentTimeMillis());
 
             String body = item.optString("body", "");
             String summary = body.length() > 110 ? body.substring(0, 110) + "…" : body;

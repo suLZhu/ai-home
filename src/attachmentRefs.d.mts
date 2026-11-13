@@ -18,7 +18,7 @@ export function assetIdsOfMessages(list: MessageLike[] | null | undefined): Set<
 export function collectReferencedAssetIds(state?: {
   conversations?: Record<string, Array<{ id?: string; messages?: MessageLike[] }>> | null
   messages?: Record<string, MessageLike[]> | null
-  deferredBatches?: Record<string, { messages?: MessageLike[] } | null> | null
+  pendingSends?: Record<string, { id?: string; attachments?: AttachLike[] } | null> | null
   excludeMessageIds?: Iterable<string> | Set<string> | null
 }): Set<string>
 export function releasedAssetIds(

@@ -14,11 +14,15 @@ import { PersonAppearance } from './PersonAppearance'
 import { reportToolCallStart, reportToolCallEnd, classifyToolError, useToolCalls, useMessageToolCalls, TOOL_STATUS_LABEL, type ToolCallSource } from './toolCalls'
 import { decideTaskConsumption, parseTaskEnvelope } from './taskResult.mjs'
 import { normalizeTimeZone, buildTimeContext } from './timeContext.mjs'
-// 20 秒缓发聊天：纯函数状态机 + 本机持久化 + 编排辅助（合并成一次请求、按 scope 挑选到期批次）。
-// 缓发本轮暂停可见入口，但模块与未发队列保留（见下方恢复条）。
-import { queueMessage, markSending, removeQueuedMessage, type DeferredBatch } from './deferredSend.mjs'
-import { deferredScopeKey, loadDeferredBatches, saveDeferredBatches } from './deferredStorage.mjs'
-import { selectDueBatch, queuedIdSet, mergeQueuedForRequest, removeMessagesByIds } from './deferredChat.mjs'
+// 生成态待发送队列：纯函数状态机 + 本机持久化（当前生成成功后按 scope 自动补发，非定时缓发）。
+import { pendingScopeKey, makePending, setPending, clearPending, patchPendingText, markNeedsReview, loadPendingSends, savePendingSends, type PendingItem } from './pendingSend.mjs'
+// 模型输出清洗：隐藏 <system_warning> 系统注入、移除 DSML/function_calls 协议标签。
+// SSE 逐块到达，标签可能被拆到多个 chunk，必须用有状态的流式清洗器（见 messageCleanup.mjs）。
+import { cleanupMessageText, createStreamCleanup } from './messageCleanup.mjs'
+// 消息呈现层纯函数：Token 汇总 / 工具卡分组 / reasoning 翻译判定与请求构造。
+import { formatDuration, summarizeTokenUsage, groupToolCalls, needsChineseTranslation, buildTranslationMessages } from './messagePresentation.mjs'
+// P2-2：输入栏高频常驻 / 低频收进「+」Bottom Sheet 的显示分组（工具行为不变）。
+import { PRIMARY_TOOLS, MORE_TOOLS } from './composeTools.mjs'
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
@@ -135,32 +139,69 @@ function initialConversations():Record<Person,Conversation[]> {
 // 模型文字永远不会产生调用记录。
 
 // 软键盘弹起时，Android WebView 的 100dvh 不一定跟着缩小，布局可能整体被上推：
-// 消息列表滚到屏幕外，只剩一片空白。用 visualViewport 量真实可视高度，
-// 键盘打开时把高度与键盘高度写成 CSS 变量，聊天锁按可视高度布局、输入区贴键盘上沿。
+// 消息列表滚到屏幕外，只剩一片空白。键盘高度优先用 visualViewport 量到的真实重叠，
+// Android 11+ edge-to-edge 下窗口不随 IME 缩小、visualViewport 量不到时，改用原生回传的
+// --native-ime-bottom 兜底（见 MainActivity 的 ime inset 处理）。判定逻辑抽到
+// keyboardViewport.mjs，便于单测。原生 inset 重分发（aihome:insets）也触发重算。
+import { computeKeyboardState } from './keyboardViewport.mjs'
+import { genDebug } from './generationDebug.mjs'
 function useKeyboardViewport(){
   useEffect(()=>{
     const vv=window.visualViewport
-    if(!vv)return
     const root=document.documentElement
-    const clear=()=>{root.style.removeProperty('--app-visual-height');root.style.removeProperty('--app-keyboard-height');delete root.dataset.keyboard}
+    const clear=()=>{
+      root.style.removeProperty('--app-visual-height')
+      root.style.removeProperty('--app-keyboard-height')
+      delete root.dataset.keyboard
+      delete root.dataset.keyboardNative
+    }
     const apply=()=>{
-      const overlap=Math.max(0,window.innerHeight-vv.height-Math.max(0,vv.offsetTop))
-      if(overlap>90&&window.innerWidth<=700){
-        root.style.setProperty('--app-visual-height',Math.round(vv.height)+'px')
-        root.style.setProperty('--app-keyboard-height',Math.round(overlap)+'px')
+      const innerHeight=window.innerHeight
+      const vvHeight=vv?vv.height:innerHeight
+      const vvOffsetTop=vv?vv.offsetTop:0
+      const nativeIme=parseFloat(getComputedStyle(root).getPropertyValue('--native-ime-bottom'))||0
+      const st=computeKeyboardState({innerHeight,vvHeight,vvOffsetTop,innerWidth:window.innerWidth,nativeIme})
+      if(st.open){
+        root.style.setProperty('--app-keyboard-height',st.height+'px')
+        if(st.source==='visualViewport'){
+          // 窗口已随键盘缩小：直接把聊天锁封顶到可视高度，无需底部留白。
+          root.style.setProperty('--app-visual-height',st.visualHeight+'px')
+          delete root.dataset.keyboardNative
+        }else{
+          // 原生 IME：窗口未缩小，不重设整体高度，只在聊天锁底部留出键盘高度，
+          // 把输入区顶到键盘上沿（CSS: html[data-keyboard-native="open"] .shell-chat-lock）。
+          root.style.removeProperty('--app-visual-height')
+          root.dataset.keyboardNative='open'
+        }
         root.dataset.keyboard='open'
       }else clear()
     }
     apply()
-    vv.addEventListener('resize',apply)
-    vv.addEventListener('scroll',apply)
+    if(vv){
+      vv.addEventListener('resize',apply)
+      vv.addEventListener('scroll',apply)
+    }
     window.addEventListener('resize',apply)
-    return ()=>{vv.removeEventListener('resize',apply);vv.removeEventListener('scroll',apply);window.removeEventListener('resize',apply);clear()}
+    // 原生 inset 重分发：键盘开合 / 切后台回前台 / 页面重新聚焦 / WebView resize 后，
+    // 即使 visualViewport 无变化也要重新应用键盘高度。
+    window.addEventListener('aihome:insets',apply)
+    return ()=>{
+      if(vv){vv.removeEventListener('resize',apply);vv.removeEventListener('scroll',apply)}
+      window.removeEventListener('resize',apply)
+      window.removeEventListener('aihome:insets',apply)
+      clear()
+    }
   },[])
 }
 
 export default function App() {
   useKeyboardViewport()
+  // 真机证据：切后台 / 回前台打点（对照 generation 链路日志，判断后台是否被系统暂停）。
+  useEffect(() => {
+    const onVis = () => genDebug(document.hidden ? 'app_backgrounded' : 'app_foregrounded', { hidden: document.hidden })
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
   const [page, setPage] = useState<Page>('home')
   // 鉴权状态提前声明：通知点击路由 / 闹钟同步的 effect 依赖数组会立即求值。
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
@@ -285,6 +326,7 @@ export default function App() {
       // 锁屏期间原生闹钟已弹过的 runId：恢复前台补写聊天时不再弹第二条。
       nativeDelivered: readNativeDelivered(),
     })
+    genDebug('notification_requested',{key:payload.key,kind:payload.kind,person:payload.assistantId,conversationId:payload.conversationId,notify:decision.notify,reason:decision.reason||'?'})
     if (!decision.notify) return false
     const sent = showSystemNotification(payload)
     // 去重集合记的是「通知发出的时间」，不是消息产生的时间：补跑几天前的任务
@@ -323,8 +365,10 @@ export default function App() {
     }
     systemHandlersRef.current = {
       onOpen: (payload) => {
+        genDebug('notification_tapped',{payload})
         const route = routeFromNotificationOpen(payload, assistantsRef.current.map(a => a.id))
         if (!route) return
+        genDebug('route_restored',{person:route.person,conversationId:route.conversationId})
         if (authStatusRef.current !== 'signedIn') { pendingNotificationRef.current = payload; return }
         activateConversation(route.person, route.conversationId)
       },
@@ -403,18 +447,17 @@ export default function App() {
     })
     return () => { cancelled = true; void listener.then(h => h.remove()).catch(() => {}) }
   },[])
-  // ── 20 秒缓发聊天 ──
-  // 队列严格按「助手 + 会话」隔离（一个 scope 至多一个批次）；刷新后由 loadDeferredBatches
-  // 恢复，上次发送中断（sending）的批次恢复为 needs_review——绝不自动重发，必须用户确认。
-  const [deferredBatches, setDeferredBatches] = useState<Record<string, DeferredBatch>>(() => loadDeferredBatches(localStorage))
-  // 默认即时发送；缓发由用户在输入框上主动开启（本会话内有效，不持久化，刷新回到默认）。
-  const [deferredOn, setDeferredOn] = useState(false)
-  // 倒计时用的「现在」：有队列时每 500ms 拨一次，驱动秒数与到期检查。
-  const [deferredNow, setDeferredNow] = useState(() => Date.now())
-  // 暂停缓发（本轮）：即时发送是唯一可见模式——开关、倒计时、待发标记全部隐藏。
-  // deferredOn 初始即 false，且没有任何 UI 入口再把它打开（开关已隐藏），恒为即时发送。
-  // 缓发模块与未发队列完整保留：pending 批次仍由计时器自动补发（不丢），
-  // 需要人工处理的批次由聊天输入区上方的恢复条提供「立即发送 / 撤回」。
+  // ── 生成态待发送队列（conversation queue）──
+  // 一个 scope（助手 + 会话）至多 1 条 pending；刷新/切后台后由 loadPendingSends 恢复，不丢。
+  // 与旧 20 秒定时缓发不同：pending 在「当前该会话的生成」成功结束后自动补发，不靠计时器。
+  const [pendingSends, setPendingSends] = useState<Record<string, PendingItem>>(() => loadPendingSends(localStorage))
+  const pendingSendsRef = useRef(pendingSends)
+  useEffect(() => { pendingSendsRef.current = pendingSends })
+  function commitPending(next: Record<string, PendingItem>) {
+    try { savePendingSends(localStorage, next) } catch { /* 存储满时内存队列仍可用 */ }
+    pendingSendsRef.current = next
+    setPendingSends(next)
+  }
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => { const saved=read<Record<string,string[]>>('ai-home.tasks',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,string[]> })
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
   // 聊天里点头像 → 关聊天打开助手档案；档案左上按钮据此变成「← 返回聊天」。
@@ -885,7 +928,15 @@ export default function App() {
     if(authStatus!=='signedIn')return
     let alive=true
     const tick=async()=>{
-      if(!alive||document.hidden||!isLocalMode())return
+      if(!alive)return
+      if(document.hidden){
+        // 真机证据：后台 / 锁屏时主动任务的「执行」（写回聊天 + 结果通知）被跳过，
+        // 只靠原生闹钟先弹一条提醒。对照 task_alarm_fired 与 task_exec_started 之间的缺口，
+        // 即可确认「开 App 才看到 / 定点不弹」源于执行链路卡在等 WebView 回前台。
+        genDebug('task_tick_skipped_hidden',{localMode:isLocalMode()})
+        return
+      }
+      if(!isLocalMode())return
       try{
         const r=await apiFetch('/api/tasks/run',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({now:new Date().toISOString()})})
         if(!r.ok)return
@@ -895,9 +946,11 @@ export default function App() {
         for(const f of fired){
           const who=String(f.person||''),runId=String(f.runId||''),content=String(f.answer||'')
           if(!ASSISTANT_PEOPLE.includes(who)||!runId||!content)continue
+          genDebug('task_exec_started',{runId,person:who,scheduledAt:String(f.runAt||''),conversationId:String(f.conversationId||'')})
           updateActiveConversationMessages(who,prev=>prev.some(x=>x&&x.taskRunId===runId)?prev:[...prev,{role:'assistant' as const,content,id:'local-task-'+runId,taskRunId:runId,contextNote:'本地主动任务'}])
           // 只有写回聊天之后才允许发通知；runId 与原生闹钟共用同一个去重键。
           notifyAfterWrite({kind:'task',person:who,runId,text:content,conversationId:String(f.conversationId||activeConversationIdsRef.current[who]||''),at:Date.parse(f.runAt)||Date.now()})
+          genDebug('task_exec_completed',{runId,person:who,notifiedAt:Date.now()})
         }
         if(fired.length)setAlarmSyncTick(t=>t+1)
         // 提醒要尽快落到本机快照，别等防抖窗口。
@@ -928,9 +981,11 @@ export default function App() {
       if (decision.action === 'write') {
         const { runId, title, answer } = decision.envelope
         const conversationId = decision.conversationId
+        genDebug('task_exec_started',{runId,person:m.person,scheduledAt:String(m.created_at||''),conversationId,source:'cloud_inbox'})
         updateActiveConversationMessages(m.person, prev => prev.some(x => x && x.taskRunId === runId) ? prev : [...prev, { role: 'assistant', content: answer, id: 'task-' + runId, taskRunId: runId, contextNote: title ? '定时任务：' + title : '定时任务结果' }], conversationId)
         // 云端任务结果写回原会话后发通知；runId 与本地任务、原生闹钟是同一个稳定键。
         notifyAfterWrite({kind:'task',person:m.person,runId,text:answer,conversationId,messageId:m.id,at:Date.parse(m.created_at)||Date.now()})
+        genDebug('task_exec_completed',{runId,person:m.person,notifiedAt:Date.now(),source:'cloud_inbox'})
         pendingTaskAcks.current.set(m.id, { runId, person: m.person, conversationId })
         // 把防抖哨兵拨到已超期：任务结果必须尽快落盘，之后才能确认已读。
         firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
@@ -1049,6 +1104,7 @@ export default function App() {
     setChatError('');setSending(true)
     // 进程被系统回收时靠这条标记恢复「上次未完成的生成」，不丢空白占位气泡。
     startGeneration(localStorage,{person:target,conversationId:sendConversationId,messageId:assistantMessageId},Date.now())
+    genDebug('generation_started',{person:target,conversationId:sendConversationId,messageId:assistantMessageId})
     // Android: generation is a user-initiated long-running operation. Keep the app
     // in foreground-service priority while the existing JS stream/tool loop runs.
     setGenerationForeground({
@@ -1074,9 +1130,13 @@ export default function App() {
     }
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
+    // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
+    let lastStreamLog=0
     // 声明在 try 之外：catch 需要读取 answer，保留已流式到达的文本（块级作用域 let 进不了 catch）。
     let answer=''
     let finished=false
+    // 记录本轮生成结果，供 finally 判断是否自动补发 pending（成功才补发；报错/中断保留）。
+    let genOutcome: 'ok'|'fail'|'noop' = 'noop'
     try {
       // 缓发 flush：把已显示的待发消息从历史里排除，随后合并成一条最终 user 消息——
       // 同一条消息绝不在请求里出现两次（气泡也不重复插入）。
@@ -1162,8 +1222,17 @@ export default function App() {
         }
         if(routeMode){const used=response.headers.get('X-Route-Used')||'';const usedLabel=(()=>{try{return decodeURIComponent(response.headers.get('X-Route-Label')||'')}catch{return ''}})();if(used)setLastRouteInfo('实际使用线路：'+(usedLabel||used))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
+        // 正文与思考各用一个有状态清洗器：跨 chunk 的协议标签由缓冲窗口负责识别，
+        // 清洗后的增量才写进 answer / thinking（持久化与通知因此天然都是干净的）。
+        const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
-        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=thinkPiece;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){roundText+=piece;answer+=piece;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        // 本轮流结束：冲刷清洗器缓冲，把暂缓的尾部补回；未闭合的抑制块由 flush 丢弃，
+        // 绝不把半截系统注入写进聊天记录或下一轮工具请求。
+        const contentTail=contentCleanup.flush()
+        if(contentTail){roundText+=contentTail;answer+=contentTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}
+        const reasoningTail=reasoningCleanup.flush()
+        if(reasoningTail){thinking+=reasoningTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
@@ -1237,6 +1306,7 @@ export default function App() {
         }
         if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
       }
+      genDebug('generation_completed',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,elapsedMs:Math.max(1,Math.round(performance.now()-requestStartedAt)),completionTokens:usageTotals.completionTokens||0})
       const elapsedMs=Math.max(1,Math.round(performance.now()-requestStartedAt))
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
@@ -1250,10 +1320,11 @@ export default function App() {
       // Ordinary replies now use the same deduplicated native notification path as
       // proactive/task messages. The decision layer suppresses it only while the
       // exact conversation is visibly open; background/lock-screen/other-chat gets it.
-      if(answer) notifyAfterWrite({
+      if(answer){notifyAfterWrite({
         kind:'message', person:target, messageId:assistantMessageId,
         conversationId:sendConversationId, text:answer, at:Date.now(),
-      })
+      });genDebug('conversation_write_completed',{person:target,conversationId:sendConversationId,messageId:assistantMessageId})}
+      genOutcome='ok'
       return 'ok'
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
@@ -1269,116 +1340,139 @@ export default function App() {
           updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
         }
       }
+      genOutcome='fail'
       return 'fail'
     } finally {
       if(sendAbortRef.current&&sendAbortRef.current.id===assistantMessageId)sendAbortRef.current=null
       setSending(false)
       finishGeneration(localStorage, assistantMessageId)
       setGenerationForeground({action:'stop', messageId:assistantMessageId})
+      // 生成成功 → 自动补发同会话的 pending，开启下一轮；报错/中断不自动发（保留给用户）。
+      if (genOutcome === 'ok') void autoSendPending(target, sendConversationId)
     }
   }
 
-  // ── 缓发队列编排 ──
-  // send() 是异步长任务且闭包会过期：flush 必须调用「最新一次渲染」的 send，
+  // ── 生成态待发送队列编排（conversation queue）──
+  // send() 是异步长任务且闭包会过期：autoSend 必须调用「最新一次渲染」的 send，
   // 否则会话、模型配置等都会拿到排队时刻的旧值。
   const sendRef = useRef(send)
   useEffect(() => { sendRef.current = send })
-  const batchesRef = useRef(deferredBatches)
-  useEffect(() => { batchesRef.current = deferredBatches }, [deferredBatches])
-  const flushRef = useRef<(key: string, confirmRetry?: boolean) => void>(() => {})
-  // 同步锁：倒计时 tick、effect 重挂载、按钮点击可能在同一时刻都看到「pending 且到期」，
-  // 锁保证一个批次同时只会进入一次 flush——重复进入 = 重复提交模型请求。
+  // 同步锁：effect 重挂载、按钮点击可能同刻竞争同一条 pending，锁保证同时只进一次 send。
   const flushLockRef = useRef(false)
-  // 「立即发送」需要拿到最新的 flushDeferred；经 ref 转发，按钮永远点到当前版本。
-  useEffect(() => { flushRef.current = (key, confirmRetry) => { void flushDeferred(key, confirmRetry) } })
+  const autoSendLockRef = useRef(false)
 
-  function commitBatches(next: Record<string, DeferredBatch>) {
-    // 落盘必须同步执行：flush 开始时先写 sending，请求中途刷新才能恢复成
-    // needs_review（等用户确认），而不是被倒计时自动重发。
-    try { saveDeferredBatches(localStorage, next) } catch { /* 存储满时内存队列仍可用 */ }
-    setDeferredBatches(next)
-  }
   function markConversationDirty() {
     // 与 send() 相同的落盘防线：用户消息一入列就要求立刻保存，堵住「排队后立刻刷新丢消息」。
     firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
     setAckTick(t => t + 1)
   }
-  // 排队：气泡立即进入聊天界面，但不请求模型。每条新消息把 20 秒倒计时重置为全新一轮。
-  // 返回 false = 当前批次不可追加（正在发送 / 待确认），调用方提示用户，草稿不丢。
-  function enqueueDeferred(text: string, attachments: MessageAttachment[]): boolean {
+
+  // 入队：生成态下用户点了「发送」→ 把当前输入存为 pending（不立即请求模型），
+  // 输入立即清空、显示待发送卡片。一个 scope 仅 1 条：新内容覆盖旧内容。
+  function enqueuePending(text: string, attachments: MessageAttachment[]): boolean {
     const target = person
     const convId = activeConversationIdsRef.current[target] || ''
     if (!target || !convId) return false
-    const key = deferredScopeKey(target, convId)
-    const userMessage: ChatMessage = { role: 'user', content: text, id: crypto.randomUUID(), attachments: attachments.map(a => ({ ...a, preview: a.preview || a.dataUrl, dataUrl: undefined })) }
-    let next: DeferredBatch
-    try {
-      // 队列里只留轻量附件（图片 dataURL 不重复存一份，flush 时从会话气泡的 preview 取回）；
-      // 文本附件内容小，随批次保存，恢复后仍能送进模型。queueMessage 对跨会话/非 pending 追加一律抛错。
-      next = queueMessage(batchesRef.current[key] ?? null, {
-        assistantId: target, conversationId: convId,
-        message: { id: userMessage.id!, content: text, attachments: attachments.map(a => ({ name: a.name, type: a.type, size: a.size, textContent: a.textContent })) },
-        now: Date.now(),
-      })
-    } catch { return false }
-    commitBatches({ ...batchesRef.current, [key]: next })
-    updateActiveConversationMessages(target, prev => [...prev, userMessage], convId)
+    const item = makePending(text, attachments, { assistantId: target, conversationId: convId })
+    commitPending(setPending(pendingSendsRef.current, item))
+    setDraft('')
     markConversationDirty()
     return true
   }
-  // 倒计时到期 / 用户点「立即发送」：同会话待发消息合并为一次模型请求。
-  // confirmRetry=true 仅用于 needs_review 批次的显式重发确认（自动路径永远不会带上）。
-  async function flushDeferred(key: string, confirmRetry = false) {
+
+  // 修改待发送内容（同 id；状态回到 pending）。
+  function editPendingText(text: string): boolean {
+    const target = person
+    const convId = activeConversationIdsRef.current[target] || ''
+    if (!target || !convId) return false
+    if (!pendingSendsRef.current[pendingScopeKey(target, convId)]) return false
+    commitPending(patchPendingText(pendingSendsRef.current, target, convId, text))
+    return true
+  }
+
+  // 撤回待发送：消息从未真正发出，直接移除本地 pending（不入聊天记录，无需改 history）。
+  function cancelPending() {
+    const target = person
+    const convId = activeConversationIdsRef.current[target] || ''
+    if (!target || !convId) return
+    commitPending(clearPending(pendingSendsRef.current, target, convId))
+  }
+
+  // 发送一条 pending：自动补发与用户手动「发送」共用。
+  // confirmReview=true 允许发送 needs_review（用户显式确认）；自动路径永远只发 pending。
+  async function flushPending(assistantId: string, conversationId: string, confirmReview = false, waitsLeft = 15) {
     if (flushLockRef.current) return
-    const batch = batchesRef.current[key]
-    if (!batch) return
-    if (batch.status !== 'pending' && !(confirmRetry && batch.status === 'needs_review')) return
-    if (sending) return // 正有别的请求在跑：保持原状，下个 tick 再试（不算失败）
-    // 先同步落盘 sending 再发请求：请求中途刷新 → recoverBatch 把 sending 恢复成
-    // needs_review，必须用户确认才会重发（发送中断绝不自动重复提交）。
-    const sendingBatch: DeferredBatch = batch.status === 'pending' ? markSending(batch) : { ...batch, status: 'sending' }
-    commitBatches({ ...batchesRef.current, [key]: sendingBatch })
+    const key = pendingScopeKey(assistantId, conversationId)
+    const item = pendingSendsRef.current[key]
+    if (!item) return
+    if (item.status !== 'pending' && !(confirmReview && item.status === 'needs_review')) return
+    // 仍在生成中：让出一次重渲染再试（send() 的 finally 里 setSending(false) 是异步的，
+    // 需等 React 提交后 sendingRef/sendRef 才刷新到最新值，否则会拿到过期的 send 闭包）。
+    // 这是「等当前生成结束」的事件驱动让步，不是定时缓发；有界重试杜绝无限轮询。
+    if (sendingRef.current) {
+      if (waitsLeft <= 0) {
+        genDebug('pending_flush_wait_timeout', { assistantId, conversationId })
+        return // 保留 pending，绝不自动发；用户可手动发或下次生成结束再触发
+      }
+      window.setTimeout(() => void flushPending(assistantId, conversationId, confirmReview, waitsLeft - 1), 200)
+      return
+    }
     flushLockRef.current = true
     try {
-      const history = (conversationsRef.current[batch.assistantId] || []).find(c => c.id === batch.conversationId)?.messages || []
-      const { text, attachments } = mergeQueuedForRequest(batch, history)
-      const outcome = await sendRef.current(text, attachments as MessageAttachment[], { conversationId: batch.conversationId, queuedIds: batch.messages.map(m => m.id), insertUser: false })
-      if (outcome === 'ok') {
-        // 成功即出队：气泡上的「待发」标记随之消失，绝不再发第二次。
-        const cur = { ...batchesRef.current }
-        delete cur[key]
-        commitBatches(cur)
-      } else if (outcome === 'fail') {
-        // 失败绝不自动重试：转 needs_review，等用户「立即发送」（确认重发）或「取消待发」。
-        const current = batchesRef.current[key]
-        if (current && current.status === 'sending') commitBatches({ ...batchesRef.current, [key]: { ...current, status: 'needs_review' } })
-      } else {
-        // noop（恰好有请求在跑）：退回 pending；dueAt 已过期，下个 tick 会自然重试。
-        commitBatches({ ...batchesRef.current, [key]: batch })
-      }
+      const outcome = await sendRef.current(item.text, item.attachments as MessageAttachment[], { conversationId })
+      if (outcome === 'ok') commitPending(clearPending(pendingSendsRef.current, assistantId, conversationId))
+      else commitPending(markNeedsReview(pendingSendsRef.current, assistantId, conversationId))
     } finally { flushLockRef.current = false }
   }
-  // 「取消待发」：消息从未真正发出，从队列和聊天记录里一起撤回，避免留下「发了却永远没回音」的气泡。
-  function cancelDeferred(key: string) {
-    const batch = batchesRef.current[key]
-    if (!batch || batch.status === 'sending') return // 已在请求途中，撤不回来
-    const ids = queuedIdSet(batch)
-    const next = { ...batchesRef.current }
-    delete next[key]
-    commitBatches(next)
-    updateActiveConversationMessages(batch.assistantId, prev => removeMessagesByIds(prev, ids), batch.conversationId)
-    markConversationDirty()
+
+  // 当前会话生成成功结束后，自动补发其 pending（开启下一轮对话）。
+  async function autoSendPending(assistantId: string, conversationId: string) {
+    if (autoSendLockRef.current) return
+    const key = pendingScopeKey(assistantId, conversationId)
+    const item = pendingSendsRef.current[key]
+    if (!item || item.status !== 'pending') return
+    autoSendLockRef.current = true
+    try { await flushPending(assistantId, conversationId, false) }
+    finally { autoSendLockRef.current = false }
+  }
+
+  // 用户主动停止当前生成（AbortController）。pending 保留，可由用户随后手动发送。
+  function stopGeneration() {
+    const inf = sendAbortRef.current
+    if (inf && inf.controller) { try { inf.controller.abort() } catch { /* 已结束 */ } }
+  }
+
+  // P1-5：按需翻译 reasoning。与 send() 完全隔离——不写会话历史、不发通知、不自动触发。
+  // 复用同一 /api/chat 代理与当前模型配置，但用 stream:false 取一次完整回复。
+  async function translateReasoningText(text: string): Promise<string> {
+    const target = person
+    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
+    const activeVendor = activeModel.vendorId ? vendors.find(v=>v.id===activeModel.vendorId) : undefined
+    const activeChatUrl = activeVendor ? chatRequestUrl(activeVendor) : ''
+    const apiKeyCandidates = resolveKeyCandidates(vendors, bindings[target]?.keyId || '', apiKey[target] || '', activeModel.vendorId || '')
+    const activeApiKey = apiKeyCandidates[0] || resolveVendorKey(vendors, bindings[target]?.keyId || '') || apiKey[target] || ''
+    const logicalId = activeLogicalId(routeState, target, logicalModelId(activeModel.model || ''))
+    const routePlan = buildRoutePlan({routes:routeState.routes,logicalId,vendors,fallbackKeys:[],binding:{fixedRouteId:fixedRouteId(routeState,target)},maxAttempts:MAX_ROUTE_ATTEMPTS})
+    const routeMode = routePlan.length>0
+    if(!routeMode&&(!activeModel.endpoint.trim()||!activeModel.model.trim()||!activeApiKey.trim()))throw new Error('尚未配置可用的模型，无法翻译。')
+    const body={model:activeModel.model.trim(),messages:buildTranslationMessages(text),stream:false}
+    const response=await apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body,...(routeMode?{routes:routePlan}:{})})})
+    if(!response.ok)throw new Error('翻译请求失败（HTTP '+response.status+'）')
+    const data:any=await response.json()
+    const out=data?.choices?.[0]?.message?.content??data?.choices?.[0]?.text
+    if(typeof out!=='string'||!out.trim())throw new Error('模型没有返回翻译内容。')
+    return cleanupMessageText(out.trim())
   }
 
   // ── 消息操作：修改 / 删除 / 重新生成（复制在 Chat 内完成）──
-  // 修改：只更新这条用户消息的文字，不调用模型、不动附件；
+  // 修改：只更新这条消息的文字，双方消息均可；不调用模型、不动附件；
   // 视图（messages）与持久化（conversations）经 updateActiveConversationMessages 同时写，刷新后仍生效。
   function editMessage(messageId: string, newText: string): boolean {
     const text = newText.trim()
     if (!messageId || !text) return false
     const target = person
     const convId = activeConversationIds[target] || ''
-    updateActiveConversationMessages(target, prev => prev.map(m => m.id === messageId && m.role === 'user' ? { ...m, content: text } : m), convId)
+    updateActiveConversationMessages(target, prev => prev.map(m => m.id === messageId ? { ...m, content: text } : m), convId)
     markConversationDirty()
     return true
   }
@@ -1387,8 +1481,8 @@ export default function App() {
   function deleteMessage(messageId: string) {
     deleteMessages([messageId])
   }
-  // 多选批量删除：一次性中止在途请求、把所有选中消息从缓发出队列移除，
-  // 再同时过滤当前会话的视图与持久化——刷新不恢复，也不碰其他助手/会话。
+  // 多选批量删除：一次性中止在途请求，同时过滤当前会话的视图与持久化——
+  // 刷新不恢复，也不碰其他助手/会话。待发送（pending）不入聊天记录，无需在此剥离。
   function deleteMessages(ids: string[]) {
     const idSet = new Set(ids.filter(Boolean))
     if (!idSet.size) return
@@ -1396,36 +1490,19 @@ export default function App() {
     const convId = activeConversationIds[target] || ''
     const inFlight = sendAbortRef.current
     if (inFlight && inFlight.id && idSet.has(inFlight.id)) { try { inFlight.controller.abort() } catch { /* 请求可能已结束 */ } }
-    const batches = deferredBatches
-    let next: Record<string, DeferredBatch> | null = null
-    for (const [key, batch] of Object.entries(batches)) {
-      if (!batch || batch.status !== 'pending') continue
-      if (!batch.messages.some(x => x.id && idSet.has(x.id))) continue
-      let b: DeferredBatch | null = batch
-      for (const item of [...batch.messages]) {
-        if (item.id && idSet.has(item.id)) {
-          b = removeQueuedMessage(b!, item.id)
-          if (!b) break
-        }
-      }
-      if (!next) next = { ...batches }
-      if (b) next[key] = b
-      else delete next[key]
-    }
-    if (next) commitBatches(next)
     updateActiveConversationMessages(target, prev => prev.filter(m => !(m.id && idSet.has(m.id))), convId)
     markConversationDirty()
-    releaseUnusedAssets(idSet, next || batches)
+    releaseUnusedAssets(idSet)
   }
-  // 附件引用安全：删除后扫描全局（全部助手会话 + 视图镜像 + 缓发队列），
+  // 附件引用安全：删除后扫描全局（全部助手会话 + 视图镜像 + 待发送队列），
   // 只对「本次被移除且已无人再引用」的图片调 DELETE，绝不误删其他消息仍在使用的文件。
-  function releaseUnusedAssets(excludedMessageIds:Set<string>, batchesAfter:Record<string,DeferredBatch>|null){
+  function releaseUnusedAssets(excludedMessageIds:Set<string>){
     const removed = new Set<string>()
     for (const m of messages[person] || []) if (m.id && excludedMessageIds.has(m.id)) for (const id of assetIdsOfMessages([m])) removed.add(id)
     const convList = (conversations[person] || []).find(c => c.id === (activeConversationIds[person] || ''))?.messages || []
     for (const m of convList) if (m.id && excludedMessageIds.has(m.id)) for (const id of assetIdsOfMessages([m])) removed.add(id)
     if (!removed.size) return
-    const stillReferenced = collectReferencedAssetIds({ conversations, messages, deferredBatches: batchesAfter, excludeMessageIds: excludedMessageIds })
+    const stillReferenced = collectReferencedAssetIds({ conversations, messages, pendingSends, excludeMessageIds: excludedMessageIds })
     for (const assetId of releasedAssetIds(removed, stillReferenced)) {
       // 失败无妨：孤儿文件不影响功能，后续清理即可，绝不能因删附件失败阻断消息删除。
       apiFetch('/api/attachments/' + encodeURIComponent(assetId), { method: 'DELETE', credentials: 'include' }).catch(() => {})
@@ -1454,19 +1531,6 @@ export default function App() {
       })
     } finally { regenLockRef.current = false }
   }
-  // 倒计时心跳：仅在「已登录且有队列」时运行。每 500ms 拨一次 deferredNow（秒数显示），
-  // 并挑出最早到期的批次自动合并发送；登录完成前不 flush（配置与会话尚未就绪）。
-  useEffect(() => {
-    if (authStatus !== 'signedIn') return
-    if (!Object.keys(deferredBatches).length) return
-    const timer = window.setInterval(() => {
-      setDeferredNow(Date.now())
-      if (flushLockRef.current) return
-      const key = selectDueBatch(batchesRef.current, Date.now())
-      if (key) void flushRef.current(key)
-    }, 500)
-    return () => window.clearInterval(timer)
-  }, [authStatus, deferredBatches])
 
   function addTask() {
     const text = draft.trim()
@@ -1589,9 +1653,9 @@ export default function App() {
         modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
         sending={sending} chatError={chatError} setChatError={setChatError}
         personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} customAssets={customAssets}
-        deferredOn={deferredOn} setDeferredOn={setDeferredOn} deferredBatches={deferredBatches} deferredNow={deferredNow}
-        enqueueDeferred={enqueueDeferred} flushDeferredNow={(key)=>flushDeferred(key,true)} cancelDeferred={cancelDeferred}
-        editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage}
+        pendingSends={pendingSends}
+        enqueuePending={enqueuePending} flushPending={flushPending} cancelPending={cancelPending} editPendingText={editPendingText} stopGeneration={stopGeneration}
+        editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} translateReasoning={translateReasoningText}
         tasks={tasks} addTask={addTask}
         userSettings={userSettings} setUserSettings={setUserSettings}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
@@ -1667,8 +1731,10 @@ function Home({ onPerson, onMe, time, displayName, characters, roomName }: { onP
   // 圆圈里固定显示字母（Z / Y / Z），下方名字跟随设置里的改名
   const LETTERS: Record<string, string> = { [YWX]: 'Z', 'me': 'Y', [YS]: 'Z' }
   return <div className="home-screen">
-    {/* 品牌识别只占顶栏一小行：Logo 不是页面背景，UI 仍按 Mist 走现代简洁路线。 */}
-    <div className="home-brand"><img src={brandAsset('icon')} alt=""/><b>{BRAND_NAME}</b></div>
+    {/* P2-1：首页不再显示 Logo + 品牌名，进入后直接是助手内容。
+        这里只保留 Android 系统状态栏安全区需要的顶部留白，品牌资源本身不删除
+        （launcher 图标 / splash / 关于页 / 系统通知身份仍在使用）。 */}
+    <div className="home-safe-spacer" aria-hidden="true"/>
     <div className="home-people" aria-label="房间入口">
       {([YWX, 'me', YS] as const).map(item => {
         const mine = item === 'me'
@@ -1729,16 +1795,20 @@ function Room(props: {
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
   sending: boolean, chatError: string, setChatError: (v:string)=>void,
   personAppearance: Record<string,PersonAppearancePref>, setPersonAppearance: React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>, customAssets: CustomAssets,
-  // 20 秒缓发：队列与开关由 App 持有（跨会话/刷新不丢），Chat 只负责输入与展示。
-  deferredOn: boolean, setDeferredOn: React.Dispatch<React.SetStateAction<boolean>>,
-  deferredBatches: Record<string,DeferredBatch>, deferredNow: number,
-  enqueueDeferred: (text:string, attachments:MessageAttachment[])=>boolean,
-  flushDeferredNow: (key:string)=>Promise<void>, cancelDeferred: (key:string)=>void,
+  // 生成态待发送队列（conversation queue）：pending 由 App 持有（跨会话/刷新不丢），
+  // Chat 只负责输入状态机与待发送卡片的展示/交互。
+  pendingSends: Record<string,PendingItem>,
+  enqueuePending: (text:string, attachments:MessageAttachment[])=>boolean,
+  flushPending: (assistantId:string, conversationId:string, confirmReview?:boolean)=>Promise<void>,
+  cancelPending: ()=>void,
+  editPendingText: (text:string)=>boolean,
+  stopGeneration: ()=>void,
   // 消息操作菜单：修改/删除/重新生成在 App 层完成持久化与请求控制，Chat 只负责交互。
   editMessage: (messageId:string, newText:string)=>boolean,
   deleteMessage: (messageId:string)=>void,
   deleteMessages: (ids:string[])=>void,
-  regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>
+  regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>,
+  translateReasoning: (text:string)=>Promise<string>
 }) {
   // 历史会话与工作区都默认展开：进来直接看到对话框名称与小程序。折叠偏好存本机，
   // 用 ref 设置 details.open，避免在下面的条件 return 之后引入 Hook（会打乱 Hook 顺序）。
@@ -2124,22 +2194,23 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
  return <div className="tool-panel"><h3>模型连接</h3><p className="muted">支持 OpenAI 兼容接口，例如 One API / New API。API Key 加密保存在后端数据库，登录后自动带回，换设备也无需重填；不进入云端快照明文备份。</p><label className="model-field">API 地址<input value={value.endpoint} onChange={e=>{onChange({...value,endpoint:e.target.value});setTestResult(null);setModelList(null)}} placeholder="https://你的中转站/v1"/></label><label className="model-field">模型名称<div className="model-combo" ref={comboRef}><input value={value.model} onFocus={openCombo} onChange={e=>{onChange({...value,model:e.target.value});setTestResult(null);setComboQuery(e.target.value);if(modelList&&modelList.ids.length)setModelOpen(true)}} placeholder={modelList&&modelList.ids.length?'点击输入框选择模型':'例如 gpt-4o-mini'}/>{modelList&&modelList.ids.length>0&&<button type="button" className={'model-combo-caret'+(modelOpen?' open':'')} aria-label="展开模型列表" onClick={()=>{if(modelOpen)setModelOpen(false);else openCombo()}}>▾</button>}{modelOpen&&<ul className="model-combo-list">{comboIds.length?comboIds.map(id=><li key={id}><button type="button" className={id===value.model?'current':''} onClick={()=>{onChange({...value,model:id});setTestResult(null);setModelOpen(false);setComboQuery('')}}>{id}</button></li>):<li className="model-combo-empty">没有匹配的模型</li>}</ul>}</div></label><label className="model-field">API Key<input type="password" autoComplete="off" value={apiKey} onChange={e=>{setApiKey(e.target.value);setTestResult(null)}} placeholder="sk-…"/></label><div className="model-fetch-row"><button type="button" disabled={listing} onClick={fetchModels}>{listing?'正在获取…':'获取站点模型列表'}</button><small>拉取该站点可用模型，填好 API 地址与 Key 后点击，即可在模型名称框下拉选择。</small></div>{modelList&&<p role="status" className={modelList.ok?'model-test-ok':'model-test-error'}>{modelList.text}</p>}<div className="pricing-settings"><b>用量费用估算（最终显示人民币 ¥）</b><small>输入价格按服务商 USD / 百万 tokens 资费填写；汇率可自行调整。留空价格则不估算费用，缓存价格留空时按普通输入价估算。</small><div className="pricing-grid"><label>输入价格<input type="number" min="0" step="any" value={value.inputPrice??''} onChange={e=>onChange({...value,inputPrice:e.target.value})} placeholder="例如 2.5"/></label><label>输出价格<input type="number" min="0" step="any" value={value.outputPrice??''} onChange={e=>onChange({...value,outputPrice:e.target.value})} placeholder="例如 10"/></label><label>缓存输入价格<input type="number" min="0" step="any" value={value.cachedInputPrice??''} onChange={e=>onChange({...value,cachedInputPrice:e.target.value})} placeholder="可选"/></label><label>美元兑人民币汇率<input type="number" min="0.01" step="0.01" value={value.usdToCny??'7.2'} onChange={e=>onChange({...value,usdToCny:e.target.value})} placeholder="例如 7.2"/></label></div></div><button type="button" disabled={testing} onClick={testConnection}>{testing?'正在测试连接…':'测试 API 连接'}</button>{testResult&&<p role="status" className={testResult.ok?'model-test-ok':'model-test-error'}>{testResult.text}</p>}<small>地址、模型名和价格设置自动保存在此浏览器。API Key 以加密形式存于后端，登录后自动带回（换设备同样可用）；本机浏览器仅作离线缓存，不写入云端快照明文。模型列表、连接测试与聊天请求均经由本机后端代理转发，不受浏览器 CORS 限制。</small></div>
 }
 
-// 消息下方的永久调用卡片：只渲染事件层里绑定到该 messageId 的真实记录。
+// 气泡内部的工具调用折叠卡（P1-4）：默认一行业务摘要，展开是「工具名 + 结果」，
+// tool name / arguments / latency / raw result 收进二级「详情」。没有调用时整卡不渲染。
 function MessageToolCalls({messageId}:{messageId:string}) {
   const calls=useMessageToolCalls(messageId)
   const [open,setOpen]=useState(false)
-  if(!calls.length)return null
-  const succeeded=calls.filter(c=>c.status==='succeeded').length
-  const failed=calls.filter(c=>c.status==='failed'||c.status==='timed_out').length
-  return <div className="msg-tool-calls">
+  const group=groupToolCalls(calls)
+  if(!group.total)return null
+  // 卡片在气泡内部：阻止冒泡，避免点折叠按钮触发气泡长按菜单或多选。
+  return <div className="msg-tool-calls" onClick={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()}>
     <button type="button" className="msg-tool-calls-head" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>
-      <span className="msg-tool-calls-icon" aria-hidden="true">⚡</span>
-      <b>已完成 {succeeded} 个工具{failed?' · '+failed+' 失败':''}</b>
-      <span className="msg-tool-calls-chevron">{open?'收起':'详情'}</span>
+      <span className="msg-tool-calls-icon" aria-hidden="true">{group.icon}</span>
+      <b>{group.label}</b>
+      <span className="msg-tool-calls-chevron">{open?'收起':'›'}</span>
     </button>
-    {open&&<ul className="msg-tool-calls-list">{calls.map(c=><li key={c.key} className={'msg-tool-call status-'+c.status}>
-      <div className="msg-tool-call-top"><span className={'msg-tool-badge '+c.status}>{TOOL_STATUS_LABEL[c.status]}</span><b>{c.displayName}</b>{c.durationMs!=null&&<small>{c.durationMs<1000?c.durationMs+' ms':(c.durationMs/1000).toFixed(1)+' s'}</small>}</div>
-      <details className="msg-tool-call-detail"><summary>参数与结果（已脱敏）</summary><pre>{JSON.stringify({参数:c.arguments,结果:c.resultSummary,...(c.errorMessage?{错误:c.errorMessage}:{}),...(c.errorCode?{错误码:c.errorCode}:{}),服务:c.serverName||'—',开始时间:new Date(c.startedAt).toLocaleString('zh-CN'),...(c.finishedAt?{结束时间:new Date(c.finishedAt).toLocaleString('zh-CN')}:{})},null,2)}</pre></details>
+    {open&&<ul className="msg-tool-calls-list">{group.items.map(c=><li key={c.key} className={'msg-tool-call status-'+c.status}>
+      <div className="msg-tool-call-top"><b>{c.label}</b><span className={'msg-tool-outcome '+c.status}>{c.outcome}</span>{c.durationMs!=null&&<small>{formatDuration(c.durationMs)}</small>}</div>
+      <details className="msg-tool-call-detail"><summary>详情</summary><pre>{JSON.stringify({工具:c.detail.toolName,参数:c.detail.arguments,原始结果:c.detail.resultSummary,...(c.detail.errorMessage?{错误:c.detail.errorMessage}:{}),...(c.detail.errorCode?{错误码:c.detail.errorCode}:{}),服务:c.detail.serverName||'—',耗时:c.detail.durationMs!=null?formatDuration(c.detail.durationMs):'—',开始时间:c.detail.startedAt?new Date(c.detail.startedAt).toLocaleString('zh-CN'):'—',...(c.detail.finishedAt?{结束时间:new Date(c.detail.finishedAt).toLocaleString('zh-CN')}:{})},null,2)}</pre></details>
     </li>)}</ul>}
   </div>
 }
@@ -2166,16 +2237,8 @@ const STICKERS=['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','
 const EMOJI_KW:Record<string,string>={'😀':'笑 开心 微笑 高兴','😃':'笑 开心','😄':'笑 开心','😁':'笑 开心','😆':'笑 搞笑','😅':'尴尬 汗 微笑','🤣':'笑 哭 搞笑','😂':'笑 哭 搞笑 滑稽','🙂':'微笑','🙃':'无奈 反转','😉':'眨眼 调皮','😊':'笑 温暖 微笑','😇':'天使 乖','🥰':'爱 甜 可爱 喜欢','😍':'爱 喜欢 心动','🤩':'惊喜 棒 厉害','😘':'亲亲 爱 么么哒','😗':'亲','☺️':'微笑 笑','😚':'亲亲','😋':'好吃 馋 美食','😛':'吐舌 调皮','😜':'吐舌 调皮 眨眼','🤪':'搞怪 疯','😝':'吐舌 调皮','🤗':'抱抱 欢迎','🤭':'偷笑 捂嘴','🫢':'惊讶 捂嘴','🤫':'嘘 保密','🤔':'思考 疑问 想','🫡':'敬礼 致敬','🤐':'闭嘴 拉链','😶':'无语 沉默','😐':'平静','😑':'无语','😬':'尴尬','🙄':'白眼 无语','😯':'惊讶','😪':'困 累','😮':'惊讶 张嘴','😴':'困 睡 晚安','🤤':'馋 垂涎','😌':'平静 放松','😔':'难过 失落','😏':'得意 坏笑','🥲':'苦笑 难过','😢':'哭 难过 伤心','😭':'哭 大哭 难过','😮‍💨':'叹气 无奈','😲':'惊讶','😵':'晕 头晕','😵‍💫':'晕 眼花','🤠':'牛仔 得意','😎':'酷 墨镜 得意','🤓':'书呆子 眼镜','🧐':'审视 打量','😕':'疑惑 为难','🫤':'疑惑 无奈','😟':'担心','🙁':'不高兴 难过','☹️':'难过 不开心','😰':'紧张 冒汗','😨':'害怕','🥶':'冷 冻','🥵':'热 热死了','😱':'惊叫 恐怖 吓','😣':'难受 痛苦','😫':'累 烦','😩':'累 崩溃','😖':'难受','😞':'失望 难过','😤':'生气 傲 哼','😠':'生气','😡':'生气 发火 怒','🤬':'骂 生气','🤯':'震惊 绝了 爆炸','😳':'害羞 尴尬','🥴':'晕 醉','🤢':'恶心','🤮':'吐 恶心','😷':'口罩 病','🤒':'生病 发烧','🤕':'受伤 包扎','👋':'打招呼 你好 拜拜 再见','🤚':'停 手','👌':'好的 OK','🤌':'拿捏','✌️':'胜利 剪刀手','🤞':'祈祷 好运','🫰':'比心 钱','🤟':'爱你','🤙':'酷 拨打','👍':'赞 好 棒 点赞','👎':'踩 不好','🫱':'握手','🫲':'握手','🙏':'拜托 谢谢 感谢 祈祷 加油','💪':'加油 强壮 力量','🙌':'欢呼 棒','👏':'鼓掌 棒 厉害','🫶':'比心 爱','🤝':'握手 合作 成交','🖖':' Vulcan 祝愿','☝️':'上 一','👇':'下','👈':'左','👉':'右','🧑':'人','👨':'男 他','👩':'女 她','🧔':'胡子','👦':'男孩','👧':'女孩','🕺':'跳舞','💃':'跳舞','🧎':'跪','🧘':'瑜伽 冥想','🙇':'鞠躬 抱歉','🐶':'狗 汪 宠物','🐱':'猫 喵 宠物','🐭':'老鼠','🐹':'仓鼠','🐰':'兔子 可爱','🦊':'狐狸','🐻':'熊','🐼':'熊猫','🐨':'考拉','🐯':'老虎','🦁':'狮子','🐮':'牛','🐷':'猪','🐸':'青蛙','🐵':'猴子','🙈':'害羞 不看','🙉':'不听','🙊':'不说 保密','🦄':'独角兽','🐝':'蜜蜂','🦋':'蝴蝶','🐢':'乌龟','🐍':'蛇','🐙':'章鱼','🐧':'企鹅','🐦':'鸟','🦅':'老鹰','🦉':'猫头鹰','🐞':'瓢虫','🐟':'鱼','🐠':'热带鱼','🐬':'海豚','🐳':'鲸','🦈':'鲨鱼','🐊':'鳄鱼','🐉':'龙','🐲':'龙','🌵':'仙人掌','🌴':'椰树','🌳':'树','🍀':'幸运 四叶草','🍁':'枫叶','🍂':'落叶','🌿':'草 叶子','🌷':'花 郁金香','🌹':'玫瑰 花 爱','🌺':'花','🌻':'向日葵 花','🌼':'花','🌸':'花 樱花 春天','🍉':'西瓜 水果','🍓':'草莓 水果','🍒':'樱桃 水果','🍑':'桃 水果','🍊':'橘子 水果','🍋':'柠檬 水果','🍌':'香蕉 水果','🍇':'葡萄 水果','🥝':'猕猴桃 水果','🍅':'西红柿 水果','🥑':'牛油果','🍞':'面包 吃','🍔':'汉堡 吃 饿','🍟':'薯条 吃','🍕':'披萨 吃 饿','🌭':'热狗 吃','🌮':'卷饼 吃','🌯':'卷饼','🥪':'三明治 吃','🍜':'面 吃 饿','🍛':'咖喱 吃','🍚':'米饭 吃','🍣':'寿司 吃','🍤':'虾 吃','🍳':'煎蛋 吃','🥞':'松饼 早餐','🧀':'奶酪','🍰':'蛋糕 甜','🎂':'生日 蛋糕 庆祝','🍪':'饼干 甜','☕':'咖啡 喝 提神','🍵':'茶 喝','🍺':'啤酒 喝','🍻':'干杯 喝','🥂':'干杯 庆祝','🍷':'红酒 喝','🥤':'奶茶 喝 饮料','⚽':'足球 运动','🏀':'篮球 运动','🎾':'网球 运动','🏈':'橄榄球 运动','⚾':'棒球 运动','🎮':'游戏 玩','🎯':'靶子 目标','🎤':'唱歌 麦克风','🎧':'听歌 音乐','🎵':'音乐 歌','🎶':'音乐 歌','📷':'拍照 图片','📺':'电视 看剧','🎬':'电影 拍戏','🎭':'戏剧 面具','🎨':'画画 艺术','🎪':'马戏','🎠':'旋转木马','🎡':'摩天轮','🎢':'过山车','🎉':'庆祝 派对 生日 开心','🎊':'庆祝 派对','🎁':'礼物 生日','🎈':'气球 生日','🏆':'冠军 奖杯','🥇':'第一 冠军','🎿':'滑雪 运动','🛷':'雪橇','❤️':'心 爱 红心 喜欢','🧡':'心 爱','💛':'心 爱','💚':'心 爱','💙':'心 爱','💜':'心 爱','🖤':'心 黑','🤍':'心 白','💔':'伤心 分手 难过','❣️':'心 爱','💕':'爱 心','💞':'爱 心','💓':'爱 心','💗':'爱 心','💖':'爱 心','💘':'爱 心 桃心','💝':'爱 心 礼物','⭐':'星 星星','🌟':'星 星星 闪亮','✨':'闪亮 棒','💫':'星 晕','🔥':'火 热 厉害','💧':'水 滴','🌈':'彩虹','❄️':'雪 冷','☀️':'太阳 晴 热','🌙':'月亮 晚上 晚安','⚡':'闪电 快','🌊':'海浪','💯':'满分 优秀 加油','❗':'重要 注意','❓':'疑问 问题','✅':'对 完成 可以','❌':'错 不行 禁止','⭕':'圈','🚫':'禁止 不行','💤':'困 睡 晚安','💌':'信 情书 爱','📜':'文书','📌':'定位 图钉','📍':'定位 地点','🔔':'铃 提醒'}
 function matchEmoji(e:string,q:string){if(!q)return true;if(e===q)return true;const kw=EMOJI_KW[e];return !!kw&&kw.includes(q)}
 
-// 输入栏底部图标：数据驱动，后续要加新工具只要往这里加一项（并在 tray 里加一个分支）。
+// 输入栏图标 id：常驻与「+」Bottom Sheet 共用（分组见 composeTools.mjs，P2-2）。
 type ComposeToolId = 'emoji'|'model'|'world'|'mcp'|'search'|'tools'
-const COMPOSE_TOOLS: { id:ComposeToolId; label:string }[] = [
-  { id:'emoji', label:'表情' },
-  { id:'model', label:'模型' },
-  { id:'world', label:'世界书' },
-  { id:'mcp', label:'MCP' },
-  { id:'search', label:'查找聊天记录' },
-  { id:'tools', label:'工具' },
-]
 // 线性小图标：统一 24×24 描边，跟参考图的输入框图标栏保持一致。
 function ComposeGlyph({id}:{id:ComposeToolId}) {
   const s = { fill:'none', stroke:'currentColor', strokeWidth:1.7, strokeLinecap:'round' as const, strokeLinejoin:'round' as const }
@@ -2209,6 +2272,14 @@ function Chat(p: any) {
     setTray(t=>t===id?'':id);setEmojiOpen(false);setMoreOpen(false)
   }
   const closeModelSheet=useCallback(()=>setTray(''),[])
+  // P2-2：「+」Bottom Sheet 里的低频入口，点完立即收起 sheet 再落到原行为。
+  function runMoreTool(id:string){
+    setMoreOpen(false)
+    if(id==='image'){imageInput.current?.click();return}
+    if(id==='file'){fileInput.current?.click();return}
+    if(id==='search'){setTray('');setEmojiOpen(false);setSearchOpen(true);return}
+    setEmojiOpen(false);openTray(id as 'model'|'world'|'mcp'|'tools')
+  }
   const runQuickTool=(id:string)=>{
     setTray('')
     if(id==='task'){p.setChatOpen(false);p.setActiveTool('工作流');return}
@@ -2289,10 +2360,10 @@ function Chat(p: any) {
   },[])
   const currentMessages:ChatMessage[]=p.messages[chatPerson]||[]
   const activeChatConversationId:string=p.activeConversationIds?.[chatPerson]||''
-  // 缓发已暂停：开关、倒计时、待发标记全部隐藏；但历史遗留队列不能静默丢失——
-  // 还有未发出的批次时在输入区上方给出恢复入口（pending 批次计时器也会自动补发）。
-  const recoveryBatches=Object.entries(p.deferredBatches||{}).map(([key,batch])=>({key,batch:batch as DeferredBatch})).filter(x=>x.batch&&Array.isArray(x.batch.messages)&&x.batch.messages.length>0)
-  const recoveryTotal=recoveryBatches.reduce((n,x)=>n+x.batch.messages.length,0)
+  // 当前（助手 + 会话）的待发送 pending：强绑定 scope，绝不通话；刷新/切后台后由 App 恢复。
+  const pendingForScope:PendingItem|null=(p.pendingSends||{})[pendingScopeKey(chatPerson,activeChatConversationId)]||null
+  const [pendingEditMode,setPendingEditMode]=useState(false)
+  const [pendingEditText,setPendingEditText]=useState('')
   // ── 消息操作：常驻轻量图标栏（复制/修改/重新生成/删除）+ 微信式多选删除 ──
   const [selectMode,setSelectMode]=useState(false)          // 多选模式（只作用于当前会话）
   const [selectedIds,setSelectedIds]=useState<string[]>([])  // 已勾选的消息 id
@@ -2303,6 +2374,9 @@ function Chat(p: any) {
   const [editingId,setEditingId]=useState<string|null>(null)
   const [editDraft,setEditDraft]=useState('')
   const [copiedId,setCopiedId]=useState<string|null>(null)
+  // P1-5：翻译结果按 messageId 缓存，只在该消息展开后由用户点「翻译」才请求；刷新不落盘。
+  const [translations,setTranslations]=useState<Record<string,string>>({})
+  const [translatingId,setTranslatingId]=useState<string|null>(null)
   const copyTimerRef=useRef<number|undefined>(undefined)
   const longPressRef=useRef<number|undefined>(undefined)
   const delArmTimerRef=useRef<number|undefined>(undefined)
@@ -2354,15 +2428,29 @@ function Chat(p: any) {
   useEffect(()=>{const list=editWatch||[];if(editingId&&!list.some((m:ChatMessage)=>m.id===editingId)){setEditingId(null);setEditDraft('')}},[editWatch,editingId])
   async function copyMessage(m:ChatMessage){
     if(!m.id||!m.content)return
+    // 只复制当前消息正文；助手消息先走清洗，绝不把系统注入/协议标签复制出去。
+    const text=m.role==='assistant'?cleanupMessageText(m.content):m.content
+    if(!text)return
     try{
-      if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(m.content)
-      else{const ta=document.createElement('textarea');ta.value=m.content;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
+      if(navigator.clipboard&&navigator.clipboard.writeText)await navigator.clipboard.writeText(text)
+      else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}
       setCopiedId(m.id)
       if(copyTimerRef.current)window.clearTimeout(copyTimerRef.current)
       copyTimerRef.current=window.setTimeout(()=>setCopiedId(v=>v===m.id?null:v),1600)
     }catch{p.setChatError('复制失败，请手动选择文本复制。')}
   }
-  function startEdit(m:ChatMessage){if(m.role!=='user'||!m.id||selectMode)return;setEditingId(m.id);setEditDraft(m.content)}
+  // P1-7：双方消息都可修改（只改文本，不重发、不重新生成）。助手消息用清洗后的正文做草稿。
+  function startEdit(m:ChatMessage){if(!m.id||selectMode)return;setEditingId(m.id);setEditDraft(m.role==='assistant'?cleanupMessageText(m.content):m.content)}
+  // P1-5：用户点「翻译」才请求，结果与原文分开展示，绝不自动翻译。
+  async function doTranslate(m:ChatMessage){
+    if(!m.id||!m.reasoning||translatingId)return
+    setTranslatingId(m.id)
+    try{
+      const out=await p.translateReasoning(cleanupMessageText(m.reasoning))
+      setTranslations(prev=>({...prev,[m.id!]:out}))
+    }catch(e){p.setChatError('翻译失败：'+(e instanceof Error?e.message:String(e)))}
+    finally{setTranslatingId(null)}
+  }
   function saveEdit(){if(!editingId)return;const text=editDraft.trim();if(!text)return;p.editMessage(editingId,text);setEditingId(null);setEditDraft('')}
   function cancelEdit(){setEditingId(null);setEditDraft('')}
   // 单条删除：轻量二次确认——第一次点垃圾桶变红「删除？」，3 秒内再点一次才执行。
@@ -2447,8 +2535,8 @@ function Chat(p: any) {
   },[pinToLatest])
   // 图片上传换稳定引用：字节存后端（见 server/attachments.mjs），preview 持久化为
   // /api/attachments/<id>，聊天记录只带 assetId+URL，Base64 永不进 localStorage/云端快照。
-  // 时机选在「选择图片」而非「发送」：loadFiles 本就是 async，这样立即发送与缓发两条
-  // 路径（App.tsx send/enqueueDeferred）一行都不用改。
+  // 时机选在「选择图片」而非「发送」：loadFiles 本就是 async，
+  // 上传后的稳定引用对普通发送与待发送卡片（pendingSend）两条路径都直接可用，发送逻辑无需改动。
   async function uploadAttachment(item:MessageAttachment):Promise<{id:string,url:string}|null>{
     try{
       const dataUrl=item.dataUrl||''
@@ -2495,11 +2583,11 @@ function Chat(p: any) {
     const target=files[index]
     setFiles(prev=>prev.filter((_,j)=>j!==index))
     if(!target||!target.assetId)return
-    const stillReferenced=collectReferencedAssetIds({conversations:p.conversations,messages:p.messages,deferredBatches:p.deferredBatches})
+    const stillReferenced=collectReferencedAssetIds({conversations:p.conversations,messages:p.messages,pendingSends:p.pendingSends})
     if(stillReferenced.has(String(target.assetId)))return
     apiFetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'include'}).catch(()=>{})
   }
-  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.deferredOn&&activeChatConversationId){/* 缓发：消息立即显示但不请求模型；队列不可追加（发送中/待确认）时保留草稿并提示 */if(!p.enqueueDeferred(text,payload)){p.setChatError('这条会话的缓发队列正在发送或有待确认的待发消息，先处理完再继续加入。');return}}else{if(p.sending)return;p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);closeSearch()}
+  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.sending){/* 生成态 + 有输入 → 入待发送队列（不立即请求模型）；输入立即清空，显示待发送卡片 */if(!p.enqueuePending(text,payload)){p.setChatError('这条会话已有待发送内容，先发送或撤回它再继续。');return}}else{p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);closeSearch()}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   function pickEmoji(emoji:string){p.setDraft(p.draft+emoji);const next=[emoji,...recentEmojis.filter(x=>x!==emoji)].slice(0,24);setRecentEmojis(next);localStorage.setItem('ai-home.recentEmojis',JSON.stringify(next))}
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
@@ -2579,6 +2667,11 @@ function Chat(p: any) {
     const selected=!!(inSelect&&canAct&&m.id&&selectedIds.includes(m.id))
     const armed=!!(m.id&&armedDelId===m.id)
     const canRegenerate=m.role==='assistant'&&isLast&&canAct&&!p.sending
+    // 历史消息渲染兜底：老记录可能已存了系统注入/协议标签。只清洗助手输出，
+    // 用户自己输入的原文（哪怕在讨论 <system_warning>）保持不变。
+    const shownContent=m.role==='assistant'?cleanupMessageText(m.content||''):(m.content||'')
+    const shownReasoning=m.role==='assistant'?cleanupMessageText(m.reasoning||''):(m.reasoning||'')
+    const tokenSummary=m.role==='assistant'&&m.usage?summarizeTokenUsage(m.usage):null
     return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')+(actionsOpenId===m.id?' actions-open':'')} key={i} data-message-id={m.id||undefined}>
       {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
       {m.role==='assistant'&&<button type="button" className="message-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button>}
@@ -2586,35 +2679,40 @@ function Chat(p: any) {
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
           : <>
-            {m.reasoning?<details className="reasoning"><summary>{(p.sending&&isLast&&!m.content)?'思考中……':'思考过程'}</summary><div className="reasoning-body">{m.reasoning}</div></details>:null}
+            {shownReasoning?<details className="reasoning">
+              <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
+              <div className="reasoning-body">
+                <div className="reasoning-original">{shownReasoning}</div>
+                {needsChineseTranslation(shownReasoning)&&m.id&&<div className="reasoning-translate">
+                  {translations[m.id]?null:<button type="button" disabled={translatingId===m.id} onClick={()=>void doTranslate(m)}>{translatingId===m.id?'翻译中…':'翻译'}</button>}
+                </div>}
+                {m.id&&translations[m.id]&&<div className="reasoning-translated"><b>中文翻译</b><div>{translations[m.id]}</div></div>}
+              </div>
+            </details>:null}
             <div className={'bubble '+m.role}
               onClick={e=>bubbleClick(e,m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
-          {m.content|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+          {shownContent|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+          {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
         </div>
           </>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
           <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
-          {m.role==='user'&&<button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>}
+          <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>
           {m.role==='assistant'&&isLast&&<button type="button" className="message-action" title={p.sending?'正在生成，稍后再试':'重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
           {armed
             ? <button type="button" className="message-action danger armed" title="再点一次确认删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-armed-text">删除？</span></button>
             : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><IconTrash/></button>}
         </div>}
         {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
-        {m.role==='assistant'&&m.usage&&<details className="message-tech">
-          <summary>{m.usage.elapsedMs!==undefined?(m.usage.elapsedMs/1000).toFixed(1)+'s':'已生成'} · 详情</summary>
+        {m.role==='assistant'&&tokenSummary&&<details className="message-tech">
+          <summary>{tokenSummary.label}<span className="fold-chevron" aria-hidden="true">›</span></summary>
           <div className="message-tech-body">
-            <span>↑ {m.usage.promptTokens??'—'} input tokens</span>
-            <span>↓ {m.usage.completionTokens??'—'} output tokens</span>
-            {(m.usage.cachedTokens||m.usage.cacheReadTokens)?<span>⚡ 缓存 {Math.max(m.usage.cachedTokens||0,m.usage.cacheReadTokens||0)} tokens</span>:<span>缓存未报告</span>}
-            {m.usage.tokensPerSecond!==undefined&&<span>{m.usage.tokensPerSecond} tok/s</span>}
-            {m.usage.elapsedMs!==undefined&&<span>{(m.usage.elapsedMs/1000).toFixed(1)}s · latency</span>}
-            {estimatedCost(m.usage)!==null&&<span>≈ ${estimatedCost(m.usage)!.toFixed(6)}</span>}
+            {tokenSummary.rows.map(r=><span key={r.label}>{r.label}：{r.value}</span>)}
+            {estimatedCost(m.usage!)!==null&&<span>≈ ¥{estimatedCost(m.usage!)!.toFixed(4)}</span>}
             {p.lastRouteInfo&&<span>{p.lastRouteInfo}</span>}
           </div>
         </details>}
-        {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
       </div>
       {m.role==='user'&&<button type="button" className="message-avatar message-avatar-me avatar-link" title="我的头像 · 点开助手档案的用户设置" aria-label="我的头像" onClick={()=>p.openAssistantProfile(true)}>{userAvatar?<img src={userAvatar} alt=""/>:myName.slice(0,1)}</button>}
     </div>
@@ -2631,12 +2729,26 @@ function Chat(p: any) {
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
     {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，点下面的按钮上传图片。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{if(window.confirm('清空全部图片表情包？')){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
-    {recoveryBatches.length>0&&<div className="deferred-recovery" role="status">
-      <span>⏳ {recoveryTotal} 条缓发消息尚未发出</span>
-      <span className="deferred-recovery-actions">
-        <button type="button" disabled={p.sending} title="立即串行发送所有待发批次" onClick={()=>{void (async()=>{for(const x of recoveryBatches)await p.flushDeferredNow(x.key)})()}}>立即发送</button>
-        <button type="button" title="撤回全部待发消息（会从队列移除）" onClick={()=>{for(const x of recoveryBatches)p.cancelDeferred(x.key)}}>撤回</button>
-      </span>
+    {pendingForScope&&<div className="pending-card" role="status">
+      <div className="pending-card-head">
+        <span className="pending-card-badge">待发送</span>
+        {pendingForScope.status==='needs_review'&&<span className="pending-card-warn">上次发送失败，可点「发送」重试</span>}
+        {pendingForScope.attachments?.length?(<span className="pending-card-meta">· {pendingForScope.attachments.length} 个附件</span>):null}
+      </div>
+      {pendingEditMode
+        ? <div className="pending-card-edit">
+            <textarea value={pendingEditText} onChange={e=>setPendingEditText(e.target.value)} rows={3} aria-label="编辑待发送内容" placeholder="待发送内容…"/>
+            <div className="pending-card-edit-actions">
+              <button type="button" className="ghost" onClick={()=>setPendingEditMode(false)}>取消</button>
+              <button type="button" className="primary" disabled={!pendingEditText.trim()} onClick={()=>{if(p.editPendingText(pendingEditText.trim()))setPendingEditMode(false)}}>保存</button>
+            </div>
+          </div>
+        : <div className="pending-card-text" onDoubleClick={()=>{setPendingEditText(pendingForScope.text);setPendingEditMode(true)}} title="双击编辑">{pendingForScope.text||'(空消息)'}</div>}
+      <div className="pending-card-actions">
+        <button type="button" className="pending-send" disabled={p.sending} title="立即发送这条待发消息" onClick={()=>void p.flushPending(chatPerson,activeChatConversationId,true)}>发送</button>
+        {!pendingEditMode&&<button type="button" className="ghost" title="编辑待发送内容" onClick={()=>{setPendingEditText(pendingForScope.text);setPendingEditMode(true)}}>编辑</button>}
+        <button type="button" className="ghost danger" title="撤回待发送（不会发送）" onClick={()=>p.cancelPending()}>删除</button>
+      </div>
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
@@ -2661,20 +2773,34 @@ function Chat(p: any) {
       : <form className="compose compose-box" ref={formRef} onSubmit={submit}>
       <textarea ref={composeTextRef} className="compose-text" rows={1} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
       <div className="compose-toolbar"><div className="compose-icons" role="toolbar" aria-label="聊天输入工具">
-        {COMPOSE_TOOLS.map(t=>{
+        {PRIMARY_TOOLS.map(t=>{
           const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||t.id===tray
           return <button key={t.id} type="button" className={'compose-tool-icon'+(on?' active':'')} title={t.label} aria-label={t.label} aria-pressed={!!on} onClick={()=>{
             if(t.id==='emoji'){setTray('');setMoreOpen(false);if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)};return}
             if(t.id==='search'){setTray('');setEmojiOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
             setEmojiOpen(false);openTray(t.id as 'model'|'world'|'mcp'|'tools')
-          }}><ComposeGlyph id={t.id}/></button>
+          }}><ComposeGlyph id={t.id as ComposeToolId}/></button>
         })}
       </div><div className="compose-send">
-        <button type="button" className={'compose-attach'+(moreOpen?' active':'')} title="图片与文件" aria-label="图片与文件" onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false);setTray('')}}>{moreOpen?'×':'＋'}</button>
-        <button className="send-button" disabled={p.sending||(!p.draft.trim()&&!files.length)}>{p.sending?'生成中…':'发送'}</button>
+        <button type="button" className={'compose-attach'+(moreOpen?' active':'')} title="更多工具" aria-label="更多工具" aria-expanded={moreOpen} onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false);setTray('')}}>{moreOpen?'×':'＋'}</button>
+        {p.sending
+          ? (p.draft.trim()||files.length
+              ? <button type="submit" className="send-button" title="发送（将加入待发送队列，当前回复结束后自动补发）">发送</button>
+              : <button type="button" className="send-button stop" title="停止当前生成" onClick={()=>p.stopGeneration()}>停止</button>)
+          : <button type="submit" className="send-button" disabled={!p.draft.trim()&&!files.length}>发送</button>}
       </div></div>
-      {moreOpen&&<div className="compose-more" aria-label="更多发送选项"><div className="compose-more-actions"><button type="button" title="发送图片" aria-label="发送图片" onClick={()=>imageInput.current?.click()}>▧ 图片</button><button type="button" title="发送文件" aria-label="发送文件" onClick={()=>fileInput.current?.click()}>▤ 文件</button></div><input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/><input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/></div>}
+      <input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/>
+      <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/>
     </form>}
+    {moreOpen&&<div className="compose-sheet-backdrop" onClick={()=>setMoreOpen(false)}>
+      <div className="compose-sheet" role="dialog" aria-modal="true" aria-label="更多工具" onClick={e=>e.stopPropagation()}>
+        <div className="compose-sheet-head"><b>更多工具</b><button type="button" aria-label="关闭" onClick={()=>setMoreOpen(false)}>×</button></div>
+        <div className="compose-sheet-grid">{MORE_TOOLS.map(t=><button type="button" key={t.id} onClick={()=>runMoreTool(t.id)}>
+          <span className="compose-sheet-icon" aria-hidden="true">{(t.id==='image'||t.id==='file')?(t.id==='image'?'▧':'▤'):<ComposeGlyph id={t.id as ComposeToolId}/>}</span>
+          <span className="compose-sheet-label"><b>{t.label}</b><small>{t.desc}</small></span>
+        </button>)}</div>
+      </div>
+    </div>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
     {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
