@@ -1932,3 +1932,13 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .message-meta .message-sender,.shell .message-meta .message-time{font-size:10px;margin:0;color:inherit}
 .bubble .reasoning{display:block;width:100%;margin:0 0 6px;border:0;background:transparent;padding:0}
 .bubble .reasoning>summary{font-size:10.5px;color:var(--muted,#8a7d6d)}
+
+/* 数据与管理：横向紧凑排列 */
+.settings-data-rows{display:flex;flex-direction:column;gap:6px}
+.settings-data-rows .settings-inner-card{margin:0!important;padding:10px 12px!important;border-radius:10px!important}
+.settings-data-rows .settings-inner-card>b{display:block;font-size:12px;margin-bottom:2px}
+.settings-data-rows .settings-inner-card>p{font-size:11px!important;line-height:1.55;margin:2px 0 0!important}
+.settings-data-rows .memory-search{height:30px!important;padding:4px 9px!important;font-size:11.5px!important;margin:6px 0 2px!important}
+.settings-data-rows .data-fold{margin:0}
+.settings-data-rows .data-fold>summary{padding:10px 12px;border:1px solid var(--line,#e2d9cc);border-radius:10px;background:var(--card,#fffdf9);font-size:12px;cursor:pointer;list-style:none}
+.settings-data-rows .settings-logout{margin-top:2px}
