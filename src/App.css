@@ -1732,3 +1732,14 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .wm-col>h4{margin:0 0 2px;font-size:12.5px;font-weight:600;color:var(--ink,#302c37)}
 .chat-config-body .world-mcp-matrix{gap:14px}
 .chat-config-panel .wm-col .tray-option{margin:0}
+
+/* 世界书编辑：开关用明显的强调色表示「开」；绑定角色用整行下拉 */
+.shell .world-editor .world-switch-row input{background:#d8d7d3!important;border:0!important;box-shadow:none!important;appearance:none}
+.shell .world-editor .world-switch-row input:checked{background:var(--accent,#8b593b)!important}
+.shell .world-editor .world-switch-row input::after{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.shell .world-editor .world-switch-row input:checked::after{transform:translateX(16px)}
+.world-bound-roles{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.world-bound-roles .soft-select{width:100%}
+.world-bound-roles .soft-select>button.soft-select-trigger{width:100%}
+.world-entry-bindings{display:flex;align-items:center;gap:8px}
+.world-entry-bindings span{font-size:11px;color:var(--muted,#8a7d6d)}

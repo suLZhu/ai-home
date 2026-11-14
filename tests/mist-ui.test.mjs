@@ -213,7 +213,7 @@ test('世界书与 MCP 合并成一栏，设置页与聊天齿轮共用两栏页
   const app = read('src/App.tsx')
   const css = read('src/App.css')
   assert.match(app, /label:'世界书 \/ MCP'/)
-  assert.match(app, /section==='bind'&&<><WorldMcpMatrix mode="pool"/)
+  assert.match(app, /<WorldMcpMatrix mode="bind" person=\{person\}/)
   assert.match(app, /function WorldMcpMatrix/)
   assert.match(app, /mode==='bind'&&person\?isWorldEntryBound/)
   assert.match(app, /<ChatBindPanel person=\{chatPerson\}/)
@@ -239,4 +239,21 @@ test('世界书 / MCP 页面保留完整的新增与编辑入口', () => {
   assert.match(app, /function ResourceLibrary/)
   assert.match(app, /tabs\?: Array<'model'\|'world'\|'mcp'>/)
   assert.match(app, /\.filter\(\(\[key\]\)=>allowedTabs\.includes\(key\)\)/)
+})
+
+test('世界书编辑器：去掉粘滞/冷却/延迟，数字可清空，绑定角色改下拉', () => {
+  const wb = read('src/WorldbookEditor.tsx')
+  assert.doesNotMatch(wb, /粘滞（消息数）|冷却（消息数）|延迟（消息数）/)
+  assert.match(wb, /function NumberField/)
+  assert.match(wb, /onBlur=\{\(\)=>\{if\(text\.trim\(\)===''\|\|text==='-'\)/)
+  assert.match(wb, /通用（全部助手）/)
+  assert.match(wb, /不绑定（到聊天里再选）/)
+  assert.match(wb, /<SoftSelect ariaLabel="绑定角色"/)
+  // 设置页只保留资源库，不再渲染两列勾选
+  const app = read('src/App.tsx')
+  assert.match(app, /<ResourceLibrary key="bind-library"/)
+  assert.doesNotMatch(app, /section==='bind'&&<><WorldMcpMatrix mode="pool"/)
+  // 开关用强调色表示开启
+  const css = read('src/App.css')
+  assert.match(css, /\.world-editor \.world-switch-row input:checked\{background:var\(--accent/)
 })
