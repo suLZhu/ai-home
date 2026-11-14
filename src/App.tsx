@@ -1672,7 +1672,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        <section className="sidebar-section">
+        <section className="sidebar-section sidebar-treasure">
           <div className="sidebar-section-head"><b>百宝箱</b><small>TREASURE BOX</small></div>
           <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.key==='主动任务'||item.key==='自主行动'?'助手模块':'娱乐房模块'}</small></span></button>)}</nav>
         </section>

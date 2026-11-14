@@ -2008,3 +2008,22 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-sidebar .sidebar-scroll{padding:4px 5px!important}
 .shell .app-sidebar .sidebar-conv-row{gap:2px}
 .shell .app-sidebar .sidebar-conv-edit,.shell .app-sidebar .sidebar-conv-del{padding:0 2px!important}
+
+/* 1/3 宽度下的窄屏排版：不换行、次要文字隐藏 */
+.shell .app-sidebar{font-size:11px}
+.shell .app-sidebar .sidebar-combined-head,.shell .app-sidebar .sidebar-section-head{white-space:nowrap;overflow:hidden;gap:4px}
+.shell .app-sidebar .sidebar-combined-head b,.shell .app-sidebar .sidebar-section-head b{font-size:10.5px!important;flex:0 0 auto}
+.shell .app-sidebar .sidebar-combined-head small,.shell .app-sidebar .sidebar-section-head small{font-size:7px!important;max-width:40px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .app-sidebar .sidebar-section-head small.sidebar-head-treasure{display:none!important}
+.shell .app-sidebar .sidebar-assistant-tool>small{display:none!important}
+.shell .app-sidebar .sidebar-assistant-tool>b{font-size:10.5px!important;white-space:nowrap}
+.shell .app-sidebar .sidebar-conv-name{font-size:10px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shell .app-sidebar .sidebar-link b{font-size:10.5px!important;white-space:nowrap}
+.shell .app-sidebar .sidebar-link{padding:4px 4px!important}
+.shell .app-sidebar .sidebar-brand b{font-size:11px!important}
+.shell .app-sidebar .sidebar-conv-new{font-size:9.5px!important}
+
+/* 1/3 宽度：百宝箱隐藏英文标题，会话行隐藏重命名按钮，名字能多显示几个字 */
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:none!important}
+.shell .app-sidebar .sidebar-conv-edit{display:none!important}
+.shell .app-sidebar .sidebar-conv-row{gap:4px}
