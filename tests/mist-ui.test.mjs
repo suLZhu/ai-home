@@ -81,7 +81,9 @@ test('聊天技术信息折叠、操作栏常驻在气泡下方、输入框单�
   assert.match(app, /composeTextRef/)
   assert.match(app, /import '\.\/mist\.css'/)
   const css = read('src/mist.css')
-  assert.match(css, /\.message-stack \.message-actions \{ opacity:\.9;pointer-events:auto/)
+  assert.match(css, /\.message-stack \.message-actions \{ opacity:1!important;pointer-events:auto!important/)
+  // 图标带显式尺寸：不用等 CSS 生效，避免 WebView 少画/晚画成一条线。
+  assert.match(app, /<svg viewBox="0 0 24 24" width="15" height="15" focusable="false"/)
   // Token 贴在操作图标同一行，折叠时明细不占位
   assert.match(css, /\.message-actions \.message-tech \{ margin:0 0 0 3px;display:inline-flex/)
   assert.match(css, /\.message-tech:not\(\[open\]\)>\.message-tech-body \{ display:none!important; \}/)
