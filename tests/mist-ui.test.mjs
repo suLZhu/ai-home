@@ -168,4 +168,7 @@ test('订阅账号直接作为设置页内容渲染，不再从底部弹半屏�
   // 只有三家可登录渠道，不再保留「全部 / ChatGPT / Claude / Grok」分类筛选条。
   assert.doesNotMatch(sub, /account-tabs|account-tab\b/)
   assert.doesNotMatch(css, /account-tabs|account-tab\b/)
+  // 订阅页里的历史折叠入口（按助手填旧 API Key / 重复的用量面板）已清理，只留账号登录。
+  assert.doesNotMatch(read('src/App.tsx'), /settings-legacy-fold|按助手填默认 API Key/)
+  assert.doesNotMatch(css, /settings-legacy-fold/)
 })

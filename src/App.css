@@ -892,8 +892,7 @@ details[open]>summary .fold-chevron{transform:rotate(90deg)}
 /* 顶栏绑定摘要条已删除，状态由输入栏图标角标与面板表达。 */
 .chat-config-section.chat-config-flash{box-shadow:inset 0 0 0 2px rgba(139,89,59,.35);border-radius:10px}
 
-/* ── 设置页：连接与 API Key 统一放在资源库下方 ── */
-.connection-keys{margin-top:14px}
+/* ── 设置页：连接与 API Key 统一放在供应商页 ── */
 .connection-person{display:flex;align-items:center;gap:8px;margin:8px 0 12px;font-size:12px;color:var(--muted,#8a7d6d)}
 .connection-person select{max-width:180px;padding:6px 9px;border:1px solid var(--line,#e3ddd3);border-radius:9px;background:var(--card,#fff);font-size:12px;color:var(--ink,#403b35)}
 
@@ -1396,9 +1395,6 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .sub-model-item>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell .sub-model-item>button{flex:0 0 auto;width:22px;height:22px;padding:0!important;border:1px solid var(--line,#e6ded2)!important;border-radius:6px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:var(--muted,#8a8378)!important}
 .shell .sub-model-item.picked>button{background:var(--accent-soft,#f7ece5)!important;color:var(--ink,#403b35)!important}
-.shell .settings-legacy-fold{margin:8px 0;border:1px solid var(--line,#e6ded2)!important;border-radius:12px!important;background:var(--surface,#fbf8f4)!important;padding:8px 10px}
-.shell .settings-legacy-fold>summary{cursor:pointer;font-size:11.5px;color:var(--muted,#8a8378)}
-.shell .settings-legacy-fold[open]>summary{margin-bottom:8px;color:var(--ink,#403b35)}
 /* 像素主题对 input 用了 6 个 :not() 的高权重 !important 规则，容器 ID 才能稳定压住。 */
 #subscription-accounts input{border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;box-sizing:border-box}
 #subscription-accounts .sub-search{border:1px solid var(--line,#e6ded2)!important;border-radius:999px!important;background:var(--surface,#fbf8f4)!important;box-shadow:none!important}
