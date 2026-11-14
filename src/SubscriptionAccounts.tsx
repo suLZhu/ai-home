@@ -33,7 +33,6 @@ type Props = {
   setModelProfiles: Dispatch<SetStateAction<ModelProfile[]>>
   subscriptions: SubscriptionAccount[]
   setSubscriptions: Dispatch<SetStateAction<SubscriptionAccount[]>>
-  onClose?: () => void
 }
 
 const TABS = [
@@ -69,7 +68,7 @@ async function fetchRemoteModels(endpoint: string, token: string): Promise<strin
   finally { if (timer) clearTimeout(timer) }
 }
 
-export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, subscriptions, setSubscriptions, onClose }: Props) {
+export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, subscriptions, setSubscriptions }: Props) {
   const [tab, setTab] = useState('all')
   const [busy, setBusy] = useState('')
   const [menu, setMenu] = useState('')
@@ -195,15 +194,12 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
     setMenu(''); setModelOpen(''); setModelNote('')
   }
 
-  return <div className="account-login-layer" onClick={() => onClose?.()}>
-    <div id="subscription-accounts" className="account-login-sheet" onClick={e => e.stopPropagation()}>
-      <span className="account-sheet-handle" aria-hidden="true" />
-      <div className="account-sheet-head">
-        <button type="button" className="account-sheet-close" aria-label="关闭账号登录" onClick={() => onClose?.()}>×</button>
+  // 和供应商列表一样直接作为设置页内容显示，不再从底部弹出半屏面板。
+  return <section id="subscription-accounts" className="account-login-page">
+      <header className="account-page-head">
         <b>账号登录</b>
-        <span aria-hidden="true" />
-      </div>
-      <p className="account-sheet-lead">登录订阅账号后，模型会自动出现在聊天的模型面板里，和填 API 一样直接选。</p>
+        <p className="account-page-lead">登录订阅账号后，模型会自动出现在聊天的模型面板里，和填 API 一样直接选。</p>
+      </header>
       <div className="account-tabs" role="tablist" aria-label="账号登录渠道">
         {TABS.map(t => <button type="button" role="tab" aria-selected={tab === t.id} key={t.id}
           className={'account-tab' + (tab === t.id ? ' active' : '')}
@@ -284,6 +280,5 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
           {showErrorDetail && <pre className="account-error-detail">{errorInfo.detail}</pre>}
         </>}
       </div>}
-    </div>
-  </div>
+  </section>
 }

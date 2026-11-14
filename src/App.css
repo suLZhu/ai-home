@@ -1450,13 +1450,11 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 #subscription-accounts textarea{width:100%;min-width:0;box-sizing:border-box;padding:7px 9px!important;border:1px solid var(--line,#e6ded2)!important;border-radius:9px!important;background:var(--field,#f5f1ea)!important;box-shadow:none!important;color:var(--ink,#403b35)!important;font-size:11px;line-height:1.5;resize:vertical}
 /* 面板底部留白，别被底部导航压住 */
 .shell #user-settings-panel{padding-bottom:22px}
-/* 账号登录：半屏极简面板（Kelivo 风格）。背景变暗，面板里没有任何输入框。 */
-.account-login-layer{position:fixed;inset:0;z-index:9000;display:flex;align-items:flex-end;justify-content:center;background:rgba(38,32,27,.46)}
-.shell #subscription-accounts.account-login-sheet{display:flex;flex-direction:column;width:100%;max-width:520px;min-height:74vh;max-height:82vh;overflow-y:auto;box-sizing:border-box;margin:0;padding:0 18px calc(20px + var(--native-safe-bottom,0px));border:0!important;border-radius:20px 20px 0 0!important;background:#fffaf5!important;box-shadow:0 -10px 30px rgba(40,30,20,.16)!important}
-.account-sheet-handle{flex:0 0 auto;display:block;width:36px;height:4px;margin:9px auto 2px;border-radius:999px;background:#e3d8cc}
-.shell #subscription-accounts .account-sheet-head{flex:0 0 auto;display:grid;grid-template-columns:40px 1fr 40px;align-items:center;padding:6px 0 14px}
-.shell #subscription-accounts .account-sheet-head>b{text-align:center;font-size:16px;font-weight:600;color:#403b35}
-.shell #subscription-accounts button.account-sheet-close{padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;font-size:25px;line-height:1;color:#5b5248;text-align:left;cursor:pointer}
+/* 订阅账号：作为设置页内容直接显示（和供应商列表一致），不再从底部弹出半屏面板。 */
+.shell #subscription-accounts.account-login-page{display:flex;flex-direction:column;width:100%;min-width:0;box-sizing:border-box;margin:0;padding:14px;border:1px solid var(--line,#e2d9cc)!important;border-radius:16px!important;background:var(--card,#fffdf9)!important;box-shadow:none!important}
+.shell #subscription-accounts .account-page-head{display:flex;flex-direction:column;gap:5px;margin:0 0 12px}
+.shell #subscription-accounts .account-page-head>b{font-size:15px;font-weight:600;color:#403b35}
+.shell #subscription-accounts .account-page-lead{margin:0;font-size:11px;line-height:1.6;color:#9a9186}
 .shell #subscription-accounts .account-tabs{flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:0 0 12px;overflow-x:auto;scrollbar-width:none}
 .shell #subscription-accounts .account-tabs::-webkit-scrollbar{display:none}
 .shell #subscription-accounts button.account-tab{flex:0 0 auto;padding:7px 13px!important;border:0!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#8a8378;white-space:nowrap;cursor:pointer}
@@ -1538,13 +1536,10 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .soft-select-menu button.soft-select-option>b{flex:0 0 auto;color:#8b593b}
 .soft-select-menu .soft-select-empty{margin:8px;font-size:11px;color:#9a9186}
 
-/* 账号登录面板：同一套白底细线；新增模型选择区 */
-.account-login-layer{background:rgba(28,24,20,.38)!important}
-.shell #subscription-accounts.account-login-sheet{min-height:auto;max-height:84vh;padding:0 18px calc(20px + var(--native-safe-bottom,0px));border:0!important;border-radius:22px 22px 0 0!important;background:#fff!important;box-shadow:0 -12px 34px rgba(30,24,18,.14)!important}
-.shell #subscription-accounts .account-sheet-head{grid-template-columns:40px 1fr 40px;padding:4px 0 8px}
-.shell #subscription-accounts .account-sheet-head>b{font-size:15px;color:#302b26}
-.shell #subscription-accounts button.account-sheet-close{font-size:22px;color:#8e867b}
-.shell #subscription-accounts .account-sheet-lead{margin:0 0 12px;font-size:11px;line-height:1.6;color:#9a9186;text-align:center}
+/* 账号登录：页面内白底细线卡片；新增模型选择区 */
+.shell #subscription-accounts.account-login-page{padding:14px;border:1px solid #eeeae4!important;border-radius:18px!important;background:#fff!important;box-shadow:none!important}
+.shell #subscription-accounts .account-page-head>b{font-size:14.5px;color:#302b26}
+.shell #subscription-accounts .account-page-lead{font-size:10.5px;color:#9a9186}
 .shell #subscription-accounts .account-tabs{gap:6px;padding:0 0 12px}
 .shell #subscription-accounts button.account-tab{padding:6px 13px!important;background:#f6f4f1!important;color:#8e867b!important;font-size:11.5px}
 .shell #subscription-accounts button.account-tab.active{background:#8b593b!important;color:#fff!important;font-weight:600}

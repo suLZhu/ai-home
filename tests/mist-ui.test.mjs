@@ -156,3 +156,13 @@ test('供应商详情 / 新增供应商都是独立页面，不再在列表下�
   assert.match(app, /section\.startsWith\('vendor:'\)&&section!=='vendor:account'\?'vendor':''/)
   assert.match(css, /\.vendor-page\{display:flex/)
 })
+
+test('订阅账号直接作为设置页内容渲染，不再从底部弹半屏面板', () => {
+  const sub = read('src/SubscriptionAccounts.tsx')
+  const css = read('src/App.css')
+  assert.match(sub, /<section id="subscription-accounts" className="account-login-page">/)
+  assert.match(sub, /className="account-page-head"/)
+  assert.doesNotMatch(sub, /account-login-layer|account-login-sheet/, '不应再有全屏遮罩 + 底部面板')
+  assert.match(css, /\.shell #subscription-accounts\.account-login-page\{/)
+  assert.doesNotMatch(css, /account-login-layer|account-login-sheet/)
+})
