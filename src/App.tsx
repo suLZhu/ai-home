@@ -2722,12 +2722,12 @@ function Chat(p: any) {
         </div>
           </>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
-          <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<span className="message-action-label">复制</span>}</button>
-          <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><span className="message-action-label">修改</span></button>
-          {m.role==='assistant'&&<button type="button" className="message-action" title={canRegenerate?'重新生成':'只有最新一条回复可以重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><span className="message-action-label">重生成</span></button>}
+          <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<img className="message-action-icon" src="/msg-icons/copy.png" alt="" aria-hidden="true"/>}</button>
+          <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><img className="message-action-icon" src="/msg-icons/edit.png" alt="" aria-hidden="true"/></button>
+          {m.role==='assistant'&&<button type="button" className="message-action" title={canRegenerate?'重新生成':'只有最新一条回复可以重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><img className="message-action-icon" src="/msg-icons/regen.png" alt="" aria-hidden="true"/></button>}
           {armed
             ? <button type="button" className="message-action danger armed" title="再点一次确认删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-armed-text">删除？</span></button>
-            : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-label">删除</span></button>}
+            : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><img className="message-action-icon" src="/msg-icons/trash.png" alt="" aria-hidden="true"/></button>}
           {m.role==='assistant'&&tokenSummary&&<details className="message-tech inline">
             <summary>{tokenSummary.label}</summary>
             <div className="message-tech-body">

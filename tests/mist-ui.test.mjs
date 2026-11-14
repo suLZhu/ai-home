@@ -2,7 +2,7 @@
 // 不替代 390×844 视觉探针，但能防止「又把字号散落回页面 / 又全局禁止字体缩放」这类回退。
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import ts from 'typescript'
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8')
@@ -83,9 +83,13 @@ test('聊天技术信息折叠、操作栏常驻在气泡下方、输入框单�
   const css = read('src/mist.css')
   assert.match(css, /\.message-stack \.message-actions \{ opacity:1!important;pointer-events:auto!important/)
   // 操作按钮用文字，不再依赖内联 SVG（老 WebView 会把 SVG 画成一条横线）。
-  assert.match(app, /className="message-action-label">复制</)
-  assert.match(app, /className="message-action-label">重生成</)
-  assert.doesNotMatch(app, /Icon(Copy|Edit|Regen|Trash)/)
+  // 操作按钮用位图图标（内联 SVG 在部分 Android WebView 上会被画成一条横线）。
+  assert.match(app, /className="message-action-icon" src="\/msg-icons\/copy\.png"/)
+  assert.match(app, /className="message-action-icon" src="\/msg-icons\/trash\.png"/)
+  assert.doesNotMatch(app, /message-action-label/)
+  for (const name of ['copy', 'edit', 'regen', 'trash']) {
+    assert.ok(existsSync('public/msg-icons/' + name + '.png'), '缺少图标 public/msg-icons/' + name + '.png')
+  }
   // Token 贴在操作图标同一行，折叠时明细不占位
   assert.match(css, /\.message-actions \.message-tech \{ margin:0 0 0 3px;display:inline-flex/)
   assert.match(css, /\.message-tech:not\(\[open\]\)>\.message-tech-body \{ display:none!important; \}/)

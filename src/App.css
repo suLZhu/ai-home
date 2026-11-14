@@ -386,8 +386,9 @@ html{-webkit-text-size-adjust:none;text-size-adjust:none}
 .message-row:hover .message-actions,.message-actions:focus-within{opacity:1}
 /* 操作按钮用文字标签而不是 SVG 图标：部分 Android WebView 对内联 SVG 支持不稳定
    （会画成一条横线 / 要等重绘才出现），文字永远可靠。 */
-.message-action{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;padding:0 6px;border:none;background:transparent;color:var(--muted);border-radius:7px;cursor:pointer;font-size:11px;line-height:1;white-space:nowrap}
-.message-action-label{font-size:11px;line-height:1;letter-spacing:.02em}
+.message-action{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;height:22px;padding:0;border:none;background:transparent;color:var(--muted);border-radius:7px;cursor:pointer;line-height:1}
+/* 图标用位图而不是内联 SVG：部分 Android WebView 画不出 SVG，位图一定渲染 */
+.message-action-icon{display:block;width:16px;height:16px;pointer-events:none}
 .message-action::before{content:"";position:absolute;inset:-9px -4px}
 .message-action svg{width:15px;height:15px;display:block}
 .message-action:disabled{opacity:.35;cursor:default}
