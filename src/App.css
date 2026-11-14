@@ -2067,3 +2067,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-sidebar .sidebar-assistant-tool{height:28px!important;min-height:28px!important;padding:2px 8px!important;border-radius:7px!important}
 .shell .app-sidebar .sidebar-assistant-tool>b{font-size:12px!important}
 .shell .app-sidebar .sidebar-assistant-tool>small{font-size:9px!important}
+
+/* 百宝箱作为标题：字更大、与上边线拉开距离 */
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head{padding:10px 0 7px!important;margin:0 0 6px!important;justify-content:center!important}
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head b{font-size:15px!important;font-weight:600!important;letter-spacing:.12em;line-height:1.2}
