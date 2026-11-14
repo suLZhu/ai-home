@@ -448,6 +448,7 @@ export default function App() {
     const listener = CapApp.addListener('backButton', () => {
       if (cancelled) return
       if (runBackStack()) return           // 临时层消费了本次返回
+      if (activeToolRef.current) { const fromSettings = toolReturnRef.current; setActiveTool(''); if (fromSettings) { setPage('settings'); setToolReturnToSettings(false) } return }
       if (chatOpenRef.current) { setChatOpen(false); return } // 聊天页 → 房间
       void CapApp.exitApp()                // 根页面 → 退出
     })
@@ -466,6 +467,11 @@ export default function App() {
   }
   const [tasks, setTasks] = useState<Record<Person, string[]>>(() => { const saved=read<Record<string,string[]>>('ai-home.tasks',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,string[]> })
   const [activeTool, setActiveTool] = useState<Tool | ''>('')
+  const [toolReturnToSettings, setToolReturnToSettings] = useState(false)
+  const activeToolRef = useRef<Tool | ''>(activeTool)
+  const toolReturnRef = useRef(false)
+  useEffect(() => { activeToolRef.current = activeTool }, [activeTool])
+  useEffect(() => { toolReturnRef.current = toolReturnToSettings }, [toolReturnToSettings])
   // 聊天里点头像 → 关聊天打开助手档案；档案左上按钮据此变成「← 返回聊天」。
   const [profileFromChat,setProfileFromChat]=useState(false)
   const openAssistantProfile=(fromChat=false)=>{setProfileFromChat(fromChat);setChatOpen(false);setActiveTool('助手档案');setPage('room')}
@@ -480,6 +486,8 @@ export default function App() {
     const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.sidebar-edge-handle')
     const onDown=(e:PointerEvent)=>{if(!inside(e.target))setSidebarOpen(false)}
     document.addEventListener('pointerdown',onDown)
+  useEffect(() => { if (!activeTool && toolReturnToSettings) { setPage('settings'); setToolReturnToSettings(false) } }, [activeTool, toolReturnToSettings])
+  useEffect(() => { if (!activeTool) return; const un = pushBackHandler(() => { const fromSettings = toolReturnToSettings; setActiveTool(''); if (fromSettings) { setPage('settings'); setToolReturnToSettings(false) } return true }); return un }, [activeTool, toolReturnToSettings])
     const unregister=pushBackHandler(()=>{setSidebarOpen(false);return true})
     return ()=>{document.removeEventListener('pointerdown',onDown);unregister()}
   },[sidebarOpen])
@@ -1689,7 +1697,7 @@ export default function App() {
          modelProfiles={modelProfiles} bindings={bindings} setBindings={setBindings}
          vendors={vendors} chatPool={chatPool} setChatPool={setChatPool}
          routeState={routeState} setRouteState={setRouteState} lastRouteInfo={lastRouteInfo}
-         activeTool={activeTool} setActiveTool={setActiveTool} memory={memory} setMemory={setMemory}
+         activeTool={activeTool} setActiveTool={(v)=>{ if(v===''&&toolReturnToSettings){ setToolReturnToSettings(false); setActiveTool(''); setPage('settings') } else setActiveTool(v) }} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
         sending={sending} chatError={chatError} setChatError={setChatError}
@@ -1702,7 +1710,7 @@ export default function App() {
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
       {page === 'me' && <MyRoom roomName={roomName} setRoomName={setRoomName} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room')}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} />}
+      {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     {!chatOpen && <nav className="bottom-nav">
