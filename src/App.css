@@ -1743,3 +1743,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .world-bound-roles .soft-select>button.soft-select-trigger{width:100%}
 .world-entry-bindings{display:flex;align-items:center;gap:8px}
 .world-entry-bindings span{font-size:11px;color:var(--muted,#8a7d6d)}
+
+/* 世界书开关固定短条，不再被通用 input 规则拉满整行 */
+.shell .world-editor .world-switch-row input{width:40px!important;min-width:40px!important;max-width:40px!important;height:22px!important;flex:0 0 40px!important}
+.shell .world-editor .world-switch-row input:checked::after{transform:translateX(18px)}

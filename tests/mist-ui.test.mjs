@@ -256,4 +256,8 @@ test('世界书编辑器：去掉粘滞/冷却/延迟，数字可清空，绑定
   // 开关用强调色表示开启
   const css = read('src/App.css')
   assert.match(css, /\.world-editor \.world-switch-row input:checked\{background:var\(--accent/)
+  // 筛选条整行去掉；开关固定 40px 短条；不绑定角色也能保存
+  assert.doesNotMatch(wb, /library-filter-tabs/)
+  assert.match(css, /\.world-switch-row input\{width:40px!important/)
+  assert.match(wb, /if\(!title\.trim\(\)\|\|!content\.trim\(\)\)return;/)
 })
