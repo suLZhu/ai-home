@@ -1772,3 +1772,23 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .worldbook-panel .world-editor label>small{margin:0!important;line-height:1.4}
 .shell .worldbook-panel .world-editor-grid{gap:6px!important}
 .shell .worldbook-panel .world-editor-main,.shell .worldbook-panel .world-editor-side{gap:6px!important}
+
+/* 世界书列表：折叠成一行，只显示名字 + 三角 */
+.shell .worldbook-panel .world-entry{padding:0!important;margin:6px 0!important;overflow:hidden}
+.shell .worldbook-panel .world-entry-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left;font-size:13.5px;color:var(--ink,#302c37);cursor:pointer}
+.shell .worldbook-panel .world-entry-toggle b{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .worldbook-panel .world-entry-caret{flex:0 0 auto;color:var(--muted,#8a7d6d);font-size:11px}
+.shell .worldbook-panel .world-entry.open .world-entry-toggle{border-bottom:1px solid var(--line,#e6ded2)!important}
+.shell .worldbook-panel .world-entry.open>small,
+.shell .worldbook-panel .world-entry.open>p,
+.shell .worldbook-panel .world-entry.open>.world-entry-enabled,
+.shell .worldbook-panel .world-entry.open>.world-entry-meta,
+.shell .worldbook-panel .world-entry.open>.world-entry-bindings,
+.shell .worldbook-panel .world-entry.open>.world-actions{padding-left:12px;padding-right:12px}
+.shell .worldbook-panel .world-entry.open>.world-actions{padding-bottom:10px;margin-top:6px!important}
+.shell .worldbook-panel .world-entry-enabled{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--muted,#8a7d6d)}
+
+/* 设置页顶部留白收一档 */
+.shell .settings-screen{padding-top:8px!important}
+.shell .settings-heading{padding-top:0!important;margin-bottom:8px!important}
+.shell .settings-heading h2{margin:2px 0 4px!important}

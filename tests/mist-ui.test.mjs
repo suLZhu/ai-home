@@ -260,4 +260,9 @@ test('世界书编辑器：去掉粘滞/冷却/延迟，数字可清空，绑定
   assert.doesNotMatch(wb, /library-filter-tabs/)
   assert.match(css, /\.world-switch-row input\{width:40px!important/)
   assert.match(wb, /if\(!title\.trim\(\)\|\|!content\.trim\(\)\)return;/)
+  // 扫描深度与插入深度重复，删掉上面的；列表折叠成「名字 + 三角」
+  assert.doesNotMatch(wb, /扫描深度/)
+  assert.match(wb, /className="world-entry-toggle"/)
+  assert.match(wb, /world-entry-caret/)
+  assert.match(wb, /aria-expanded=\{openId===e\.id\}/)
 })
