@@ -1991,3 +1991,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .sidebar-combined .sidebar-assistant-tool{padding:4px 6px!important}
 .shell .sidebar-combined .sidebar-assistant-tool>b{font-size:11px!important}
 .shell .sidebar-combined .sidebar-assistant-tool>small{font-size:8.5px!important}
+
+/* 侧边栏再窄一点 */
+.shell .app-sidebar{width:min(256px,76vw)!important;padding-left:10px!important;padding-right:10px!important}
+.shell .app-sidebar .sidebar-brand{padding-left:2px!important;padding-right:2px!important}
