@@ -3331,7 +3331,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     {!only&&<div className="library-filter-tabs resource-tabs">
       {([['model','模型预设'],['world','世界书'],['mcp','MCP 服务']] as const).filter(([key])=>allowedTabs.includes(key)).map(([key,label]) => <button type="button" key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}<small>{key==='model'?modelProfiles.length:key==='world'?worldEntries.length:mcp.connections.length}</small></button>)}
     </div>}
-    <p className="resource-hint">{only==='world'?'世界书条目在这里增删，上面的勾选清单决定哪些能进聊天窗口。':only==='mcp'?'MCP 服务在这里添加或移除，上面的勾选清单决定哪些能进聊天窗口。':only==='model'?'把服务商的模型预设、接口地址加进来；默认供应商在「供应商 → 添加供应商」，聊天窗口只负责选用。':'世界书和 MCP 在这里一次配置好；聊天窗口底部的世界书 / MCP 图标负责按当前助手选用。'}</p>
+    <p className="resource-hint">{only==='world'?'世界书条目在这里增删，上面的勾选清单决定哪些能进聊天窗口。':only==='mcp'?'MCP 服务在这里添加或移除，上面的勾选清单决定哪些能进聊天窗口。':only==='model'?'把服务商的模型预设、接口地址加进来；默认供应商在「供应商 → 添加供应商」，聊天窗口只负责选用。':'世界书 / MCP 在这里配置；聊天里按助手开关。'}</p>
     {tab==='model' && <>
       <div className="resource-list">
         {modelProfiles.length===0 && <p className="muted">还没有模型预设。添加一套后，聊天窗口里所有助手都能直接选用。</p>}
