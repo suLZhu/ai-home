@@ -82,8 +82,9 @@ test('聊天技术信息折叠、操作栏常驻在气泡下方、输入框单�
   assert.match(app, /import '\.\/mist\.css'/)
   const css = read('src/mist.css')
   assert.match(css, /\.message-stack \.message-actions \{ opacity:\.9;pointer-events:auto/)
-  // Token 贴在操作图标同一行
+  // Token 贴在操作图标同一行，折叠时明细不占位
   assert.match(css, /\.message-actions \.message-tech \{ margin:0 0 0 3px;display:inline-flex/)
+  assert.match(css, /\.message-tech:not\(\[open\]\)>\.message-tech-body \{ display:none!important; \}/)
   // 头像不受「按钮最小 36px」影响，保持正圆
   assert.match(css, /:not\(\.message-avatar\):not\(\.chat-avatar\)/)
   assert.match(css, /font-size:var\(--type-body\)!important/)

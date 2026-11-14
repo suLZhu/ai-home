@@ -156,13 +156,18 @@
 .shell .compose-more-actions button { border:1px solid var(--border-subtle)!important;background:var(--field)!important;color:var(--text-primary)!important;font-size:var(--type-button)!important; }
 
 /* ── 消息操作：常驻在气泡正下方（复制/修改/重新生成/删除 + Token），不再靠 hover 才出现 ─── */
-.shell .message-stack .message-actions { opacity:.9;pointer-events:auto;transition:opacity .15s ease; }
+.shell .message-stack .message-actions { opacity:.9;pointer-events:auto;transition:opacity .15s ease;flex-wrap:wrap; }
 .shell .message-row:hover .message-actions { opacity:1; }
 .shell .message-action { color:var(--text-secondary)!important; }
 /* Token 用量贴在操作图标后面同一行，不单独占一块、也不和气泡隔很远 */
 .shell .message-stack .message-actions .message-tech { margin:0 0 0 3px;display:inline-flex;align-items:center;line-height:1; }
 .shell .message-stack .message-actions .message-tech>summary { gap:2px;padding:0;font-size:var(--type-meta); }
 .shell .message-stack .message-actions .message-tech>summary::after { font-size:var(--type-meta); }
+/* 折叠时明细不参与布局（作者样式里的 display:flex 会盖掉 details 默认隐藏，曾撑出一块空白） */
+.shell .message-tech:not([open])>.message-tech-body { display:none!important; }
+/* 展开时明细独占一行，宽度跟气泡走，不挤在图标行里 */
+.shell .message-stack .message-actions .message-tech[open] { flex:0 0 100%;margin-top:2px; }
+.shell .message-stack .message-actions .message-tech[open]>.message-tech-body { width:100%; }
 
 /* ── 技术信息：默认只留一行弱状态，展开后才是完整数据 ───────────────── */
 .shell .message-usage { display:none!important; }
