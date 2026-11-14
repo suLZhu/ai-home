@@ -1747,3 +1747,28 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 /* 世界书开关固定短条，不再被通用 input 规则拉满整行 */
 .shell .world-editor .world-switch-row input{width:40px!important;min-width:40px!important;max-width:40px!important;height:22px!important;flex:0 0 40px!important}
 .shell .world-editor .world-switch-row input:checked::after{transform:translateX(18px)}
+
+/* 世界书编辑页更紧凑：字段间距、内边距、卡片间距都收一档 */
+.shell .worldbook-panel .world-editor{margin-top:10px;padding:10px;border-radius:12px}
+.shell .worldbook-panel .world-editor>h4{margin:0 0 6px;font-size:13px}
+.shell .worldbook-panel .world-editor-grid{gap:8px}
+.shell .worldbook-panel .world-editor-main,.shell .worldbook-panel .world-editor-side{gap:8px}
+.shell .worldbook-panel .world-editor-main>label,.shell .worldbook-panel .world-editor-side>label{gap:3px;font-size:12.5px}
+.shell .worldbook-panel .world-editor input:not([type=checkbox]),.shell .worldbook-panel .world-editor textarea,.shell .worldbook-panel .world-editor select{padding:7px 9px;border-radius:9px}
+.shell .worldbook-panel .world-editor textarea{line-height:1.5}
+.shell .worldbook-panel .world-switch-row{padding:5px 0!important;gap:8px}
+.shell .worldbook-panel .world-save-actions{margin-top:8px!important}
+.shell .worldbook-panel .world-entry{padding:10px;margin:8px 0;border-radius:11px}
+.shell .worldbook-panel .world-entry>p{max-height:88px;margin:6px 0}
+.shell .worldbook-panel .world-entry-meta{margin-top:6px}
+.shell .worldbook-panel .world-actions{margin-top:8px!important}
+.shell .worldbook-panel .world-entry-bindings{margin-top:6px}
+.shell .worldbook-panel .worldbook-title-row{margin-bottom:6px!important}
+
+/* 世界书编辑器：去掉字段自身的外边距，只靠网格 8px 间距 */
+.shell .worldbook-panel .world-editor-main>label,.shell .worldbook-panel .world-editor-side>label{margin:0!important}
+.shell .worldbook-panel .world-editor input:not([type=checkbox]),.shell .worldbook-panel .world-editor textarea,.shell .worldbook-panel .world-editor select{margin:0!important}
+.shell .worldbook-panel .world-inline-toggles{margin:0!important;gap:14px}
+.shell .worldbook-panel .world-editor label>small{margin:0!important;line-height:1.4}
+.shell .worldbook-panel .world-editor-grid{gap:6px!important}
+.shell .worldbook-panel .world-editor-main,.shell .worldbook-panel .world-editor-side{gap:6px!important}
