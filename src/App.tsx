@@ -2698,8 +2698,9 @@ function Chat(p: any) {
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
         {!isEditing&&(chatDisplay.assistantName||chatDisplay.userName||(chatDisplay.time&&timeText))&&<div className={'message-meta'+(m.role==='user'?' end':'')}>
           {m.role==='assistant'&&chatDisplay.assistantName&&<span className="message-sender">{p.displayName(chatPerson)}</span>}
+          {m.role==='user'&&chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
+          {m.role==='assistant'&&chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
           {m.role==='user'&&chatDisplay.userName&&<span className="message-sender">{myName}</span>}
-          {chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
         </div>}
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button>{m.role==='user'&&<button type="button" disabled={!editDraft.trim()||p.sending} onClick={()=>void saveEditAndResend(m)}>保存并重发</button>}<button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>

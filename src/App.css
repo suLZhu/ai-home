@@ -2035,3 +2035,9 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:inline!important}
 .shell .app-sidebar .sidebar-assistant-tool>small{display:block!important;font-size:8.5px!important}
 .shell .app-sidebar .sidebar-combined-head small,.shell .app-sidebar .sidebar-section-head small{max-width:72px}
+
+/* 侧边栏会话行压成窄长条 */
+.shell .app-sidebar .sidebar-conv-row{height:24px!important;min-height:24px!important;padding:2px 5px!important;border-radius:7px!important}
+.shell .app-sidebar .sidebar-conv-name{padding:0!important;font-size:10.5px!important;line-height:1.1!important}
+.shell .app-sidebar .sidebar-conv-edit,.shell .app-sidebar .sidebar-conv-del{width:16px!important;height:16px!important;min-height:16px!important;font-size:10px!important;padding:0!important}
+.shell .app-sidebar .sidebar-conv-new{height:24px!important;min-height:24px!important;padding:2px 6px!important;font-size:10px!important;border-radius:7px!important}
