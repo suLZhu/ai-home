@@ -2276,9 +2276,6 @@ const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
  const chatDisplay = useChatDisplay()
- const chatUser = p.userSettings?.[chatPerson] || blankUserSettings()
- const chatUserAvatar = chatUser.avatar || ''
- const chatUserName = chatUser.callName || chatUser.userName || '我'
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
   const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
@@ -2700,15 +2697,20 @@ function Chat(p: any) {
     return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')} key={i} data-message-id={m.id||undefined}>
       {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
       {m.role==='assistant'&&chatDisplay.assistantAvatar&&<button type="button" className="message-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button>}
-      {m.role==='user'&&chatDisplay.userAvatar&&<span className="message-avatar user-avatar" aria-hidden="true">{chatUserAvatar?<img src={chatUserAvatar} alt=""/>:<span>{chatUserName.slice(0,1)}</span>}</span>}
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
-        {!isEditing&&chatDisplay.time&&chatDisplay.timePos==='above'&&timeText&&<div className="message-time above">{timeText}</div>}
-        {!isEditing&&m.role==='assistant'&&chatDisplay.assistantName&&<div className="message-sender">{p.displayName(chatPerson)}</div>}
-        {!isEditing&&m.role==='user'&&chatDisplay.userName&&<div className="message-sender end">{chatUserName}</div>}
+        {!isEditing&&(chatDisplay.assistantName||chatDisplay.userName||(chatDisplay.time&&timeText))&&<div className={'message-meta'+(m.role==='user'?' end':'')}>
+          {m.role==='assistant'&&chatDisplay.assistantName&&<span className="message-sender">{p.displayName(chatPerson)}</span>}
+          {m.role==='user'&&chatDisplay.userName&&<span className="message-sender">{myName}</span>}
+          {chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
+        </div>}
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button>{m.role==='user'&&<button type="button" disabled={!editDraft.trim()||p.sending} onClick={()=>void saveEditAndResend(m)}>保存并重发</button>}<button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
           : <>
-            {shownReasoning?<details className="reasoning">
+
+            <div className={'bubble '+m.role}
+              onClick={e=>bubbleClick(e,m)}
+              onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
+          {shownReasoning?<details className="reasoning">
               <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
               <div className="reasoning-body">
                 <div className="reasoning-original">{shownReasoning}</div>
@@ -2718,12 +2720,8 @@ function Chat(p: any) {
                 {m.id&&translations[m.id]&&<div className="reasoning-translated"><b>中文翻译</b><div>{translations[m.id]}</div></div>}
               </div>
             </details>:null}
-            <div className={'bubble '+m.role}
-              onClick={e=>bubbleClick(e,m)}
-              onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
           {shownContent|| (p.sending&&isLast?'正在思考……':'')}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
           {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
-          {!isEditing&&chatDisplay.time&&chatDisplay.timePos==='below'&&timeText&&<div className="message-time below">{timeText}</div>}
         </div>
           </>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
@@ -2744,7 +2742,7 @@ function Chat(p: any) {
         </div>}
         {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
       </div>
-      {m.role==='user'&&<button type="button" className="message-avatar message-avatar-me avatar-link" title="我的头像 · 点开助手档案的用户设置" aria-label="我的头像" onClick={()=>p.openAssistantProfile(true)}>{userAvatar?<img src={userAvatar} alt=""/>:myName.slice(0,1)}</button>}
+      {m.role==='user'&&chatDisplay.userAvatar&&<button type="button" className="message-avatar message-avatar-me avatar-link" title="我的头像 · 点开助手档案的用户设置" aria-label="我的头像" onClick={()=>p.openAssistantProfile(true)}>{userAvatar?<img src={userAvatar} alt=""/>:myName.slice(0,1)}</button>}
     </div>
   }
   return <div className="fullscreen-chat">

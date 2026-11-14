@@ -1925,3 +1925,10 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 
 /* 预览里的用户气泡：浅底深字，保证文字可读 */
 .chat-display-preview .cdp-bubble.me{background:#e7e0f6;color:#3f3552;border:1px solid #d6cdef}
+
+/* 名称+时间一行，气泡上方；思考过程在气泡内 */
+.shell .message-meta{display:flex;align-items:center;gap:8px;margin:0 3px 3px;font-size:10px;color:var(--muted,#8a7d6d)}
+.shell .message-meta.end{justify-content:flex-end}
+.shell .message-meta .message-sender,.shell .message-meta .message-time{font-size:10px;margin:0;color:inherit}
+.bubble .reasoning{display:block;width:100%;margin:0 0 6px;border:0;background:transparent;padding:0}
+.bubble .reasoning>summary{font-size:10.5px;color:var(--muted,#8a7d6d)}

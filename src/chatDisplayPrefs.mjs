@@ -9,7 +9,7 @@ export const DEFAULT_CHAT_DISPLAY = {
   assistantName: false,
   userName: false,
   time: false,
-  timePos: 'below',
+  timePos: 'above',
   token: true,
 }
 
@@ -45,5 +45,6 @@ export function formatMessageTime(msg) {
   if (!iso) return ''
   const t = new Date(iso)
   if (Number.isNaN(t.getTime())) return ''
-  return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')
+  const p2 = (n) => String(n).padStart(2, '0')
+  return String(t.getFullYear()).slice(-2) + '/' + p2(t.getMonth() + 1) + '/' + p2(t.getDate()) + ' ' + p2(t.getHours()) + ':' + p2(t.getMinutes())
 }

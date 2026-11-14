@@ -12,15 +12,15 @@ test('聊天展示偏好：缺字段补默认，未知值被忽略', () => {
   assert.equal(v.timePos === 'sideways', false)
 })
 
-test('聊天展示偏好：时间位置只接受 above/below', () => {
-  assert.equal(normalizeChatDisplay({ timePos: 'sideways' }).timePos, 'below')
+test('聊天展示偏好：时间位置固定气泡上方', () => {
+  assert.equal(normalizeChatDisplay({ timePos: 'sideways' }).timePos, 'above')
 })
 
 test('消息时间格式化：优先 at，退回 usage.at，无效值返回空串', () => {
   const a = formatMessageTime({ at: new Date(2026, 10, 14, 9, 5).toISOString() })
-  assert.equal(a, '09:05')
+  assert.equal(a, '26/11/14 09:05')
   const b = formatMessageTime({ usage: { at: new Date(2026, 10, 14, 15, 40).toISOString() } })
-  assert.equal(b, '15:40')
+  assert.equal(b, '26/11/14 15:40')
   assert.equal(formatMessageTime({}), '')
   assert.equal(formatMessageTime({ at: 'not-a-date' }), '')
 })
