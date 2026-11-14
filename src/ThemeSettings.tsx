@@ -35,5 +35,5 @@ export function ThemeSettings({value,onChange,assets,onAssetsChange}:{value:Them
    </div>
    <div className="theme-fontctl-foot"><button type="button" onClick={()=>update({scale:100})}>跟随系统</button><small>100% = 系统字号</small></div>
  </div>
- <button type="button" className="theme-reset" onClick={()=>onChange(DEFAULT_THEME)}>恢复默认外观</button><p className="muted">开启像素风美化包时，整站配色会自动转为黑白灰，主题只决定明暗层次。</p><p className="muted">主题配置随小家的云端状态同步；上传的字体与图片只保存在本机浏览器。</p></section>
+ <button type="button" className="theme-reset" onClick={()=>onChange(DEFAULT_THEME)}>恢复默认外观</button><p className="muted">开启像素风美化包时，整站配色会自动转为黑白灰，主题只决定明暗层次。</p></section>
 }
