@@ -54,7 +54,7 @@ export function UsageStats({ people, conversations, models, displayName }: {
       for (const c of conversations[p] || []) {
         for (const m of c.messages || []) {
           if (m.role !== 'assistant' || !m.usage) continue
-          const name = (m.usage.model || '').trim() || '未标记模型'
+          const name = (m.usage.model || '').trim() || ((models[p] || '').trim() || '未标记模型')
           const b = buckets[name] || { calls: 0, tokens: 0, lastAt: '' }
           b.calls++
           b.tokens += (m.usage.promptTokens || 0) + (m.usage.completionTokens || 0)
@@ -67,7 +67,7 @@ export function UsageStats({ people, conversations, models, displayName }: {
       out[p] = list
     }
     return out
-  }, [people, conversations])
+  }, [people, conversations, models])
 
   const priceFor = (person: string, model: string): Price => {
     const map = pricing[person] || {}
@@ -110,15 +110,17 @@ export function UsageStats({ people, conversations, models, displayName }: {
       {rows.length === 0 && <p className="muted">这个助手还没有带用量记录的消息。</p>}
       {rows.map((row) => {
         const p = priceFor(active, row.model)
-        return <div className="usage-model-row" key={row.model}>
-          <div className="usage-model-name"><b>{row.model}</b><small>{row.calls} 次 · {row.tokens.toLocaleString()} Token · ≈ ¥{costOf(row.calls, row.tokens, p).toFixed(2)}</small></div>
-          <div className="usage-model-price">
+        return <div className="usage-model-block" key={row.model}>
+          <div className="usage-model-head"><b>{row.model}</b><small>{row.calls} 次 · {row.tokens.toLocaleString()} Token · ≈ ¥{costOf(row.calls, row.tokens, p).toFixed(2)}</small></div>
+          <label className="usage-field">计费方式
             <select aria-label={'计费方式 ' + row.model} value={p.mode} onChange={(e) => patchPrice(active, row.model, { mode: e.target.value as Mode })}>
-              <option value="perToken">按量</option>
-              <option value="perCall">按次</option>
+              <option value="perToken">按量（元 / 千 Token）</option>
+              <option value="perCall">按次（元 / 次）</option>
             </select>
-            <input aria-label={'单价 ' + row.model} type="number" min="0" step="0.0001" value={p.price} placeholder={p.mode === 'perToken' ? '元/千Token' : '元/次'} onChange={(e) => patchPrice(active, row.model, { price: e.target.value })}/>
-          </div>
+          </label>
+          <label className="usage-field">单价
+            <input aria-label={'单价 ' + row.model} type="number" min="0" step="0.0001" value={p.price} placeholder={p.mode === 'perToken' ? '例如 0.008' : '例如 0.02'} onChange={(e) => patchPrice(active, row.model, { price: e.target.value })}/>
+          </label>
         </div>
       })}
     </div>

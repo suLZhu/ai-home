@@ -2110,3 +2110,11 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .usage-model-price{display:flex;gap:5px;flex:0 0 auto}
 .usage-model-price select,.usage-model-price input{height:30px;padding:0 6px;border:1px solid var(--line,#e6ded2);border-radius:7px;font-size:11.5px;background:var(--card,#fffdf9)}
 .usage-model-price input{width:96px}
+
+/* 用量：每个模型一块，计费方式与单价上下排列 */
+.usage-model-block{display:flex;flex-direction:column;gap:6px;padding:9px 10px;border:1px solid var(--line,#e6ded2);border-radius:10px;background:var(--card,#fffdf9);margin-bottom:6px}
+.usage-model-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.usage-model-head b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.usage-model-head small{font-size:9.5px;color:var(--muted,#8a7d6d);white-space:nowrap}
+.usage-field{display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--muted,#8a7d6d)}
+.usage-field select,.usage-field input{height:32px;padding:0 8px;border:1px solid var(--line,#e6ded2);border-radius:8px;font-size:12px;background:var(--card,#fffdf9);color:var(--ink,#302c37)}
