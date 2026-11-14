@@ -1578,7 +1578,7 @@ export default function App() {
   if (authStatus !== 'signedIn') return <LoginScreen status={authStatus} password={loginPassword} setPassword={setLoginPassword} error={authError} onSubmit={login} onUseLocal={() => { try { localStorage.removeItem(API_BASE_STORAGE_KEY) } catch { /* 忽略 */ } setApiBase(''); void recheckAfterApiChange() }}/>
 
   const navigate=(next:Page)=>{setPage(next);setActiveTool('');setSidebarOpen(false)}
-  const openFunShortcut=(key:string)=>{setFunShortcut(key);setPage('fun');setSidebarOpen(false);setActiveTool('')}
+  const openFunShortcut=(key:string)=>{if(key==='主动任务'||key==='自主行动'){setActiveTool(key==='主动任务'?'工作流':'自主生活');setPage('room');setSidebarOpen(false);return}setFunShortcut(key);setPage('fun');setSidebarOpen(false);setActiveTool('')}
   // 左侧抽屉里的会话操作：和房间页共用 conversations / messages / activeConversationIds，
   // 切换前先把当前聊天视图写回持久化会话，避免刚发出去的消息丢在旧会话里。
   const drawerConvs:Conversation[]=conversations[person]||[]
@@ -1666,7 +1666,7 @@ export default function App() {
         </section>
         <section className="sidebar-section">
           <div className="sidebar-section-head"><b>百宝箱</b><small>TREASURE BOX</small></div>
-          <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>娱乐房模块</small></span></button>)}</nav>
+          <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'主动任务',icon:'◷',label:'主动任务'},{key:'自主行动',icon:'☀',label:'自主行动'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.key==='主动任务'||item.key==='自主行动'?'助手模块':'娱乐房模块'}</small></span></button>)}</nav>
         </section>
         {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
       </div>
@@ -1878,31 +1878,21 @@ function Room(props: {
   const lastText=(()=>{const list=props.messages[person]||[];for(let i=list.length-1;i>=0;i--){const c=list[i]?.content?.trim?.();if(c)return c.slice(0,36)}return '还没有消息，说点什么吧'})()
   function saveActiveMessages(){props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c)}))}
   function openConversation(id:string){if(id!==activeId){saveActiveMessages();const target=convs.find(c=>c.id===id);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}));props.setChatError('')}props.setChatOpen(true)}
-  function deleteConversation(id:string){const target=convs.find(c=>c.id===id);if(!target||!window.confirm('删除「'+(target.title||'新对话')+'」？此操作会删除这条会话及其消息，无法撤销。'))return;const remaining=convs.filter(c=>c.id!==id);const next=remaining.length?remaining:[{id:crypto.randomUUID(),title:'新对话',messages:[],updatedAt:new Date().toISOString()}];props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:next}));if(id===activeId){const nextActive=next[Math.max(0,convs.findIndex(c=>c.id===id)-1)]||next[0];props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:nextActive.id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:nextActive.messages}))}props.setChatError('')}
-  function createConversation(){const id=crypto.randomUUID();const title='新对话 '+(convs.length+1);props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:[...(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c),{id,title,messages:[],updatedAt:new Date().toISOString()}]}));props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:[]}));props.setChatError('')}
   return <div className="room-screen">
     {roomHeader}
     <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">→</span></button>
     {/* 历史会话默认展开：对话框名称直接可见，不用再点一下。 */}
-    <details className="room-history" ref={historyRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomHistoryExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
-      <summary><b>历史会话</b><small>{convs.length} 条 · 点名称直接进入</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
-      <div className="room-session-switch"><div className="room-session-list">{convs.map(c=><div className="room-session-item" key={c.id}><button type="button" className={'room-session-name'+(c.id===activeId?' selected':'')} title="点击进入聊天窗口" onClick={()=>openConversation(c.id)}>{c.title||'新对话'}</button><button type="button" className="room-session-delete" aria-label={'删除 '+(c.title||'新对话')} title="删除这条对话" onClick={()=>deleteConversation(c.id)}>×</button></div>)}{convs.length===0&&<p className="room-session-empty">还没有对话，用下面的按钮新建。</p>}</div><button type="button" className="room-history-new" onClick={createConversation}>＋ 新建对话</button></div>
-    </details>
     <details className="room-tools" ref={toolsRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomToolsExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
       <summary><b>工作区</b><small>小程序 · 后续可继续往里加</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
       <WorkspaceApplets onOpen={t=>props.setActiveTool(t)}/>
-      <p className="workspace-foot">人物设置与长期 / 短期记忆点房间顶部头像；模型、世界书、MCP 在聊天窗口里选与绑定，资源统一在「设置」。</p>
     </details>
   </div>
 }
 
 // 工作区只放小程序：助手头像不再陈列在这里（房间顶部头像仍可打开助手档案）。
 // 后续做了小程序 / 单独的可视化网页，只要往 WORKSPACE_APPLETS 加一项（tool 或 shortcut）。
-const WORKSPACE_APPLETS: { id:Tool; icon:string; label:string; desc:string }[] = [
-  { id:'工作流', icon:'◷', label:'主动任务', desc:'定时任务与工作流' },
-  { id:'自主生活', icon:'☀', label:'自主行动', desc:'助手自主行为面板' },
-  { id:'工具调用看板', icon:'▦', label:'工具看板', desc:'真实调用记录' },
-]
+const WORKSPACE_APPLETS: { id:Tool; icon:string; label:string; desc:string }[] = []
+
 function WorkspaceApplets({onOpen}:{ onOpen:(t:Tool)=>void }) {
   return <div className="workspace-applets">
     {WORKSPACE_APPLETS.map(a=><button type="button" className="workspace-applet" key={a.id} onClick={()=>onOpen(a.id)}>
@@ -2699,9 +2689,9 @@ function Chat(p: any) {
       {m.role==='assistant'&&chatDisplay.assistantAvatar&&<button type="button" className="message-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button>}
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
         {!isEditing&&(chatDisplay.assistantName||chatDisplay.userName||(chatDisplay.time&&timeText))&&<div className={'message-meta'+(m.role==='user'?' end':'')}>
-          {chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
           {m.role==='assistant'&&chatDisplay.assistantName&&<span className="message-sender">{p.displayName(chatPerson)}</span>}
           {m.role==='user'&&chatDisplay.userName&&<span className="message-sender">{myName}</span>}
+          {chatDisplay.time&&timeText&&<span className="message-time">{timeText}</span>}
         </div>}
         {isEditing
           ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button>{m.role==='user'&&<button type="button" disabled={!editDraft.trim()||p.sending} onClick={()=>void saveEditAndResend(m)}>保存并重发</button>}<button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
