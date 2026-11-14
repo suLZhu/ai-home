@@ -1061,11 +1061,21 @@ details[open]>summary .fold-chevron{transform:rotate(90deg)}
 .vendor-new{display:flex;flex-direction:column;gap:9px;min-width:0;width:100%;box-sizing:border-box;margin-top:4px;padding:13px;border:1px dashed #d8cebf;border-radius:12px!important;background:rgba(250,246,238,.6)}
 .vendor-new>b{font-size:11.5px;color:var(--ink,#403b35)}
 .vendor-new>small{font-size:10px;color:var(--muted);line-height:1.5}
+/* 新建供应商时可选的多 Key：勾选后才展开备用 Key 行，删空就只剩主 Key */
+.vendor-multi-toggle{display:flex;align-items:center;gap:7px;min-width:0;font-size:11px;line-height:1.4;color:var(--muted,#8a7d6d)}
+.shell .settings-screen .vendor-multi-toggle input{flex:0 0 auto;width:15px;height:15px;min-width:0;margin:0;padding:0;accent-color:var(--accent,#8b593b)}
+.vendor-new-keys{display:flex;flex-direction:column;gap:6px;min-width:0}
+.vendor-new-key{display:grid;grid-template-columns:minmax(0,.75fr) minmax(0,1.25fr) 30px 26px;align-items:center;gap:5px;min-width:0}
+.vendor-new-key input{box-sizing:border-box;width:100%;min-width:0}
+.shell .settings-screen .vendor-new-key button{width:30px;height:30px;padding:0!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#faf6ef)!important;box-shadow:none!important;color:var(--muted,#8a7d6d);font-size:13px;line-height:1}
+.shell .settings-screen .vendor-new-key button[aria-label="删除备用 Key"]{width:26px;height:26px;border:0!important;border-radius:7px!important;background:transparent!important;color:var(--muted);font-size:16px}
+.shell .settings-screen .vendor-new-key button:hover{color:var(--accent,#8b593b)}
+.shell .settings-screen .vendor-add-key{align-self:flex-start;padding:6px 11px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#faf6ef)!important;box-shadow:none!important;color:var(--ink,#403b35);font-size:11px;white-space:nowrap}
 
 /* ── 供应商：显式字段 + 配置/模型两级 + 按网址拉模型 ───────────────── */
 .vendor-field{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:11px;color:var(--muted,#8a7d6d)}
 .vendor-field>small{font-size:9.5px;color:var(--muted,#8a7d6d)}
-.vendor-endpoint input,.vendor-add-row input,.vendor-key-row input,
+.vendor-endpoint input,.vendor-add-row input,.vendor-key-row input,.vendor-new-key input,
 .shell .settings-screen .vendor-field input,
 .shell .settings-screen .vendor-key-input input,
 .shell .settings-screen .vendor-model-tools input{box-sizing:border-box;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--line,#e3ddd3)!important;border-radius:9px!important;background:var(--field,#fff);color:var(--ink,#403b35);font-size:11.5px;box-shadow:none!important}

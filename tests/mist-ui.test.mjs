@@ -121,3 +121,19 @@ test('Mist 顶栏保留 Android 状态栏安全区与可点击热区', () => {
   const appCss = read('src/App.css')
   assert.match(appCss, /--app-safe-top:max\(env\(safe-area-inset-top/)
 })
+
+test('供应商多 Key：新建时可勾选，编辑页仍能增删改备用 Key，且样式类都有定义', () => {
+  const app = read('src/App.tsx')
+  const css = read('src/App.css')
+  // 新建表单：勾选后展开备用 Key 行，提交时并入 vendor.keys。
+  assert.match(app, /启用多 Key 模式/)
+  assert.match(app, /newMultiKey\?newExtraKeys\.filter\(k=>k\.value\.trim\(\)\)/)
+  // 编辑页：原有「多 KEY 模式」管理区保留，能改备注、改角色、删除既有 Key。
+  assert.match(app, /多 KEY 模式/)
+  assert.match(app, /addBackupKey/)
+  assert.match(app, /aria-label="删除这把 Key"/)
+  // 新加的样式类必须真的落在 App.css，避免只有 markup 没有样式。
+  for (const cls of ['vendor-multi-toggle', 'vendor-new-keys', 'vendor-new-key', 'vendor-add-key']) {
+    assert.match(css, new RegExp('\\.' + cls + '(?=[\\s,{.:\\[]|$)'), '缺少样式 .' + cls)
+  }
+})

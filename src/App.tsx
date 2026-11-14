@@ -2988,6 +2988,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
   const [showKey,setShowKey]=useState(false)
   const [newName,setNewName]=useState('')
   const [newKey,setNewKey]=useState('')
+  const [newMultiKey,setNewMultiKey]=useState(false)
+  const [newExtraKeys,setNewExtraKeys]=useState<Array<{id:string;label:string;value:string;visible:boolean}>>([])
   const [newEndpoint,setNewEndpoint]=useState('')
   const [newApiPath,setNewApiPath]=useState('')
   // 每次改动都基于当前 vendors 算出新数组，再同步模型池；不在 setState updater 里嵌套 setState。
@@ -3029,10 +3031,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     const name=newName.trim(),endpoint=newEndpoint.trim()
     if(!name)return
     const id='custom-'+Math.random().toString(36).slice(2,10)
-    const keys=newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]
+    const keys=[...(newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]),...(newMultiKey?newExtraKeys.filter(k=>k.value.trim()).map((k,i)=>({id:k.id,label:k.label.trim()||('备用 '+(i+1)),value:k.value.trim(),role:'backup' as const})):[])]
     commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,keys,models:[]}] as Vendor[])
     setEditing(id);setTab('model');resetEditUI()
-    setNewName('');setNewKey('');setNewEndpoint('');setNewApiPath('')
+    setNewName('');setNewKey('');setNewMultiKey(false);setNewExtraKeys([]);setNewEndpoint('');setNewApiPath('')
   }
   // 只向「当前这一家」的接口拉模型，用备用优先的第一把有效 Key。
   const fetchRemote=async(v:Vendor)=>{
@@ -3073,6 +3075,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
       <b>添加自定义供应商</b>
       <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/></label>
       <label className="vendor-field">API Key<input aria-label="API Key" type="password" autoComplete="off" value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/></label>
+      <label className="vendor-multi-toggle"><input type="checkbox" checked={newMultiKey} onChange={e=>{setNewMultiKey(e.target.checked);if(e.target.checked&&newExtraKeys.length===0)setNewExtraKeys([{id:crypto.randomUUID(),label:'',value:'',visible:false}])}}/> 启用多 Key 模式</label>
+      {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type={k.visible?'text':'password'} autoComplete="off" value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))}>{k.visible?'🙈':'👁'}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}>×</button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}>＋</button></div>}
       <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
       <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
       <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
@@ -3116,7 +3120,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
             <button type="button" aria-label="添加筛选出的全部模型" title="添加筛选出的全部模型" onClick={()=>pickModels(active.id,visibleGroups.flatMap(g=>g.models))}>☑</button>
             <button type="button" aria-label="刷新模型列表" title="从该网址重新拉取模型" onClick={()=>void fetchRemote(active)}>⟳</button>
           </div>
-          <p className="vendor-url-hint">来源 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
           {listState.loading&&<p className="muted">正在从这个网址获取模型…</p>}
           {listState.error&&<p className="mcp-error">{listState.error}</p>}
           {!listState.loading&&visibleGroups.length===0&&<p className="muted">{remoteIds.length?'没有匹配的模型，换个关键词试试。':'点右上角 ⟳ 从这个网址拉取它自己的模型；拉取失败也可以手动输入模型名。'}</p>}
