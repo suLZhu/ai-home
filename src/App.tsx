@@ -1664,9 +1664,16 @@ export default function App() {
           </div>
           <button type="button" className="sidebar-conv-new" onClick={drawerCreate}>＋ 新建对话</button>
         </section>
+        <section className="sidebar-section sidebar-assistant-tools">
+          <div className="sidebar-section-head"><b>助手工具</b><small>{displayName(person)}</small></div>
+          <div className="sidebar-assistant-card">
+            <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('主动任务')}><span aria-hidden="true">◷</span><b>主动任务</b><small>定时 / 工作流</small></button>
+            <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('自主行动')}><span aria-hidden="true">☀</span><b>自主行动</b><small>自主行为面板</small></button>
+          </div>
+        </section>
         <section className="sidebar-section">
           <div className="sidebar-section-head"><b>百宝箱</b><small>TREASURE BOX</small></div>
-          <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'内嵌浏览器',icon:'⌘',label:'内嵌浏览器'},{key:'可视化网页',icon:'▧',label:'可视化网页'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'主动任务',icon:'◷',label:'主动任务'},{key:'自主行动',icon:'☀',label:'自主行动'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.key==='主动任务'||item.key==='自主行动'?'助手模块':'娱乐房模块'}</small></span></button>)}</nav>
+          <nav className="sidebar-links">{([{key:'客厅',icon:'☕',label:'公共客厅'},{key:'相册',icon:'▧',label:'相册'},{key:'播放器',icon:'♫',label:'播放器'},{key:'记账单',icon:'¥',label:'人民币记账'},{key:'日记本',icon:'✎',label:'日记本'},{key:'待定',icon:'＋',label:'更多工具'}] as {key:string;icon:string;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon">{item.icon}</span><span><b>{item.label}</b><small>{item.key==='主动任务'||item.key==='自主行动'?'助手模块':'娱乐房模块'}</small></span></button>)}</nav>
         </section>
         {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
       </div>

@@ -1942,3 +1942,36 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .settings-data-rows .data-fold{margin:0}
 .settings-data-rows .data-fold>summary{padding:10px 12px;border:1px solid var(--line,#e2d9cc);border-radius:10px;background:var(--card,#fffdf9);font-size:12px;cursor:pointer;list-style:none}
 .settings-data-rows .settings-logout{margin-top:2px}
+
+/* 侧边栏整体收紧 + 助手工具小卡片 */
+.shell .app-sidebar .sidebar-scroll{padding:6px 9px!important}
+.shell .sidebar-section{margin:0 0 7px!important;padding:0!important}
+.shell .sidebar-section-head{margin:0 0 4px!important;padding:0 2px!important}
+.shell .sidebar-section-head b{font-size:12.5px!important}
+.shell .sidebar-section-head small{font-size:9px!important}
+.shell .sidebar-conv-row{margin:2px 0!important;padding:5px 8px!important;border-radius:8px!important}
+.shell .sidebar-conv-name{font-size:12.5px!important}
+.shell .sidebar-conv-new{margin-top:4px!important;padding:6px 8px!important;font-size:12px!important;border-radius:8px!important}
+.shell .sidebar-links{gap:2px!important}
+.shell .sidebar-link{padding:6px 8px!important;border-radius:8px!important}
+.shell .sidebar-link b{font-size:12.5px!important}
+.shell .sidebar-link small{font-size:9px!important}
+.shell .sidebar-assistant-card{display:flex;flex-direction:column;gap:2px;padding:5px;border:1px solid var(--line,#e6ded2);border-radius:10px;background:var(--card,#fffdf9)}
+.shell .sidebar-assistant-tool{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:0;border-radius:8px;background:transparent;text-align:left;color:var(--ink,#302c37)}
+.shell .sidebar-assistant-tool>span{font-size:14px}
+.shell .sidebar-assistant-tool>b{font-weight:500;font-size:12.5px}
+.shell .sidebar-assistant-tool>small{margin-left:auto;font-size:9.5px;color:var(--muted,#8a7d6d)}
+
+/* 侧边栏再收紧一档 */
+.shell .app-sidebar .sidebar-scroll{padding:4px 8px!important}
+.shell .sidebar-section{margin:0 0 6px!important}
+.shell .sidebar-conv-row{padding:4px 7px!important;margin:1px 0!important}
+.shell .sidebar-conv-name{font-size:11.5px!important}
+.shell .sidebar-conv-new{padding:5px 7px!important;font-size:11px!important;margin-top:3px!important}
+.shell .sidebar-link{padding:4px 7px!important}
+.shell .sidebar-link b{font-size:11.5px!important}
+.shell .sidebar-link small{font-size:8.5px!important}
+.shell .sidebar-assistant-tool{padding:5px 7px!important}
+.shell .sidebar-assistant-tool>b{font-size:11.5px!important}
+.shell .sidebar-section-head b{font-size:11.5px!important}
+.shell .sidebar-section-head small{font-size:8.5px!important}
