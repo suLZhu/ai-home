@@ -88,12 +88,16 @@ const MODEL_FAMILIES = [
   familyRule('nova', 'Nova', 'nova'),
   familyRule('jamba', 'Jamba', 'jamba'),
 ]
-const OTHER_FAMILY = { id: 'other', label: '其他' }
-const FAMILY_ORDER = new Map([...MODEL_FAMILIES, OTHER_FAMILY].map((f, i) => [f.id, i]))
+const FAMILY_ORDER = new Map(MODEL_FAMILIES.map((f, i) => [f.id, i]))
 
 function familyOf(id) {
   const lower = id.toLowerCase()
-  return MODEL_FAMILIES.find(f => f.re.test(lower)) || OTHER_FAMILY
+  const known = MODEL_FAMILIES.find(f => f.re.test(lower))
+  if (known) return known
+  // 认不出大厂的（Aeon 3.0 / Agnes 2.5 / Big Pickle…）：按名字里的第一个词自成一组，
+  // 既不硬塞「其他」，也不会一条一个类。
+  const token = id.split(/[\s/_.-]+/).filter(Boolean)[0] || id
+  return { id: 'name:' + token.toLowerCase(), label: token.charAt(0).toUpperCase() + token.slice(1) }
 }
 
 export function groupModels(ids) {
@@ -105,7 +109,9 @@ export function groupModels(ids) {
     if (!groups.has(family.id)) groups.set(family.id, { id: family.id, label: family.label, models: [] })
     groups.get(family.id).models.push(id)
   }
-  return [...groups.values()].sort((a, b) => FAMILY_ORDER.get(a.id) - FAMILY_ORDER.get(b.id))
+  // 已知大厂按固定顺序在前；认不出的按名字分组，保持首次出现顺序排在后面。
+  const rank = (g) => FAMILY_ORDER.has(g.id) ? FAMILY_ORDER.get(g.id) : MODEL_FAMILIES.length + 1
+  return [...groups.values()].sort((a, b) => rank(a) - rank(b))
 }
 
 // 多 KEY 的角色：备用优先于主号（用户要「先用备用再用主号」）。
