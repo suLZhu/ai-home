@@ -22,7 +22,7 @@ import { cleanupMessageText, createStreamCleanup } from './messageCleanup.mjs'
 // 消息呈现层纯函数：Token 汇总 / 工具卡分组 / reasoning 翻译判定与请求构造。
 import { formatDuration, summarizeTokenUsage, groupToolCalls, needsChineseTranslation, buildTranslationMessages } from './messagePresentation.mjs'
 // P2-2：输入栏高频常驻 / 低频收进「+」Bottom Sheet 的显示分组（工具行为不变）。
-import { PRIMARY_TOOLS, MORE_TOOLS } from './composeTools.mjs'
+import { COMPOSE_TOOLS } from './composeTools.mjs'
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
@@ -1013,7 +1013,7 @@ export default function App() {
   // 正在进行的模型请求：删除「正在生成」的助手消息时中止它；回写全部按 id 匹配，
   //   消息删除后天然无处可写，绝不会删除后又重新出现。
   const sendAbortRef = useRef<{ id: string; controller: AbortController } | null>(null)
-  async function send(textInput: string, attachments: MessageAttachment[] = [], options: { conversationId?: string; queuedIds?: string[]; insertUser?: boolean; historyEndIndex?: number; regenerate?: { replaceId: string; originalContent: string; originalUsage?: TokenUsage } } = {}): Promise<'ok'|'fail'|'noop'> {
+  async function send(textInput: string, attachments: MessageAttachment[] = [], options: { conversationId?: string; queuedIds?: string[]; insertUser?: boolean; historyEndIndex?: number; regenerate?: { replaceId: string; originalContent: string; originalUsage?: TokenUsage }; onUserInserted?: () => void } = {}): Promise<'ok'|'fail'|'noop'> {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
@@ -1104,6 +1104,8 @@ export default function App() {
         ? [...prev,{role:'assistant',content:'',id:assistantMessageId}]
         : [...prev,userMessage,{role:'assistant',content:'',id:assistantMessageId}],sendConversationId)
     if(options.insertUser!==false)setDraft('')
+    // 用户气泡一入列就算「发出去了」：待发送卡片立刻消失，不必等助手回复生成完。
+    options.onUserInserted?.()
     setChatError('');setSending(true)
     // 进程被系统回收时靠这条标记恢复「上次未完成的生成」，不丢空白占位气泡。
     startGeneration(localStorage,{person:target,conversationId:sendConversationId,messageId:assistantMessageId},Date.now())
@@ -1422,9 +1424,15 @@ export default function App() {
     }
     flushLockRef.current = true
     try {
-      const outcome = await sendRef.current(item.text, item.attachments as MessageAttachment[], { conversationId })
-      if (outcome === 'ok') commitPending(clearPending(pendingSendsRef.current, assistantId, conversationId))
-      else commitPending(markNeedsReview(pendingSendsRef.current, assistantId, conversationId))
+      const outcome = await sendRef.current(item.text, item.attachments as MessageAttachment[], {
+        conversationId,
+        // 气泡一插入就清掉待发送卡片：用户看到「已发出」，不再等助手回复。
+        onUserInserted: () => commitPending(clearPending(pendingSendsRef.current, assistantId, conversationId)),
+      })
+      if (outcome !== 'ok' && pendingSendsRef.current[pendingScopeKey(assistantId, conversationId)]) {
+        // 还没走到插气泡就失败（比如没配模型）才保留卡片，方便重试。
+        commitPending(markNeedsReview(pendingSendsRef.current, assistantId, conversationId))
+      }
     } finally { flushLockRef.current = false }
   }
 
@@ -2256,20 +2264,6 @@ const STICKERS=['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','
 const EMOJI_KW:Record<string,string>={'😀':'笑 开心 微笑 高兴','😃':'笑 开心','😄':'笑 开心','😁':'笑 开心','😆':'笑 搞笑','😅':'尴尬 汗 微笑','🤣':'笑 哭 搞笑','😂':'笑 哭 搞笑 滑稽','🙂':'微笑','🙃':'无奈 反转','😉':'眨眼 调皮','😊':'笑 温暖 微笑','😇':'天使 乖','🥰':'爱 甜 可爱 喜欢','😍':'爱 喜欢 心动','🤩':'惊喜 棒 厉害','😘':'亲亲 爱 么么哒','😗':'亲','☺️':'微笑 笑','😚':'亲亲','😋':'好吃 馋 美食','😛':'吐舌 调皮','😜':'吐舌 调皮 眨眼','🤪':'搞怪 疯','😝':'吐舌 调皮','🤗':'抱抱 欢迎','🤭':'偷笑 捂嘴','🫢':'惊讶 捂嘴','🤫':'嘘 保密','🤔':'思考 疑问 想','🫡':'敬礼 致敬','🤐':'闭嘴 拉链','😶':'无语 沉默','😐':'平静','😑':'无语','😬':'尴尬','🙄':'白眼 无语','😯':'惊讶','😪':'困 累','😮':'惊讶 张嘴','😴':'困 睡 晚安','🤤':'馋 垂涎','😌':'平静 放松','😔':'难过 失落','😏':'得意 坏笑','🥲':'苦笑 难过','😢':'哭 难过 伤心','😭':'哭 大哭 难过','😮‍💨':'叹气 无奈','😲':'惊讶','😵':'晕 头晕','😵‍💫':'晕 眼花','🤠':'牛仔 得意','😎':'酷 墨镜 得意','🤓':'书呆子 眼镜','🧐':'审视 打量','😕':'疑惑 为难','🫤':'疑惑 无奈','😟':'担心','🙁':'不高兴 难过','☹️':'难过 不开心','😰':'紧张 冒汗','😨':'害怕','🥶':'冷 冻','🥵':'热 热死了','😱':'惊叫 恐怖 吓','😣':'难受 痛苦','😫':'累 烦','😩':'累 崩溃','😖':'难受','😞':'失望 难过','😤':'生气 傲 哼','😠':'生气','😡':'生气 发火 怒','🤬':'骂 生气','🤯':'震惊 绝了 爆炸','😳':'害羞 尴尬','🥴':'晕 醉','🤢':'恶心','🤮':'吐 恶心','😷':'口罩 病','🤒':'生病 发烧','🤕':'受伤 包扎','👋':'打招呼 你好 拜拜 再见','🤚':'停 手','👌':'好的 OK','🤌':'拿捏','✌️':'胜利 剪刀手','🤞':'祈祷 好运','🫰':'比心 钱','🤟':'爱你','🤙':'酷 拨打','👍':'赞 好 棒 点赞','👎':'踩 不好','🫱':'握手','🫲':'握手','🙏':'拜托 谢谢 感谢 祈祷 加油','💪':'加油 强壮 力量','🙌':'欢呼 棒','👏':'鼓掌 棒 厉害','🫶':'比心 爱','🤝':'握手 合作 成交','🖖':' Vulcan 祝愿','☝️':'上 一','👇':'下','👈':'左','👉':'右','🧑':'人','👨':'男 他','👩':'女 她','🧔':'胡子','👦':'男孩','👧':'女孩','🕺':'跳舞','💃':'跳舞','🧎':'跪','🧘':'瑜伽 冥想','🙇':'鞠躬 抱歉','🐶':'狗 汪 宠物','🐱':'猫 喵 宠物','🐭':'老鼠','🐹':'仓鼠','🐰':'兔子 可爱','🦊':'狐狸','🐻':'熊','🐼':'熊猫','🐨':'考拉','🐯':'老虎','🦁':'狮子','🐮':'牛','🐷':'猪','🐸':'青蛙','🐵':'猴子','🙈':'害羞 不看','🙉':'不听','🙊':'不说 保密','🦄':'独角兽','🐝':'蜜蜂','🦋':'蝴蝶','🐢':'乌龟','🐍':'蛇','🐙':'章鱼','🐧':'企鹅','🐦':'鸟','🦅':'老鹰','🦉':'猫头鹰','🐞':'瓢虫','🐟':'鱼','🐠':'热带鱼','🐬':'海豚','🐳':'鲸','🦈':'鲨鱼','🐊':'鳄鱼','🐉':'龙','🐲':'龙','🌵':'仙人掌','🌴':'椰树','🌳':'树','🍀':'幸运 四叶草','🍁':'枫叶','🍂':'落叶','🌿':'草 叶子','🌷':'花 郁金香','🌹':'玫瑰 花 爱','🌺':'花','🌻':'向日葵 花','🌼':'花','🌸':'花 樱花 春天','🍉':'西瓜 水果','🍓':'草莓 水果','🍒':'樱桃 水果','🍑':'桃 水果','🍊':'橘子 水果','🍋':'柠檬 水果','🍌':'香蕉 水果','🍇':'葡萄 水果','🥝':'猕猴桃 水果','🍅':'西红柿 水果','🥑':'牛油果','🍞':'面包 吃','🍔':'汉堡 吃 饿','🍟':'薯条 吃','🍕':'披萨 吃 饿','🌭':'热狗 吃','🌮':'卷饼 吃','🌯':'卷饼','🥪':'三明治 吃','🍜':'面 吃 饿','🍛':'咖喱 吃','🍚':'米饭 吃','🍣':'寿司 吃','🍤':'虾 吃','🍳':'煎蛋 吃','🥞':'松饼 早餐','🧀':'奶酪','🍰':'蛋糕 甜','🎂':'生日 蛋糕 庆祝','🍪':'饼干 甜','☕':'咖啡 喝 提神','🍵':'茶 喝','🍺':'啤酒 喝','🍻':'干杯 喝','🥂':'干杯 庆祝','🍷':'红酒 喝','🥤':'奶茶 喝 饮料','⚽':'足球 运动','🏀':'篮球 运动','🎾':'网球 运动','🏈':'橄榄球 运动','⚾':'棒球 运动','🎮':'游戏 玩','🎯':'靶子 目标','🎤':'唱歌 麦克风','🎧':'听歌 音乐','🎵':'音乐 歌','🎶':'音乐 歌','📷':'拍照 图片','📺':'电视 看剧','🎬':'电影 拍戏','🎭':'戏剧 面具','🎨':'画画 艺术','🎪':'马戏','🎠':'旋转木马','🎡':'摩天轮','🎢':'过山车','🎉':'庆祝 派对 生日 开心','🎊':'庆祝 派对','🎁':'礼物 生日','🎈':'气球 生日','🏆':'冠军 奖杯','🥇':'第一 冠军','🎿':'滑雪 运动','🛷':'雪橇','❤️':'心 爱 红心 喜欢','🧡':'心 爱','💛':'心 爱','💚':'心 爱','💙':'心 爱','💜':'心 爱','🖤':'心 黑','🤍':'心 白','💔':'伤心 分手 难过','❣️':'心 爱','💕':'爱 心','💞':'爱 心','💓':'爱 心','💗':'爱 心','💖':'爱 心','💘':'爱 心 桃心','💝':'爱 心 礼物','⭐':'星 星星','🌟':'星 星星 闪亮','✨':'闪亮 棒','💫':'星 晕','🔥':'火 热 厉害','💧':'水 滴','🌈':'彩虹','❄️':'雪 冷','☀️':'太阳 晴 热','🌙':'月亮 晚上 晚安','⚡':'闪电 快','🌊':'海浪','💯':'满分 优秀 加油','❗':'重要 注意','❓':'疑问 问题','✅':'对 完成 可以','❌':'错 不行 禁止','⭕':'圈','🚫':'禁止 不行','💤':'困 睡 晚安','💌':'信 情书 爱','📜':'文书','📌':'定位 图钉','📍':'定位 地点','🔔':'铃 提醒'}
 function matchEmoji(e:string,q:string){if(!q)return true;if(e===q)return true;const kw=EMOJI_KW[e];return !!kw&&kw.includes(q)}
 
-// 输入栏图标 id：常驻与「+」Bottom Sheet 共用（分组见 composeTools.mjs，P2-2）。
-type ComposeToolId = 'emoji'|'model'|'world'|'mcp'|'search'|'tools'
-// 线性小图标：统一 24×24 描边，跟参考图的输入框图标栏保持一致。
-function ComposeGlyph({id}:{id:ComposeToolId}) {
-  const s = { fill:'none', stroke:'currentColor', strokeWidth:1.7, strokeLinecap:'round' as const, strokeLinejoin:'round' as const }
-  return <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
-    {id==='emoji'&&<g {...s}><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8"/><path d="M9 9.5h.01M15 9.5h.01" strokeWidth="2.4"/></g>}
-    {id==='model'&&<g {...s}><path d="M12 2.8 20 7v10l-8 4.2L4 17V7z"/><path d="M4 7l8 4.2L20 7M12 11.2v10"/></g>}
-    {id==='world'&&<g {...s}><path d="M5 4.5h11a2 2 0 0 1 2 2V20H7a2 2 0 0 1-2-2z"/><path d="M8 8.5h7M8 12h7M8 15.5h4"/><path d="M18 17.5H7"/></g>}
-    {id==='mcp'&&<g {...s}><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8.2"/><path d="M12 3.8v3M12 17.2v3M3.8 12h3M17.2 12h3"/></g>}
-    {id==='search'&&<g {...s}><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.5 15.5 4.3 4.3"/></g>}
-    {id==='tools'&&<g {...s}><circle cx="6" cy="17.5" r="2.6"/><circle cx="6" cy="6.5" r="2.6"/><path d="M8.3 8.2 18 19M8.3 15.8 18 5"/></g>}
-  </svg>
-}
 // 「工具」图标里的小程序：附件统一走输入框右下角的 ＋，这里暂时只放主动任务。
 // 后续做了小程序 / 单独可视化网页，往这个数组加一项即可（其余位置留空）。
 type ChatQuickTool = { id:string; label:string; desc:string; icon:string }
@@ -2283,21 +2277,20 @@ function Chat(p: any) {
   const [configOpen,setConfigOpen]=useState(false)
   const closeConfig=useCallback(()=>setConfigOpen(false),[])
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
-  const [tray,setTray]=useState<''|'model'|'world'|'mcp'|'tools'>('')
+  const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
   const formRef=useRef<HTMLFormElement>(null)
-  const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{
+  const openTray=(id:''|'model'|'bind'|'tools')=>{
     // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
     if(id==='model'){const active=document.activeElement;if(active instanceof HTMLElement)active.blur()}
-    setTray(t=>t===id?'':id);setEmojiOpen(false);setMoreOpen(false)
+    setTray(t=>t===id?'':id);setEmojiOpen(false);setAttachOpen(false)
   }
   const closeModelSheet=useCallback(()=>setTray(''),[])
   // P2-2：「+」Bottom Sheet 里的低频入口，点完立即收起 sheet 再落到原行为。
-  function runMoreTool(id:string){
-    setMoreOpen(false)
-    if(id==='image'){imageInput.current?.click();return}
-    if(id==='file'){fileInput.current?.click();return}
-    if(id==='search'){setTray('');setEmojiOpen(false);setSearchOpen(true);return}
-    setEmojiOpen(false);openTray(id as 'model'|'world'|'mcp'|'tools')
+  // 附件：一个图标管图片和文件，点开先选类型。
+  function pickAttachment(kind:'image'|'file'){
+    setAttachOpen(false)
+    if(kind==='image'){imageInput.current?.click();return}
+    fileInput.current?.click()
   }
   const runQuickTool=(id:string)=>{
     setTray('')
@@ -2340,7 +2333,7 @@ function Chat(p: any) {
   const [imageStickers,setImageStickers]=useState<string[]>(()=>read('ai-home.imageStickers',[]))
   const [customEmojis,setCustomEmojis]=useState<string[]>(()=>read('ai-home.customEmojis',[]))
   const [newCustom,setNewCustom]=useState('')
-  const [moreOpen,setMoreOpen]=useState(false)
+  const [attachOpen,setAttachOpen]=useState(false)
   const [searchOpen,setSearchOpen]=useState(false)
   // 会话的新建 / 切换 / 重命名 / 删除统一收进左侧边抽屉，顶栏不再承载历史会话控件。
   const [lightbox,setLightbox]=useState<{src:string;name:string}|null>(null)
@@ -2429,18 +2422,18 @@ function Chat(p: any) {
   // Android 返回键：聊天页内临时层优先关闭（灯泡图→搜索→多选→表情/更多面板），
   // 全关完才把返回事件交还给上层（房间页/根），由 App 决定是否退出。
   useEffect(()=>{
-    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||moreOpen
+    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||attachOpen
     if(!anyLayer)return
     const unregister=pushBackHandler(()=>{
       if(lightbox){setLightbox(null);return true}
       if(searchOpen){closeSearch();return true}
       if(selectMode){exitSelect();return true}
       if(emojiOpen){setEmojiOpen(false);return true}
-      if(moreOpen){setMoreOpen(false);return true}
+      if(attachOpen){setAttachOpen(false);return true}
       return false
     })
     return unregister
-  },[lightbox,searchOpen,selectMode,emojiOpen,moreOpen])
+  },[lightbox,searchOpen,selectMode,emojiOpen,attachOpen])
   // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
   // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
   const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
@@ -2500,7 +2493,7 @@ function Chat(p: any) {
     setSelectedIds(id?[id]:[])
     setArmedSelKey(null);setArmedDelId(null)
     setEditingId(null);setEditDraft('')
-    setEmojiOpen(false);setMoreOpen(false);closeSearch()
+    setEmojiOpen(false);setAttachOpen(false);closeSearch()
   }
   function exitSelect(){setSelectMode(false);setSelectedIds([]);setArmedSelKey(null);setArmedDelId(null)}
   function toggleSelect(id:string){if(!id)return;setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}
@@ -2612,7 +2605,7 @@ function Chat(p: any) {
     if(stillReferenced.has(String(target.assetId)))return
     apiFetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'include'}).catch(()=>{})
   }
-  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.sending){/* 生成态 + 有输入 → 入待发送队列（不立即请求模型）；输入立即清空，显示待发送卡片 */if(!p.enqueuePending(text,payload)){p.setChatError('这条会话已有待发送内容，先发送或撤回它再继续。');return}}else{p.send(text,payload)}setFiles([]);setEmojiOpen(false);setMoreOpen(false);closeSearch()}
+  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.sending){/* 生成态 + 有输入 → 入待发送队列（不立即请求模型）；输入立即清空，显示待发送卡片 */if(!p.enqueuePending(text,payload)){p.setChatError('这条会话已有待发送内容，先发送或撤回它再继续。');return}}else{p.send(text,payload)}setFiles([]);setEmojiOpen(false);setAttachOpen(false);closeSearch()}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   function pickEmoji(emoji:string){p.setDraft(p.draft+emoji);const next=[emoji,...recentEmojis.filter(x=>x!==emoji)].slice(0,24);setRecentEmojis(next);localStorage.setItem('ai-home.recentEmojis',JSON.stringify(next))}
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
@@ -2777,14 +2770,20 @@ function Chat(p: any) {
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次选择</small>{tray!=='tools'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');openConfig(tray==='world'?'world':'mcp')}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
+      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');openConfig('world')}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
       <div className="compose-tray-body">
-        {tray==='world'&&<>
-          {trayWorld.map(e=><label className="tray-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span></label>)}
-        </>}
-        {tray==='mcp'&&<>
-          {quickMcp.error&&<p className="mcp-error">{quickMcp.error}</p>}
-          {trayMcp.map(c=><label className="tray-option" key={c.id}><input type="checkbox" checked={(quickBinding.mcpIds===null?mcpAll:quickBinding.mcpIds).includes(c.id)} onChange={v=>patchBinding(toggleMcpId(quickBinding,c.id,v.target.checked,mcpAll))}/><span><i className="tray-no">{mcpNo(c.id)}</i> {c.name}<small>{c.url}</small></span></label>)}
+        {tray==='bind'&&<>
+          <div className="tray-section">
+            <b className="tray-section-title">MCP</b>
+            {quickMcp.error&&<p className="mcp-error">{quickMcp.error}</p>}
+            {trayMcp.length===0&&<p className="muted tray-empty">还没有 MCP 服务，到设置里添加。</p>}
+            {trayMcp.map(c=><label className="tray-option tray-switch-row" key={c.id}><span><i className="tray-no">{mcpNo(c.id)}</i> {c.name}<small>{c.url}</small></span><input type="checkbox" className="tray-switch" checked={(quickBinding.mcpIds===null?mcpAll:quickBinding.mcpIds).includes(c.id)} onChange={v=>patchBinding(toggleMcpId(quickBinding,c.id,v.target.checked,mcpAll))}/></label>)}
+          </div>
+          <div className="tray-section">
+            <b className="tray-section-title">世界书</b>
+            {trayWorld.length===0&&<p className="muted tray-empty">还没有世界书条目。</p>}
+            {trayWorld.map(e=><label className="tray-option tray-switch-row" key={e.id}><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span><input type="checkbox" className="tray-switch" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/></label>)}
+          </div>
         </>}
         {tray==='tools'&&<div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>}
       </div>
@@ -2798,34 +2797,29 @@ function Chat(p: any) {
       : <form className="compose compose-box" ref={formRef} onSubmit={submit}>
       <textarea ref={composeTextRef} className="compose-text" rows={1} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
       <div className="compose-toolbar"><div className="compose-icons" role="toolbar" aria-label="聊天输入工具">
-        {PRIMARY_TOOLS.map(t=>{
-          const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||t.id===tray
+        {COMPOSE_TOOLS.map(t=>{
+          const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||(t.id==='attach'&&attachOpen)||t.id===tray
           return <button key={t.id} type="button" className={'compose-tool-icon'+(on?' active':'')} title={t.label} aria-label={t.label} aria-pressed={!!on} onClick={()=>{
-            if(t.id==='emoji'){setTray('');setMoreOpen(false);if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)};return}
-            if(t.id==='search'){setTray('');setEmojiOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
-            setEmojiOpen(false);openTray(t.id as 'model'|'world'|'mcp'|'tools')
-          }}><ComposeGlyph id={t.id as ComposeToolId}/></button>
+            if(t.id==='emoji'){setTray('');setAttachOpen(false);if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)};return}
+            if(t.id==='search'){setTray('');setEmojiOpen(false);setAttachOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
+            if(t.id==='attach'){setEmojiOpen(false);setTray('');setAttachOpen(v=>!v);return}
+            setEmojiOpen(false);setAttachOpen(false);openTray(t.id as 'model'|'bind'|'tools')
+          }}><img className="compose-tool-icon-glyph" src={'/msg-icons/'+t.icon+'.png'} alt="" aria-hidden="true"/></button>
         })}
       </div><div className="compose-send">
-        <button type="button" className={'compose-attach'+(moreOpen?' active':'')} title="更多工具" aria-label="更多工具" aria-expanded={moreOpen} onClick={()=>{setMoreOpen(v=>!v);setEmojiOpen(false);setTray('')}}>{moreOpen?'×':'＋'}</button>
         {p.sending
           ? (p.draft.trim()||files.length
-              ? <button type="submit" className="send-button" title="发送（将加入待发送队列，当前回复结束后自动补发）">发送</button>
-              : <button type="button" className="send-button stop" title="停止当前生成" onClick={()=>p.stopGeneration()}>停止</button>)
-          : <button type="submit" className="send-button" disabled={!p.draft.trim()&&!files.length}>发送</button>}
+              ? <button type="submit" className="send-button" title="发送（将加入待发送队列，当前回复结束后自动补发）" aria-label="发送"><img className="send-icon" src="/msg-icons/send.png" alt="" aria-hidden="true"/></button>
+              : <button type="button" className="send-button stop" title="停止当前生成" aria-label="停止生成" onClick={()=>p.stopGeneration()}><img className="send-icon" src="/msg-icons/stop.png" alt="" aria-hidden="true"/></button>)
+          : <button type="submit" className="send-button" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><img className="send-icon" src="/msg-icons/send.png" alt="" aria-hidden="true"/></button>}
       </div></div>
+      {attachOpen&&<div className="compose-attach-menu" role="menu" aria-label="附件类型">
+        <button type="button" role="menuitem" onClick={()=>pickAttachment('image')}>图片</button>
+        <button type="button" role="menuitem" onClick={()=>pickAttachment('file')}>文件</button>
+      </div>}
       <input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/>
       <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/>
     </form>}
-    {moreOpen&&<div className="compose-sheet-backdrop" onClick={()=>setMoreOpen(false)}>
-      <div className="compose-sheet" role="dialog" aria-modal="true" aria-label="更多工具" onClick={e=>e.stopPropagation()}>
-        <div className="compose-sheet-head"><b>更多工具</b><button type="button" aria-label="关闭" onClick={()=>setMoreOpen(false)}>×</button></div>
-        <div className="compose-sheet-grid">{MORE_TOOLS.map(t=><button type="button" key={t.id} onClick={()=>runMoreTool(t.id)}>
-          <span className="compose-sheet-icon" aria-hidden="true">{(t.id==='image'||t.id==='file')?(t.id==='image'?'▧':'▤'):<ComposeGlyph id={t.id as ComposeToolId}/>}</span>
-          <span className="compose-sheet-label"><b>{t.label}</b><small>{t.desc}</small></span>
-        </button>)}</div>
-      </div>
-    </div>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
     {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}

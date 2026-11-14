@@ -1,36 +1,26 @@
-// 输入栏工具分组（P2-2）：高频常驻输入栏，低频收进「+」Bottom Sheet。
-// 只描述「显示分组」：工具 id 与真实行为完全不变，任何工具都不会因为瘦身而失去入口。
-// 纯数据 + 纯函数，便于单测校验「两组互斥且覆盖全部工具」。
+// 输入栏工具：微信式一排小图标，不再把低频入口收进「+」Bottom Sheet。
+// 这里只描述「显示意图」，真实行为仍在 App 里按 id 分支；图标用 public/msg-icons 下的位图，
+// 避免部分 Android WebView 画不出内联 SVG。
 
-/** 输入栏常驻高频工具（保持在输入框旁边）。 */
-export const PRIMARY_TOOLS = [
-  { id: 'emoji', label: '表情' },
-  { id: 'model', label: '模型' },
+/** 输入栏一排工具（顺序即显示顺序）。 */
+export const COMPOSE_TOOLS = [
+  { id: 'emoji', label: '表情', icon: 'emoji' },
+  { id: 'model', label: '模型', icon: 'model' },
+  { id: 'bind', label: '世界书 / MCP', icon: 'bind' },
+  { id: 'attach', label: '图片 / 文件', icon: 'attach' },
+  { id: 'tools', label: '工具', icon: 'tools' },
+  { id: 'search', label: '查找聊天记录', icon: 'search' },
 ]
 
-/** 「+」Bottom Sheet 里的低频工具与附件入口。action 决定点击后的落地方式。 */
-export const MORE_TOOLS = [
-  { id: 'image', label: '发送图片', desc: '从相册选择图片', action: 'file' },
-  { id: 'file', label: '发送文件', desc: '选择文件作为附件', action: 'file' },
-  { id: 'world', label: '世界书', desc: '本次会话绑定的条目', action: 'tray' },
-  { id: 'mcp', label: 'MCP', desc: 'MCP 服务与工具', action: 'tray' },
-  { id: 'tools', label: '工具', desc: '聊天快捷工具', action: 'tray' },
-  { id: 'search', label: '查找聊天记录', desc: '在本会话里搜索', action: 'search' },
-]
+/** 工具 id 列表（回归测试与角标逻辑共用）。 */
+export const COMPOSE_TOOL_IDS = COMPOSE_TOOLS.map(t => t.id)
 
-/** 原输入栏的六个工具 id，用于回归校验「没有工具被瘦身掉」。 */
-export const LEGACY_TOOL_IDS = ['emoji', 'model', 'world', 'mcp', 'search', 'tools']
-
+/** 每个工具都必须有中文标签与位图图标名，且 id 不重复。 */
 export function composeToolGroups() {
-  const primary = PRIMARY_TOOLS.map(t => t.id)
-  const more = MORE_TOOLS.map(t => t.id)
+  const ids = COMPOSE_TOOL_IDS
   return {
-    primary,
-    more,
-    allIds: [...primary, ...more],
-    // 两组不得出现同一个 id，否则「+」里会出现重复入口 / 输入栏依然拥挤。
-    duplicates: primary.filter(id => more.includes(id)),
-    // 原六个工具里没被任何一组覆盖的（应恒为空）。
-    missing: LEGACY_TOOL_IDS.filter(id => !primary.includes(id) && !more.includes(id)),
+    allIds: ids,
+    duplicates: ids.filter((id, i) => ids.indexOf(id) !== i),
+    missingIcon: COMPOSE_TOOLS.filter(t => !t.label || !t.icon).map(t => t.id),
   }
 }

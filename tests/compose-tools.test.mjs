@@ -1,32 +1,33 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { PRIMARY_TOOLS, MORE_TOOLS, LEGACY_TOOL_IDS, composeToolGroups } from '../src/composeTools.mjs'
+import { existsSync } from 'node:fs'
+import { COMPOSE_TOOLS, COMPOSE_TOOL_IDS, composeToolGroups } from '../src/composeTools.mjs'
 
-test('输入栏常驻只保留真正高频的表情 / 模型', () => {
-  assert.deepEqual(PRIMARY_TOOLS.map(t => t.id), ['emoji', 'model'])
-  assert.ok(PRIMARY_TOOLS.every(t => t.label && typeof t.label === 'string'))
+// 微信式输入栏：表情 / 模型 / 世界书+MCP / 图片文件 / 工具 / 查找，全部常驻一排图标。
+test('输入栏六个工具常驻，不再有「+」二级面板', () => {
+  assert.deepEqual(COMPOSE_TOOL_IDS, ['emoji', 'model', 'bind', 'attach', 'tools', 'search'])
+  assert.ok(COMPOSE_TOOLS.every(t => t.label && t.icon))
+  assert.equal(new Set(COMPOSE_TOOL_IDS).size, COMPOSE_TOOL_IDS.length, 'id 不得重复')
 })
 
-test('低频工具全部收进「+」，且每个都有中文说明与落地方式', () => {
-  const ids = MORE_TOOLS.map(t => t.id)
-  for (const id of ['world', 'mcp', 'tools', 'search', 'image', 'file']) assert.ok(ids.includes(id), id)
-  assert.ok(MORE_TOOLS.every(t => t.label && t.desc && ['file', 'tray', 'search'].includes(t.action)))
+test('世界书与 MCP 合并成一个入口，附件一个入口管图片和文件', () => {
+  const byId = Object.fromEntries(COMPOSE_TOOLS.map(t => [t.id, t]))
+  assert.equal(byId.bind.label, '世界书 / MCP')
+  assert.equal(byId.attach.label, '图片 / 文件')
+  assert.ok(!byId.world && !byId.mcp, '不再单独暴露 world / mcp 两个入口')
 })
 
-test('分组互斥、无重复，且原六个工具入口一个都没丢', () => {
+test('图标位图都存在（老 WebView 画不了内联 SVG，只能用位图）', () => {
+  for (const t of COMPOSE_TOOLS) {
+    assert.ok(existsSync('public/msg-icons/' + t.icon + '.png'), '缺少 public/msg-icons/' + t.icon + '.png')
+  }
+  for (const name of ['send', 'stop']) {
+    assert.ok(existsSync('public/msg-icons/' + name + '.png'), '缺少 public/msg-icons/' + name + '.png')
+  }
+})
+
+test('分组自检：无重复 id、没有缺图标的条目', () => {
   const g = composeToolGroups()
   assert.deepEqual(g.duplicates, [])
-  assert.deepEqual(g.missing, [])
-  for (const id of LEGACY_TOOL_IDS) assert.ok(g.allIds.includes(id), id)
-  assert.equal(new Set(g.allIds).size, g.allIds.length, '不得出现重复 id')
-})
-
-test('图片 / 文件走 file action，世界书 / MCP / 工具走 tray，搜索走 search', () => {
-  const byId = Object.fromEntries(MORE_TOOLS.map(t => [t.id, t.action]))
-  assert.equal(byId.image, 'file')
-  assert.equal(byId.file, 'file')
-  assert.equal(byId.world, 'tray')
-  assert.equal(byId.mcp, 'tray')
-  assert.equal(byId.tools, 'tray')
-  assert.equal(byId.search, 'search')
+  assert.deepEqual(g.missingIcon, [])
 })

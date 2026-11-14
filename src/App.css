@@ -1682,3 +1682,26 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .compose-sheet-label{display:flex;flex-direction:column;gap:2px;min-width:0}
 .compose-sheet-label b{font-size:12.5px;font-weight:600}
 .compose-sheet-label small{font-size:10px;color:var(--muted,#8b858b);line-height:1.35}
+
+/* ── 微信式输入栏：一排小图标 + 圆形发送键（位图图标，不依赖内联 SVG） ── */
+.compose-box{position:relative}
+.shell .fullscreen-chat .compose-icons{gap:4px}
+.shell .fullscreen-chat .compose-tool-icon-glyph{display:block;width:20px;height:20px;pointer-events:none}
+.shell .fullscreen-chat .compose-box .send-button{width:40px;height:40px;padding:0!important;border-radius:50%!important;display:grid;place-items:center;flex:0 0 auto}
+.shell .fullscreen-chat .compose-box .send-button .send-icon{display:block;width:20px;height:20px;pointer-events:none}
+.shell .fullscreen-chat .compose-box .send-button:disabled{opacity:.5}
+.compose-attach-menu{position:absolute;right:56px;bottom:56px;z-index:30;display:flex;flex-direction:column;gap:2px;min-width:104px;padding:6px;border:1px solid var(--line,#e3ddd3);border-radius:12px;background:var(--surface,#fffdf9);box-shadow:0 8px 24px rgba(40,30,20,.16)}
+.compose-attach-menu button{padding:8px 14px;border:0;border-radius:8px;background:transparent;color:var(--ink);font-size:13px;text-align:left}
+.compose-attach-menu button:active{background:var(--accent-soft,#f0e8da)}
+
+/* 世界书 / MCP 面板：上面 MCP、下面世界书，每行一个开关 */
+.tray-section{display:flex;flex-direction:column;gap:4px;margin:0 0 10px}
+.tray-section:last-child{margin-bottom:0}
+.tray-section-title{font-size:11px;color:var(--muted,#8a7d6d);margin:2px 0 2px;letter-spacing:.02em}
+.tray-switch-row{display:flex;align-items:center;gap:10px}
+.tray-switch-row>span{flex:1;min-width:0}
+.shell .fullscreen-chat .tray-switch,.tray-switch{position:relative;flex:0 0 auto;width:38px;height:22px;margin:0;padding:0;appearance:none;-webkit-appearance:none;border:0;border-radius:999px;background:#d9d3dd;cursor:pointer;transition:background .15s}
+.tray-switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(30,24,18,.25);transition:transform .15s}
+.shell .fullscreen-chat .tray-switch:checked{background:var(--accent,#8b593b)!important}
+.shell .fullscreen-chat .tray-switch:checked::after{transform:translateX(16px)}
+.tray-empty{margin:4px 0;font-size:10.5px}
