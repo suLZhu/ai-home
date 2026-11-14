@@ -45,6 +45,20 @@ export function setGenerationForeground(payload) {
   try { return b.generation(JSON.stringify(payload || {})) === true } catch { return false }
 }
 
+/** 原生 WebView textZoom：系统字号 × App 内倍数，整站文字等比缩放（微信式「字体大小」）。 */
+export function nativeTextZoomAvailable() {
+  const b = bridge()
+  return !!b && typeof b.textZoom === 'function'
+}
+
+export function setAppTextZoom(scalePercent) {
+  const b = bridge()
+  if (!b || typeof b.textZoom !== 'function') return false
+  const factor = Number(scalePercent) / 100
+  if (!Number.isFinite(factor) || factor <= 0) return false
+  try { return b.textZoom(JSON.stringify({ factor })) === true } catch { return false }
+}
+
 export function showSystemNotification(payload) {
   const b = bridge()
   if (!b || typeof b.notify !== 'function' || !payload || !payload.key) return false

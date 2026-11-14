@@ -49,14 +49,38 @@ public class MainActivity extends BridgeActivity {
     // 不再把本 Activity 的 fontScale 固定为 1（那等于全局禁止用户放大字体）。
     // 改为读取真实系统字体设置，显式写进主 WebView 的 textZoom：
     //   - setTextZoom 是绝对值，不会与系统默认值叠加；
-    //   - 夹在 [0.85, 1.30] 只防极端档位把布局撑破，默认 / 较大字体都真实生效；
+    //   - 再乘上 App 内「字体大小」拉条（SharedPreferences: aihome.font/factor，默认 1.0），
+    //     系统字号是基准，拉条只做额外放大 / 缩小，和微信的字体大小一个思路；
+    //   - 夹在 [0.7, 1.9] 只防极端档位把布局撑破。
     //   - Web 层用 min-height、允许换行、百分比气泡宽度承接放大，不靠禁止缩放换稳定。
+    private static final String FONT_PREFS = "aihome.font";
+    private Float appFontFactor = null;
+
+    private float appFontFactor() {
+        if (appFontFactor == null) {
+            appFontFactor = getSharedPreferences(FONT_PREFS, MODE_PRIVATE).getFloat("factor", 1f);
+            if (appFontFactor < 0.8f || appFontFactor > 1.5f) appFontFactor = 1f;
+        }
+        return appFontFactor;
+    }
+
+    /** 前端「字体大小」拉条：倍数写进 SharedPreferences，并立刻重算 textZoom。 */
+    public void setAppFontFactor(float factor) {
+        if (Float.isNaN(factor)) return;
+        if (factor < 0.8f) factor = 0.8f;
+        if (factor > 1.5f) factor = 1.5f;
+        appFontFactor = factor;
+        getSharedPreferences(FONT_PREFS, MODE_PRIVATE).edit().putFloat("factor", factor).apply();
+        applyFontScaleToWebView();
+    }
+
     private void applyFontScaleToWebView() {
         WebView webView = (getBridge() != null) ? getBridge().getWebView() : null;
         if (webView == null) return;
         float scale = Resources.getSystem().getConfiguration().fontScale;
-        if (scale < 0.85f) scale = 0.85f;
-        if (scale > 1.30f) scale = 1.30f;
+        scale = scale * appFontFactor();
+        if (scale < 0.70f) scale = 0.70f;
+        if (scale > 1.90f) scale = 1.90f;
         final int zoom = Math.round(100 * scale);
         webView.post(() -> webView.getSettings().setTextZoom(zoom));
     }

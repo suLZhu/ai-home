@@ -7,3 +7,17 @@
 .theme-upload:active{transform:scale(.97)}
 .theme-upload input[type=file]{display:none}
 .theme-upload-note{display:block;margin-top:6px;font-size:12px;color:var(--muted);line-height:1.6}
+
+/* ── 字体大小：微信式拉条，放在主题美化最下面 ─────────────────────── */
+.theme-fontctl{display:flex;flex-direction:column;gap:8px;margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.theme-fontctl-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.theme-fontctl-head b{font-size:14px;font-weight:600;color:var(--ink)}
+.theme-fontctl-head span{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
+.theme-fontctl-hint{margin:0;font-size:12px;line-height:1.6;color:var(--muted)}
+.theme-fontctl-range{display:flex;align-items:center;gap:12px;margin-top:2px}
+.theme-fontctl-range input[type=range]{flex:1 1 auto;width:auto;margin:0;height:32px;accent-color:var(--accent)}
+.theme-fontctl-a{flex:0 0 auto;font-size:14px;line-height:1;color:var(--muted);font-weight:600}
+.theme-fontctl-a.large{font-size:22px;color:var(--ink)}
+.theme-fontctl-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.theme-fontctl-foot button{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);font-size:12px}
+.theme-fontctl-foot small{font-size:11px;color:var(--muted)}

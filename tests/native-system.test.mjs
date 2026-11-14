@@ -4,6 +4,7 @@ import {
   systemBridgeAvailable, readSystemCapabilities, openSystemSetting,
   showSystemNotification, syncSystemChannels, syncSystemAlarms,
   consumePendingOpen, readNativeDelivered, registerSystemHandlers,
+  nativeTextZoomAvailable, setAppTextZoom,
 } from '../src/nativeSystem.mjs'
 
 function mockBridge(over = {}) {
@@ -158,5 +159,21 @@ test('原生 onResume 早于 React 挂载时，通知点击不会丢失', () => 
   mockBridge({ pendingOpen: () => JSON.stringify({ assistantId: 'assistant-yanshuo', conversationId: 'conv-2' }) })
   globalThis.__aihomeSystemResume()
   assert.deepEqual(consumePendingOpen(), { assistantId: 'assistant-yanshuo', conversationId: 'conv-2' })
+  clearBridge()
+})
+
+test('字体大小：没有原生桥时静默返回 false，有桥时把倍数交给 textZoom', () => {
+  clearBridge()
+  assert.equal(nativeTextZoomAvailable(), false)
+  assert.equal(setAppTextZoom(120), false)
+
+  const { bridge, calls } = mockBridge()
+  assert.equal(nativeTextZoomAvailable(), false, '桥里没有 textZoom 时仍视为不可用')
+  bridge.textZoom = (json) => { calls.push(['textZoom', JSON.parse(json)]); return true }
+  assert.equal(nativeTextZoomAvailable(), true)
+  assert.equal(setAppTextZoom(120), true)
+  assert.deepEqual(calls.at(-1), ['textZoom', { factor: 1.2 }])
+  assert.equal(setAppTextZoom(0), false)
+  assert.equal(setAppTextZoom(Number.NaN), false)
   clearBridge()
 })

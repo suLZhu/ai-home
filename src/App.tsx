@@ -62,7 +62,7 @@ import { loadCustomAssets, saveCustomAssets } from './assetStore.mjs'
 import { AndroidSystemSettings } from './AndroidSystemSettings'
 import { channelPlan, notificationPayload, decideNotification, loadNotified, markNotified, routeFromNotificationOpen } from './notificationDispatch.mjs'
 import { buildAlarmPlan } from './taskAlarms.mjs'
-import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground } from './nativeSystem.mjs'
+import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom } from './nativeSystem.mjs'
 import { friendlyHttpError, routeInfoFromError } from './chatHttpError.mjs'
 import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
@@ -209,6 +209,9 @@ export default function App() {
   const authStatusRef = useRef<string>('checking')
   useEffect(()=>{ authStatusRef.current = authStatus },[authStatus])
   const [themePrefs,setThemePrefs]=useState<ThemePrefs>(()=>({...DEFAULT_THEME,...read<Partial<ThemePrefs>>('ai-home.themePrefs',DEFAULT_THEME)}))
+  // Android：字体大小交给原生 textZoom（系统字号 × App 倍数），整站文字一起缩放；
+  // 桌面浏览器没有原生层时退回 CSS --font-scale，只缩放语义字号。
+  useEffect(()=>{ if(nativeTextZoomAvailable()) setAppTextZoom(themePrefs.scale) },[themePrefs.scale])
   const [beautifyPack,setBeautifyPack]=useState<string>(()=>read('ai-home.beautifyPack',DEFAULT_BEAUTIFY_PACK))
   useEffect(()=>{ try{localStorage.setItem('ai-home.beautifyPack',JSON.stringify(beautifyPack))}catch{ /* private mode */ } },[beautifyPack])
   // 全面屏状态栏 / 手势条图标明暗跟随主题：夜间主题用亮色图标，浅色主题用深色图标。
@@ -1610,7 +1613,7 @@ export default function App() {
   // 聊天打开时给整条布局链上锁：shell 用 height 封顶（而非 min-height），
   // 消息列表成为唯一滚动容器，页面整体不再被聊天记录撑长。
   const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
-  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
+  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(nativeTextZoomAvailable()?{'--font-scale':'1'}:{}),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
     {/* 全面屏：百宝箱与历史聊天都收进左侧抽屉，默认只露一条贴边细把手，点一下才滑出。 */}
     <button type="button" className={'mobile-menu-toggle sidebar-edge-handle'+(sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起侧边栏':'打开侧边栏'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">›</span></button>
     {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}

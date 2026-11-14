@@ -15,7 +15,6 @@ export function ThemeSettings({value,onChange,assets,onAssetsChange}:{value:Them
  {tab==='font'&&<div className="theme-tab-panel">
    <label>字体<select value={value.font||'serif'} onChange={e=>update({font:e.target.value as ThemePrefs['font']})}><option value="serif">书页宋体</option><option value="sans">简洁无衬线</option><option value="custom" disabled={!assets.fontData}>自定义字体{assets.fontName?'（'+assets.fontName+'）':''}</option></select></label>
    <div className="theme-upload-row"><label className="theme-upload">{assets.fontData?'重新上传字体':'上传字体'}<input type="file" accept=".ttf,.otf,.woff,.woff2" onChange={e=>{const f=e.target.files?.[0]; if(!f)return; warnBig(f); readFile(f,d=>onAssetsChange({...assets,fontName:f.name,fontData:d}))}}/></label><small className="theme-upload-note">{assets.fontData?'已上传 '+assets.fontName+'，在上方字体里选「自定义字体」即可使用':'支持 .ttf / .otf / .woff，保存在本机浏览器，大文件也没问题'}</small></div>
-   <label>全局字号 <strong>{value.scale}%</strong><input type="range" min="85" max="125" step="5" value={value.scale} onChange={e=>update({scale:Number(e.target.value)})}/></label>
    <label>圆角大小 <strong>{value.radius}px</strong><input type="range" min="4" max="28" step="2" value={value.radius} onChange={e=>update({radius:Number(e.target.value)})}/></label>
  </div>}
  {tab==='interface'&&<div className="theme-tab-panel">
@@ -26,5 +25,15 @@ export function ThemeSettings({value,onChange,assets,onAssetsChange}:{value:Them
    <div className="theme-upload-row"><label className="theme-upload">上传气泡图<input type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0]; if(!f)return; warnBig(f); readFile(f,d=>onAssetsChange({...assets,bubble:d}))}}/></label><small className="theme-upload-note">{assets.bubble?'已上传，上方气泡选「自定义气泡图」即可使用':'给聊天气泡铺一张底图'}</small></div>
    <p className="muted">想给某位助手单独设置背景和气泡？去 房间 → 工作区 → 角色外观。</p>
  </div>}
+ <div className="theme-fontctl">
+   <div className="theme-fontctl-head"><b>字体大小</b><span>{value.scale}%</span></div>
+   <p className="theme-fontctl-hint">默认跟随系统字体和系统字号；觉得软件里的字小，就把下面的拉条往右拉，整站文字一起放大。</p>
+   <div className="theme-fontctl-range">
+     <span className="theme-fontctl-a" aria-hidden="true">A</span>
+     <input type="range" min="80" max="160" step="5" value={value.scale} aria-label="字体大小" onChange={e=>update({scale:Number(e.target.value)})}/>
+     <span className="theme-fontctl-a large" aria-hidden="true">A</span>
+   </div>
+   <div className="theme-fontctl-foot"><button type="button" onClick={()=>update({scale:100})}>跟随系统</button><small>100% = 系统字号</small></div>
+ </div>
  <button type="button" className="theme-reset" onClick={()=>onChange(DEFAULT_THEME)}>恢复默认外观</button><p className="muted">开启像素风美化包时，整站配色会自动转为黑白灰，主题只决定明暗层次。</p><p className="muted">主题配置随小家的云端状态同步；上传的字体与图片只保存在本机浏览器。</p></section>
 }

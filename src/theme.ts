@@ -25,7 +25,7 @@ export const TYPOGRAPHY_TOKENS:Record<string,string>={
   '--type-display':'calc(21px * var(--font-scale,1))',   // 页面大标题 20–22sp
   '--type-title':'calc(16px * var(--font-scale,1))',     // 助手名 / 中型标题 16sp
   '--type-body':'calc(16px * var(--font-scale,1))',      // 聊天正文 16sp
-  '--type-body-line':'calc(24px * var(--font-scale,1))', // 聊天正文行高 24sp
+  '--type-body-line':'1.5', // 聊天正文行高 = 1.5 × 字号（无单位，跟着任何缩放走，不会被固定 px 挤重叠）
   '--type-item':'calc(14.5px * var(--font-scale,1))',   // 普通设置项 14–15sp
   '--type-button':'calc(14px * var(--font-scale,1))',   // 普通按钮 14sp
   '--type-caption':'calc(12.5px * var(--font-scale,1))',// 次级信息 12–13sp

@@ -24,7 +24,7 @@ const REQUIRED_TOKENS = [
 
 test('Typography tokens 按 Android sp 视觉比例分档，且随 App 字体设置缩放', () => {
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-body'], /16px/)
-  assert.match(theme.TYPOGRAPHY_TOKENS['--type-body-line'], /24px/)
+  assert.match(theme.TYPOGRAPHY_TOKENS['--type-body-line'], /^1\.5$/, '行高用无单位倍数，跟随字号缩放')
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-title'], /16px/)
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-display'], /21px/)
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-item'], /14\.5px/)
@@ -32,6 +32,8 @@ test('Typography tokens 按 Android sp 视觉比例分档，且随 App 字体设
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-caption'], /12\.5px/)
   assert.match(theme.TYPOGRAPHY_TOKENS['--type-meta'], /11px/)
   for (const [key, value] of Object.entries(theme.TYPOGRAPHY_TOKENS)) {
+    // 行高用无单位倍数，跟随字号（含原生 textZoom）一起走，不写死 px。
+    if (key === '--type-body-line') continue
     assert.match(value, /var\(--font-scale,1\)/, key + ' 必须跟随字体缩放')
   }
 })
@@ -102,7 +104,7 @@ test('Android 不再全局禁止系统字体缩放，改为 WebView textZoom 承
   assert.doesNotMatch(main, /public Resources getResources\(\)/, '不应再覆盖 Activity Resources')
   assert.match(main, /setTextZoom\(zoom\)/)
   assert.match(main, /onConfigurationChanged\(Configuration/)
-  assert.match(main, /scale > 1\.30f/, '极端放大有上限，但不是禁止缩放')
+  assert.match(main, /scale > 1\.90f/, '极端放大有上限，但不是禁止缩放')
   const manifest = read('android/app/src/main/AndroidManifest.xml')
   assert.match(manifest, /configChanges="[^"]*fontScale/)
   const indexCss = read('src/index.css')
@@ -171,4 +173,19 @@ test('订阅账号直接作为设置页内容渲染，不再从底部弹半屏�
   // 订阅页里的历史折叠入口（按助手填旧 API Key / 重复的用量面板）已清理，只留账号登录。
   assert.doesNotMatch(read('src/App.tsx'), /settings-legacy-fold|按助手填默认 API Key/)
   assert.doesNotMatch(css, /settings-legacy-fold/)
+})
+
+test('主题美化底部有微信式字体大小拉条，跟随系统字号并可再放大', () => {
+  const ts = read('src/ThemeSettings.tsx')
+  const app = read('src/App.tsx')
+  const main = read('android/app/src/main/java/com/sulzhu/aihome/MainActivity.java')
+  assert.match(ts, /className="theme-fontctl"/)
+  assert.match(ts, /min="80" max="160"/)
+  assert.match(ts, /跟随系统/)
+  assert.match(ts, /100% = 系统字号/)
+  // 原生：系统字号 × App 倍数；Web：退回 CSS 变量，避免双重缩放。
+  assert.match(app, /setAppTextZoom\(themePrefs\.scale\)/)
+  assert.match(app, /nativeTextZoomAvailable\(\)\?\{'--font-scale':'1'\}/)
+  assert.match(main, /setAppFontFactor/)
+  assert.match(main, /scale = scale \* appFontFactor\(\)/)
 })

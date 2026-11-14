@@ -78,6 +78,19 @@ final class SystemBridge {
         try { return Settings.canDrawOverlays(c); } catch (Exception e) { return false; }
     }
 
+    /** 字体大小：只接收一个倍数，夹范围与写 textZoom 都由 MainActivity 统一处理。 */
+    @JavascriptInterface
+    public boolean textZoom(final String json) {
+        try {
+            JSONObject o = new JSONObject(json == null ? "{}" : json);
+            final float factor = (float) o.optDouble("factor", 1.0);
+            activity.runOnUiThread(() -> activity.setAppFontFactor(factor));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** 点击状态行：token 白名单，前端无法指定任意 Activity / URL。 */
     @JavascriptInterface
     public void open(final String json) {
