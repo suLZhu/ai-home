@@ -1853,3 +1853,34 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .mcp-list-head .worldbook-add-btn{width:auto}
 
 .shell .worldbook-back{height:28px!important;min-height:28px!important;padding:0 10px!important;font-size:11px!important}
+
+/* 聊天展示设置 */
+.chat-display-options{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.chat-display-option{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line,#eee7db)}
+.chat-display-option:last-child{border-bottom:0}
+.chat-display-option input{flex:0 0 auto;width:18px;height:18px;accent-color:var(--accent,#8a79aa)}
+.chat-display-option span{display:flex;align-items:baseline;gap:6px}
+.chat-display-option b{font-size:12.5px;font-weight:500}
+.chat-display-option small{font-size:10.5px;color:var(--muted,#8a7d6d)}
+.chat-display-timepos{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:11.5px;color:var(--muted,#8a7d6d);flex-wrap:wrap}
+.chat-display-timepos label{display:inline-flex;align-items:center;gap:4px}
+.chat-display-timepos input{accent-color:var(--accent,#8a79aa)}
+
+/* 气泡旁的头像 / 名称 / 时间 */
+.message-avatar.user-avatar{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;overflow:hidden;background:var(--field,#efeae1);color:var(--muted,#8a7d6d);font-size:13px;flex:0 0 32px;align-self:flex-start;margin-top:2px}
+.message-avatar.user-avatar img{width:100%;height:100%;object-fit:cover}
+.message-sender{font-size:11px;color:var(--muted,#8a7d6d);margin:0 2px 2px;align-self:flex-start}
+.message-sender.end{align-self:flex-end}
+.message-time{font-size:10px;color:var(--muted,#9a8f83);margin:2px 4px;align-self:center}
+.message-time.above{margin-bottom:2px}
+.message-time.below{margin-top:2px}
+
+/* MCP Token 掩码与显示开关 */
+.mcp-token-field{display:flex;align-items:center;gap:6px}
+.mcp-token-field input{flex:1;min-width:0}
+.shell .mcp-token-eye{flex:0 0 auto;height:32px!important;min-height:32px!important;padding:0 10px!important;border-radius:8px!important;border:1px solid var(--line,#e2d9cc)!important;background:var(--card,#fffdf9)!important;color:var(--muted,#8a7d6d)!important;font-size:11px!important;box-shadow:none!important}
+
+/* 行内启用开关（世界书 / MCP） */
+.shell .worldbook-panel .world-entry-switch,.shell .mcp-tool-picker .mcp-card-switch{flex:0 0 34px!important;width:34px!important;min-width:34px!important;max-width:34px!important;height:20px!important;margin:0 2px}
+.shell .worldbook-panel .world-entry-switch:checked::after{transform:translateX(14px)!important}
+.shell .mcp-tool-picker .mcp-card-switch:checked::after{transform:translateX(14px)!important}
