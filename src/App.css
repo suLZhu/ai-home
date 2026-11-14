@@ -1018,6 +1018,11 @@ details[open]>summary .fold-chevron{transform:rotate(90deg)}
 
 /* ── 设置页：供应商中心 ───────────────────────────────────────────── */
 .vendor-center{display:flex;flex-direction:column;gap:9px;width:100%;min-width:0;margin:8px 0 12px}
+/* 供应商列表 → 详情 / 手动新增：两个独立页面，直接替换列表，不再在下面展开面板 */
+.vendor-page{display:flex;flex-direction:column;gap:10px;min-width:0;width:100%}
+.vendor-page>.settings-back{align-self:flex-start;justify-self:auto}
+.vendor-page .vendor-new{margin-top:0}
+.vendor-page .vendor-card{width:100%}
 .vendor-center .resource-hint{max-width:100%;overflow-wrap:anywhere}
 .vendor-summary{display:flex;gap:6px;flex-wrap:wrap}
 .vendor-summary span{padding:4px 9px;border:1px solid var(--line,#e3ddd3);border-radius:999px!important;background:var(--card,#fff);font-size:10.5px;color:var(--muted,#8a7d6d)}

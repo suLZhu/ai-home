@@ -2841,8 +2841,8 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   // Android 返回键：二级页先退回一级，一级页再退回设置首页。
   useEffect(()=>{
     if(!section)return
-    // 二级标签直接退回设置首页：一级本身已落在一个内容上，不再插一层空目录。
-    const unregister=pushBackHandler(()=>{setSection('');return true})
+    // 供应商详情 / 手动新增是列表下的二级页：先回「供应商列表」，其余仍回设置首页。
+    const unregister=pushBackHandler(()=>{setSection(section.startsWith('vendor:')&&section!=='vendor:account'?'vendor':'');return true})
     return unregister
   },[section])
   // Kelivo 风格（iOS 分组列表）设置首页；偏好只存本机，可一键切回原来的卡片网格。
@@ -2864,7 +2864,7 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
   const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'system',icon:'◉',title:'Android 系统能力',desc:'通知 / 后台 / 精确定时',meta:'状态与权限'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail"><button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section==='vendor'||section.startsWith('theme:')||section.startsWith('vendor:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{(section==='vendor'||section==='vendor:add')&&<VendorCenter vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onClose={()=>setSection('')}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<><SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onClose={()=>setSection('')}/><details className="settings-legacy-fold"><summary>按助手填默认 API Key（旧方式）</summary><ConnectionKeys modelConfig={modelConfig} setModelConfig={setModelConfig} apiKey={apiKey} setApiKey={setApiKey} displayName={displayName}/></details><details className="settings-legacy-fold"><summary>用量与费用</summary><div className="setting-card settings-inner-card"><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></div></details></>}{section==='usage'&&<UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/ >}{section==='appearance'&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div>}{section==='dev'&&<><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：一级 6 项，主题美化 / 供应商各自再分二级 ─────────────
@@ -2904,7 +2904,7 @@ function SettingsSubNav({section,onSelect}:{section:string;onSelect:(s:string)=>
   const isTheme=section==='theme'||section.startsWith('theme:')
   const rows=isTheme
     ? [{id:'theme:global',label:'全局主题'},{id:'theme:person',label:'助手主题'}]
-    : [{id:'vendor:add',label:'添加供应商'},{id:'vendor:account',label:'订阅账号'}]
+    : [{id:'vendor',label:'供应商列表'},{id:'vendor:account',label:'订阅账号'}]
   const active=(section.startsWith('theme:')||section.startsWith('vendor:'))?section:rows[0].id
   return <div className="settings-subnav settings-tabs" role="tablist" aria-label={isTheme?'主题美化分组':'供应商分组'}>
     {rows.map(r=><button type="button" role="tab" aria-selected={active===r.id} className={'subnav-row'+(active===r.id?' active':'')} key={r.id} onClick={()=>onSelect(r.id)}><b>{r.label}</b></button>)}
@@ -2970,12 +2970,14 @@ function ConnectionKeys({modelConfig,setModelConfig,apiKey,setApiKey,displayName
 // ── 供应商中心：一排两个小图标，点开一家才展开「配置 / 模型」两块 ─────────
 // 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
 // 搜索 + 折叠分组 + 逐条 ＋ 点选；Key 只留本机，不进云端快照。
-function VendorCenter({vendors,setVendors,setModelProfiles}:{
+function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
+  section:string; onSection:(s:string)=>void
 }) {
-  // 一次只出现一个编辑区：'new' = 新增表单，其余 = 某家供应商详情。
-  const [editing,setEditing]=useState<string>('')
+  // 列表 / 新增 / 某家详情各自是一个独立页面（section 驱动），不再在列表下面展开面板。
+  const showNew=section==='vendor:add'
+  const activeId=section.startsWith('vendor:')&&!showNew?section.slice('vendor:'.length):''
   const [tab,setTab]=useState<'config'|'model'>('config')
   const [pickerOpen,setPickerOpen]=useState(false)
   const [modelQuery,setModelQuery]=useState('')
@@ -2996,8 +2998,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
   const commit=(next:Vendor[])=>{setVendors(next);setModelProfiles(old=>syncVendorProfiles(next,old))}
   const patch=(id:string,fn:(v:Vendor)=>Vendor)=>commit(vendors.map(v=>v.id===id?fn(v):v))
   const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
-  const showNew=editing==='new'
-  const active=vendors.find(v=>v.id===editing)
+  const active=activeId?vendors.find(v=>v.id===activeId):undefined
   const primary=active?(active.keys.find(k=>k.role==='primary')||active.keys[0]):undefined
   const backupKeys=active?active.keys.filter(k=>k!==primary):[]
   const chatUrl=active?chatRequestUrl(active):''
@@ -3022,10 +3023,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     setKeyDraft({label:'',value:''})
   }
   const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setKeyDraft({label:'',value:''})}
-  const openVendor=(id:string)=>{
-    if(editing===id){setEditing('');resetEditUI();return}
-    setEditing(id);setTab('config');resetEditUI()
-  }
+  // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
+  const backToList=()=>{resetEditUI();onSection('vendor')}
+  const openVendorPage=(id:string)=>{setTab('config');resetEditUI();onSection('vendor:'+id)}
   const addVendor=(e:FormEvent)=>{
     e.preventDefault()
     const name=newName.trim(),endpoint=newEndpoint.trim()
@@ -3033,8 +3033,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     const id='custom-'+Math.random().toString(36).slice(2,10)
     const keys=[...(newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]),...(newMultiKey?newExtraKeys.filter(k=>k.value.trim()).map((k,i)=>({id:k.id,label:k.label.trim()||('备用 '+(i+1)),value:k.value.trim(),role:'backup' as const})):[])]
     commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,keys,models:[]}] as Vendor[])
-    setEditing(id);setTab('model');resetEditUI()
+    setTab('model');resetEditUI()
     setNewName('');setNewKey('');setNewMultiKey(false);setNewExtraKeys([]);setNewEndpoint('');setNewApiPath('')
+    onSection('vendor:'+id)
   }
   // 只向「当前这一家」的接口拉模型，用备用优先的第一把有效 Key。
   const fetchRemote=async(v:Vendor)=>{
@@ -3060,18 +3061,23 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
     .filter(g=>g.models.length)
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
+  const isList=!showNew&&!active
   return <div className="vendor-center">
-    <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
-    <p className="resource-hint">点小图标展开一家：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
-    <div className="vendor-icon-grid">
-      {vendors.map(v=><button type="button" className={'vendor-icon-tile'+(editing===v.id?' active':'')} key={v.id} aria-expanded={editing===v.id} onClick={()=>openVendor(v.id)}>
-        <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
-        <span className="vit-text"><b>{v.name}</b><small>{v.keys.length} Key</small></span>
-      </button>)}
-      <button type="button" className={'vendor-icon-tile add'+(showNew?' active':'')} aria-expanded={showNew} onClick={()=>{if(showNew){setEditing('');resetEditUI()}else{setEditing('new');resetEditUI()}}}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
-    </div>
+    {isList&&<>
+      <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
+      <p className="resource-hint">点一家供应商进入它自己的配置页：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
+      <div className="vendor-icon-grid">
+        {vendors.map(v=><button type="button" className="vendor-icon-tile" key={v.id} onClick={()=>openVendorPage(v.id)}>
+          <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
+          <span className="vit-text"><b>{v.name}</b><small>{v.keys.length} Key</small></span>
+        </button>)}
+        <button type="button" className="vendor-icon-tile add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
+      </div>
+    </>}
 
-    {showNew&&<form className="vendor-new" onSubmit={addVendor}>
+    {showNew&&<section className="vendor-page">
+      <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
+      <form className="vendor-new" onSubmit={addVendor}>
       <b>添加自定义供应商</b>
       <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/></label>
       <label className="vendor-field">API Key<input aria-label="API Key" type="password" autoComplete="off" value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/></label>
@@ -3082,10 +3088,13 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
       <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
       <button type="submit" className="vendor-submit">＋ 添加</button>
       <small>Key 与地址都填好后，到「模型」里点 ⟳ 就能只选这个网址自己的模型；拉取失败也可手动输入模型名。</small>
-    </form>}
+      </form>
+    </section>}
 
-    {active&&<div className="vendor-card open" key={active.id}>
-      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b><button type="button" aria-label="收起供应商详情" onClick={()=>{setEditing('');resetEditUI()}}>收起 ×</button></div>
+    {active&&<section className="vendor-page">
+      <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
+      <div className="vendor-card open" key={active.id}>
+      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b></div>
       <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
         <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
         <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
@@ -3105,7 +3114,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
           <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(d=>({...d,label:e.target.value}))} placeholder="备用 Key 备注名"/><input aria-label="新 Key 值" type="password" value={keyDraft.value} onChange={e=>setKeyDraft(d=>({...d,value:e.target.value}))} placeholder="API Key"/><button type="button" onClick={addBackupKey}>添加备用 Key</button></div>
           <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKey(s=>!s)}>{showKey?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
         </div>
-        {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==active.id));setEditing('');resetEditUI()}}>删除这家供应商</button>}
+        {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{if(!window.confirm('删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？'))return;commit(vendors.filter(x=>x.id!==active.id));backToList()}}>删除这家供应商</button>}
       </div>}
 
       {tab==='model'&&<div className="vendor-card-body">
@@ -3133,7 +3142,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles}:{
           {!customModelOpen?<button type="button" className="vendor-model-manual" onClick={()=>setCustomModelOpen(true)}>✎ 手动输入模型名</button>:<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDraft} onChange={e=>setModelDraft(e.target.value)} placeholder="模型名，如 my-model" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
         </div>}
       </div>}
-    </div>}
+      </div>
+    </section>}
   </div>
 }
 

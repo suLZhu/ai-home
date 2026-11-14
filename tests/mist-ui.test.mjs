@@ -137,3 +137,22 @@ test('供应商多 Key：新建时可勾选，编辑页仍能增删改备用 Key
     assert.match(css, new RegExp('\\.' + cls + '(?=[\\s,{.:\\[]|$)'), '缺少样式 .' + cls)
   }
 })
+
+test('供应商详情 / 新增供应商都是独立页面，不再在列表下面展开配置面板', () => {
+  const app = read('src/App.tsx')
+  const css = read('src/App.css')
+  // 点列表里的供应商 → 切到 vendor:<id> 页面；点「自定义」→ vendor:add 页面。
+  assert.match(app, /onSection\('vendor:'\+id\)/)
+  assert.match(app, /openVendorPage\(v\.id\)/)
+  assert.match(app, /onSection\('vendor:add'\)/)
+  assert.match(app, /section==='vendor:add'/)
+  assert.match(app, /section\.startsWith\('vendor:'\)&&!showNew/)
+  // 页面容器与返回按钮存在，列表只在 isList 时渲染。
+  assert.match(app, /const isList=!showNew&&!active/)
+  assert.match(app, /className="vendor-page"/)
+  assert.match(app, /← 供应商/)
+  assert.doesNotMatch(app, /editing===v\.id/, '列表点开不应再靠内联 editing 状态')
+  // Android 返回键：供应商二级页先回列表。
+  assert.match(app, /section\.startsWith\('vendor:'\)&&section!=='vendor:account'\?'vendor':''/)
+  assert.match(css, /\.vendor-page\{display:flex/)
+})
