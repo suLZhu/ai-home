@@ -94,14 +94,14 @@ export function UsageStats({ people, conversations, models, displayName }: {
   const latest = rows[0] && rows[0].model !== '未标记模型' ? rows[0].model : (models[active] || '')
 
   return <div className="usage-stats">
+
+    <div className="usage-people" role="tablist" aria-label="选择助手">
+      {people.map((p) => <button type="button" role="tab" key={p} aria-selected={p === active} className={'usage-person' + (p === active ? ' active' : '')} onClick={() => setActive(p)}>{displayName(p)}</button>)}
+    </div>
     <div className="usage-summary">
       <div><small>合计花费（估算）</small><b>≈ ¥{totals.cost.toFixed(2)}</b></div>
       <div><small>调用次数</small><b>{totals.calls}</b></div>
       <div><small>Token 总量</small><b>{totals.tokens.toLocaleString()}</b></div>
-    </div>
-
-    <div className="usage-people" role="tablist" aria-label="选择助手">
-      {people.map((p) => <button type="button" role="tab" key={p} aria-selected={p === active} className={'usage-person' + (p === active ? ' active' : '')} onClick={() => setActive(p)}>{displayName(p)}</button>)}
     </div>
 
     <div className="usage-model-line"><small>最近使用的模型</small><b>{latest || '（未设置）'}</b></div>
