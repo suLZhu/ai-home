@@ -1851,3 +1851,5 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .worldbook-back{height:28px!important;min-height:28px!important;padding:0 10px!important;border-radius:8px!important;border:1px solid var(--line,#e2d9cc)!important;background:var(--card,#fffdf9)!important;font-size:11.5px!important;color:var(--muted,#8a7d6d)!important;box-shadow:none!important}
 .shell .worldbook-add-btn{height:30px!important;min-height:30px!important;padding:0 10px!important;border-radius:8px!important;border:1px solid transparent!important;background:var(--accent,#8a79aa)!important;color:#fff!important;font-size:11px!important;box-shadow:none!important}
 .mcp-list-head .worldbook-add-btn{width:auto}
+
+.shell .worldbook-back{height:28px!important;min-height:28px!important;padding:0 10px!important;font-size:11px!important}
