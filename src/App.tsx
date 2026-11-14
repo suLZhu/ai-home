@@ -3228,6 +3228,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
   const [mcpStatus, setMcpStatus] = useState<Record<string, 'ok' | 'fail'>>({})
   const [mcpEdit, setMcpEdit] = useState<Array<{ id: string; person: Person }>>([])
   const [mcpTest, setMcpTest] = useState<{ busy: boolean; ok?: boolean; message: string }>({ busy: false, message: '' })
+  const [mcpFormOpen, setMcpFormOpen] = useState(false)
   const mcp = useMcpLibrary()
   // 同一服务会为每位助手各存一条连接，这里按「名称 + 地址」合成一张卡片。
   const mcpGroups = useMemo(() => {
@@ -3281,6 +3282,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       }
       setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
       setMcpTest({ busy: false, message: '' })
+      setMcpFormOpen(false)
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
     finally { setMcpBusy(false) }
@@ -3312,6 +3314,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
   }
   const startEditMcp = (g: { name: string; url: string; items: McpLibraryItem[] }) => {
+    setMcpFormOpen(true)
     setMcpEdit(g.items.map((c) => ({ id: c.id, person: c.person })))
     setMcpDraft({ name: g.name, url: g.url, token: '', owner: 'all' })
     document.querySelector('.resource-form')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -3347,36 +3350,41 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     </>}
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
     {tab==='mcp' && <>
-      <form className="resource-form" onSubmit={addMcp}><h4>{mcpEdit.length ? '修改 MCP 服务' : '添加 MCP 服务'}</h4>
-        <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
-        <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
-        <label>Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/></label>
-        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button>{mcpEdit.length>0&&<button type="button" onClick={()=>{setMcpEdit([]);setMcpDraft({name:'',url:'',token:'',owner:'all'});setMcpTest({busy:false,message:''})}}>取消</button>}</div>
-        {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?'✓ ':'✗ '}{mcpTest.message}</small>}
-        <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
-      </form>
-      <div className="mcp-tool-picker">
-        {mcp.error && <p className="mcp-error">{mcp.error}</p>}
-        {mcpGroups.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，先在上面添加。</p>}
-        {mcpGroups.map((g) => {
-          const open = mcpOpen === g.key
-          const count = mcpCounts[g.key]
-          const status = mcpStatus[g.key]
-          const enabled = g.items.every((c) => c.enabled !== false)
-          return <article className={'mcp-card' + (open ? ' open' : '')} key={g.key}>
-            <button type="button" className="mcp-card-toggle" aria-expanded={open} onClick={() => toggleMcpCard(g)}>
-              <span className="mcp-card-main"><b>{g.name}</b><small>{count === undefined ? '工具 —' : '工具 ' + count + '/' + count}</small></span>
-              <span className={'mcp-card-status' + (status === 'ok' ? ' ok' : status === 'fail' ? ' bad' : '')}>{status === 'ok' ? '已连通' : status === 'fail' ? '未连通' : '未测试'}</span>
-              <span className="mcp-card-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
-            </button>
-            {open && <div className="mcp-card-body">
-              <small>{g.items.map((c) => displayName(c.person)).join('、')} · {g.url}</small>
-              <label className="mcp-enable-row">启用<input type="checkbox" className="tray-switch" checked={enabled} onChange={e => void toggleGroupEnabled(g, e.target.checked)}/></label>
-              <div className="world-actions"><button type="button" onClick={() => startEditMcp(g)}>修改设置</button><button type="button" onClick={() => void removeMcp(g)}>删除</button></div>
-            </div>}
-          </article>
-        })}
-      </div>
+      {mcpFormOpen ? <>
+        <div className="worldbook-form-head"><button type="button" className="worldbook-back" onClick={() => { setMcpFormOpen(false); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}>← 返回</button><b>{mcpEdit.length ? '编辑 MCP 服务' : '新增 MCP 服务'}</b></div>
+        <form className="resource-form" onSubmit={addMcp}>
+          <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
+          <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
+          <label>Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/></label>
+          <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button></div>
+          {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?'✓ ':'✗ '}{mcpTest.message}</small>}
+          <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
+        </form>
+      </> : <>
+        <div className="mcp-list-head"><button type="button" className="worldbook-add-btn" onClick={() => { setMcpFormOpen(true); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}>＋ 添加 MCP 服务</button></div>
+        <div className="mcp-tool-picker">
+          {mcp.error && <p className="mcp-error">{mcp.error}</p>}
+          {mcpGroups.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，点上面的按钮添加。</p>}
+          {mcpGroups.map((g) => {
+            const open = mcpOpen === g.key
+            const count = mcpCounts[g.key]
+            const status = mcpStatus[g.key]
+            const enabled = g.items.every((c) => c.enabled !== false)
+            return <article className={'mcp-card' + (open ? ' open' : '')} key={g.key}>
+              <button type="button" className="mcp-card-toggle" aria-expanded={open} onClick={() => toggleMcpCard(g)}>
+                <span className="mcp-card-main"><b>{g.name}</b><small>{count === undefined ? '工具 —' : '工具 ' + count + '/' + count}</small></span>
+                <span className={'mcp-card-status' + (status === 'ok' ? ' ok' : status === 'fail' ? ' bad' : '')}>{status === 'ok' ? '已连通' : status === 'fail' ? '未连通' : '未测试'}</span>
+                <span className="mcp-card-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+              </button>
+              {open && <div className="mcp-card-body">
+                <small>{g.items.map((c) => displayName(c.person)).join('、')} · {g.url}</small>
+                <label className="mcp-enable-row">启用<input type="checkbox" className="tray-switch" checked={enabled} onChange={e => void toggleGroupEnabled(g, e.target.checked)}/></label>
+                <div className="world-actions"><button type="button" onClick={() => startEditMcp(g)}>修改设置</button><button type="button" onClick={() => void removeMcp(g)}>删除</button></div>
+              </div>}
+            </article>
+          })}
+        </div>
+      </>}
     </>}
   </div>
 }
