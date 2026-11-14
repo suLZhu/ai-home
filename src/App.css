@@ -1720,3 +1720,15 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .fullscreen-chat .compose-tool-icon-glyph{width:20px;height:20px}
 .shell .fullscreen-chat .compose-box .send-button{width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:50%!important;margin-left:2px}
 .shell .fullscreen-chat .compose-box .send-button .send-icon{width:18px;height:18px}
+
+/* 输入栏图标再收紧一档（36px 热区、0 间距），点击时浮出文字说明 */
+.shell .fullscreen-chat .compose-box button.compose-tool-icon{width:36px!important;height:36px!important;min-width:36px!important}
+.shell .fullscreen-chat .compose-box .compose-icons{gap:0}
+.compose-tool-hint{position:absolute;left:12px;bottom:58px;z-index:20;padding:5px 10px;border-radius:999px;background:rgba(48,42,37,.88);color:#fff;font-size:11px;line-height:1;pointer-events:none;box-shadow:0 4px 12px rgba(20,16,12,.18)}
+
+/* 世界书 / MCP 两栏并排（设置页与聊天齿轮共用） */
+.world-mcp-matrix{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.wm-col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.wm-col>h4{margin:0 0 2px;font-size:12.5px;font-weight:600;color:var(--ink,#302c37)}
+.chat-config-body .world-mcp-matrix{gap:14px}
+.chat-config-panel .wm-col .tray-option{margin:0}

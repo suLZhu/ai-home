@@ -208,3 +208,26 @@ test('主题美化底部有微信式字体大小拉条，跟随系统字号并�
   assert.match(main, /setAppFontFactor/)
   assert.match(main, /scale = scale \* appFontFactor\(\)/)
 })
+
+test('世界书与 MCP 合并成一栏，设置页与聊天齿轮共用两栏页面', () => {
+  const app = read('src/App.tsx')
+  const css = read('src/App.css')
+  assert.match(app, /label:'世界书 \/ MCP'/)
+  assert.match(app, /section==='bind'&&<WorldMcpMatrix mode="pool"/)
+  assert.match(app, /function WorldMcpMatrix/)
+  assert.match(app, /mode==='bind'&&person\?isWorldEntryBound/)
+  assert.match(app, /<ChatBindPanel person=\{chatPerson\}/)
+  assert.doesNotMatch(app, /ChatPoolPicker/)
+  assert.doesNotMatch(app, /勾进这里的/)
+  assert.match(css, /\.world-mcp-matrix\{display:grid;grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\)/)
+})
+
+test('输入栏图标更紧凑，点图标会浮出文字说明', () => {
+  const app = read('src/App.tsx')
+  const css = read('src/App.css')
+  assert.match(app, /compose-tool-hint/)
+  assert.match(app, /showToolHint\(t\.label\)/)
+  assert.match(css, /\.compose-tool-hint\{position:absolute/)
+  assert.match(css, /\.compose-box button\.compose-tool-icon\{width:36px!important/)
+  assert.match(css, /\.compose-box \.compose-icons\{gap:0\}/)
+})

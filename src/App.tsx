@@ -2278,6 +2278,7 @@ function Chat(p: any) {
   const closeConfig=useCallback(()=>setConfigOpen(false),[])
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
   const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
+  const [bindOpen,setBindOpen]=useState(false)
   const formRef=useRef<HTMLFormElement>(null)
   const openTray=(id:''|'model'|'bind'|'tools')=>{
     // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
@@ -2334,6 +2335,10 @@ function Chat(p: any) {
   const [customEmojis,setCustomEmojis]=useState<string[]>(()=>read('ai-home.customEmojis',[]))
   const [newCustom,setNewCustom]=useState('')
   const [attachOpen,setAttachOpen]=useState(false)
+  // 点输入栏图标时浮出一条文字说明（1.4s 自动消失），图标本身只留图形。
+  const [toolHint,setToolHint]=useState('')
+  const hintTimerRef=useRef<number|undefined>(undefined)
+  const showToolHint=(label:string)=>{setToolHint(label);if(hintTimerRef.current)window.clearTimeout(hintTimerRef.current);hintTimerRef.current=window.setTimeout(()=>setToolHint(''),1400)}
   const [searchOpen,setSearchOpen]=useState(false)
   // 会话的新建 / 切换 / 重命名 / 删除统一收进左侧边抽屉，顶栏不再承载历史会话控件。
   const [lightbox,setLightbox]=useState<{src:string;name:string}|null>(null)
@@ -2770,7 +2775,7 @@ function Chat(p: any) {
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');openConfig('world')}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
+      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
       <div className="compose-tray-body">
         {tray==='bind'&&<>
           <div className="tray-section">
@@ -2796,10 +2801,12 @@ function Chat(p: any) {
         </div>
       : <form className="compose compose-box" ref={formRef} onSubmit={submit}>
       <textarea ref={composeTextRef} className="compose-text" rows={1} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
+      {toolHint&&<div className="compose-tool-hint" role="status">{toolHint}</div>}
       <div className="compose-toolbar"><div className="compose-icons" role="toolbar" aria-label="聊天输入工具">
         {COMPOSE_TOOLS.map(t=>{
           const on=(t.id==='emoji'&&emojiOpen)||(t.id==='search'&&searchOpen)||(t.id==='attach'&&attachOpen)||t.id===tray
           return <button key={t.id} type="button" className={'compose-tool-icon'+(on?' active':'')} title={t.label} aria-label={t.label} aria-pressed={!!on} onClick={()=>{
+            showToolHint(t.label)
             if(t.id==='emoji'){setTray('');setAttachOpen(false);if(!emojiOpen){setEmojiOpen(true);setEmojiTab('emoji')}else if(emojiTab!=='emoji'){setEmojiTab('emoji')}else{setEmojiOpen(false)};return}
             if(t.id==='search'){setTray('');setEmojiOpen(false);setAttachOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
             if(t.id==='attach'){setEmojiOpen(false);setTray('');setAttachOpen(v=>!v);return}
@@ -2823,6 +2830,7 @@ function Chat(p: any) {
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
     {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
+    {bindOpen&&<ChatBindPanel person={chatPerson} displayName={p.displayName} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} bindings={p.bindings} setBindings={p.setBindings} onClose={()=>setBindOpen(false)}/>}
   </div>
 }
 function formatSize(size:number){return size<1024?size+' B':size<1024*1024?(size/1024).toFixed(1)+' KB':(size/1024/1024).toFixed(1)+' MB'}
@@ -2882,8 +2890,8 @@ function Settings({onLogout,cloudStatus,themePrefs,setThemePrefs,beautifyPack,se
   const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.length):section==='world'?'world':section==='mcp'?'mcp':'') as ''|'model'|'world'|'mcp'
   const resourceOnly=['world','mcp'].includes(section)
   const showResources=section==='resources'||!!resourceTab
-  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'world',icon:'▤',title:'世界书',desc:'设定、条目与关键词',meta:worldEntries.length+' 条世界书'},{id:'mcp',icon:'⌘',title:'MCP',desc:'外部工具服务',meta:'按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'system',icon:'◉',title:'Android 系统能力',desc:'通知 / 后台 / 精确定时',meta:'状态与权限'}]
-  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='world'||section==='mcp')&&<ChatPoolPicker kind={section} chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries}/>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div>}</div>}</div>
+  const cards=[{id:'theme',icon:'◐',title:'主题美化',desc:'全局主题 / 助手主题',meta:'4 套主题 · '+BEAUTIFY_PACKS.length+' 套皮肤'},{id:'vendor',icon:'◈',title:'供应商',desc:'添加供应商 / 订阅账号',meta:vendors.length+' 家供应商 · '+modelProfiles.length+' 个模型'},{id:'bind',icon:'▤',title:'世界书 / MCP',desc:'条目与服务',meta:worldEntries.length+' 条世界书 · 按助手隔离'},{id:'data',icon:'☁',title:'数据与管理',desc:'存储、用量与日志',meta:cloudStatus==='saved'?'云端已同步':cloudStatus==='saving'?'正在同步':cloudStatus==='error'?'同步异常':'连接中'},{id:'system',icon:'◉',title:'Android 系统能力',desc:'通知 / 后台 / 精确定时',meta:'状态与权限'}]
+  return <div className="settings-screen"><header className={'settings-heading'+(simpleMode?' kelivo-heading':'')}><span>PERSONAL CONTROL ROOM</span><h2>设置</h2></header>{!section?(simpleMode?<KelivoSettingsHome onSelect={setSection} onClassic={()=>setMode(false)} modelProfiles={modelProfiles} worldEntries={worldEntries} cloudStatus={cloudStatus}/>:<><button type="button" className="kelivo-switch-back" onClick={()=>setMode(true)}>◧ 切换为 Kelivo 风格设置</button><div className="settings-module-grid">{cards.map(card=><button className="settings-module-card" key={card.id} onClick={()=>setSection(card.id)}><span className="settings-module-icon">{card.icon}</span><span className="settings-module-meta">{card.meta}</span><b>{card.title}</b><span className="settings-module-open">打开设置 ↗</span></button>)}</div></>):<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>setSection('')}>← 全部设置</button>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<WorldMcpMatrix mode="pool" chatPool={chatPool} setChatPool={setChatPool} worldEntries={worldEntries} setWorldEntries={setWorldEntries}/>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<><div className="setting-card settings-inner-card"><BeautifySettings value={beautifyPack} onChange={setBeautifyPack}/></div><div className="setting-card settings-inner-card"><ThemeSettings value={themePrefs} onChange={setThemePrefs} assets={customAssets} onAssetsChange={setCustomAssets}/></div></>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='data'&&<><div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div><div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>{!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}<details className="data-fold"><summary>用量与费用</summary><UsagePanel conversations={conversations} modelConfig={modelConfig} displayName={displayName}/></details><details className="data-fold"><summary>工作区工具 · 按助手打开</summary><div className="setting-card settings-inner-card"><p className="muted">工作区已放主动任务 / 自主行动 / 工具看板；这里可以按指定助手直接打开这些面板与技能库。名称在各自头像里改。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div></details><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details><div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置分两级：主题美化、供应商各有两个二级页；世界书、MCP、数据与管理直接进入。</p></div></>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div>}</div>}</div>
 }
 
 // ── Kelivo 风格设置首页：一级 6 项，主题美化 / 供应商各自再分二级 ─────────────
@@ -2897,8 +2905,7 @@ function KelivoSettingsHome({onSelect,onClassic,modelProfiles,worldEntries,cloud
     {title:'设置',rows:[
       {id:'theme',icon:'◐',label:'主题美化',keywords:'全局主题 助手主题 颜色 皮肤 美化包 外观 气泡 背景 头像',section:'theme'},
       {id:'vendor',icon:'◈',label:'供应商',keywords:'添加供应商 订阅账号 模型 预设 接口 地址 API Key 账号 连接 资源库',section:'vendor'},
-      {id:'world',icon:'▤',label:'世界书',keywords:'设定 条目 关键词 资源库 全局条目 勾选池 001 002',section:'world'},
-      {id:'mcp',icon:'⌘',label:'MCP',keywords:'服务 工具 服务器 连接 资源库 工具权限 勾选池 001 002',section:'mcp'},
+      {id:'bind',icon:'▤',label:'世界书 / MCP',keywords:'设定 条目 关键词 服务 工具 服务器 连接 勾选池 001 002',section:'bind'},
       {id:'data',icon:'☁',label:'数据与管理',keywords:'云同步 本地 备份 时区 登录 退出 用量 统计 开发者 诊断 黑匣子 日志 关于 主动任务 自主生活 工具调用看板 技能库',section:'data'},
       {id:'system',icon:'◉',label:'Android 系统能力',keywords:'通知 权限 锁屏 后台 电池优化 悬浮窗 精确定时 闹钟 开机 自启动 系统',section:'system'},
     ]},
@@ -3151,21 +3158,58 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
 }
 
 // 设置页「聊天可选清单」：勾进池里的条目才会出现在聊天窗口对应小图标里。
-function ChatPoolPicker({kind,chatPool,setChatPool,worldEntries}:{
-  kind:'world'|'mcp'; chatPool:ChatPool; setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>
-  worldEntries:WorldEntry[]
+// 世界书 / MCP 两栏并排：设置页（勾选池）和聊天页（绑定当前助手）共用同一套布局。
+function WorldMcpMatrix({mode,person,chatPool,setChatPool,worldEntries,setWorldEntries,bindings,setBindings}:{
+  mode:'pool'|'bind'; person?:Person
+  chatPool?:ChatPool; setChatPool?:React.Dispatch<React.SetStateAction<ChatPool>>
+  worldEntries:WorldEntry[]; setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>
+  bindings?:Record<Person,PersonBinding>; setBindings?:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
 }) {
   const mcp=useMcpLibrary()
-  const poolKey=kind==='world'?'worldIds':'mcpIds'
-  const items=kind==='world'
-    ? worldEntries.map(e=>({id:e.id,label:e.title||'未命名条目',sub:e.enabled?'已启用':'已停用'}))
-    : mcp.connections.map(c=>({id:c.id,label:c.name,sub:c.url}))
-  const allIds=items.map(x=>x.id)
-  return <div className="chat-pool-picker">
-    <b>聊天窗口可选清单</b>
-    <p className="muted">勾进这里的 {kind==='world'?'世界书条目':'MCP 服务'} 才会出现在聊天窗口的小图标里，前面带 001 / 002 编号；到聊天里再自己打开或关闭。</p>
-    {items.length===0&&<p className="muted">还没有条目，先在下面添加。</p>}
-    {items.map((it,i)=><label className="pool-row" key={it.id}><input type="checkbox" checked={isInPool(chatPool,poolKey,it.id,allIds)} onChange={e=>setChatPool(old=>togglePool(old,poolKey,it.id,e.target.checked,allIds))}/><span className="pool-no">{poolLabel(i)}</span><span className="pool-label">{it.label}<small>{it.sub}</small></span></label>)}
+  const pool=chatPool||{worldIds:null,mcpIds:null}
+  const worldAll=worldEntries.map(e=>e.id)
+  const binding=person?(bindings?.[person]||emptyBinding()):emptyBinding()
+  const mineMine=mcp.connections.filter(c=>!person||c.person===person)
+  const mcpAll=mineMine.map(c=>c.id)
+  const mcpIds=binding.mcpIds===null?mcpAll:binding.mcpIds
+  const patch=(next:PersonBinding)=>setBindings?.(old=>({...old,[person!]:next}))
+  const row=(id:string,label:string,sub:string,checked:boolean,onChange:(v:boolean)=>void)=>
+    <label className="tray-option tray-switch-row" key={id}><span>{label}<small>{sub}</small></span><input type="checkbox" className="tray-switch" checked={checked} onChange={e=>onChange(e.target.checked)}/></label>
+  return <div className="world-mcp-matrix">
+    <section className="wm-col"><h4>世界书</h4>
+      {worldEntries.length===0&&<p className="muted tray-empty">还没有世界书条目。</p>}
+      {worldEntries.map(e=>row(e.id,e.title||'未命名条目',e.enabled?'已启用':'已停用',
+        mode==='bind'&&person?isWorldEntryBound(e,person):isInPool(pool,'worldIds',e.id,worldAll),
+        v=>{ if(mode==='bind'&&person) setWorldEntries(old=>toggleWorldEntryBinding(old,person,e.id,v)); else setChatPool?.(old=>togglePool(old,'worldIds',e.id,v,worldAll)) }))}
+    </section>
+    <section className="wm-col"><h4>MCP</h4>
+      {mcp.error&&<p className="mcp-error">{mcp.error}</p>}
+      {mineMine.length===0&&<p className="muted tray-empty">还没有 MCP 服务。</p>}
+      {mineMine.map(c=>row(c.id,c.name,c.url,
+        mode==='bind'&&person?mcpIds.includes(c.id):isInPool(pool,'mcpIds',c.id,mcpAll),
+        v=>{ if(mode==='bind'&&person) patch(toggleMcpId(binding,c.id,v,mcpAll)); else setChatPool?.(old=>togglePool(old,'mcpIds',c.id,v,mcpAll)) }))}
+    </section>
+  </div>
+}
+
+// 聊天页齿轮：直接打开「世界书 / MCP」两栏设置（不再跳到模型那一页）。
+function ChatBindPanel({person,displayName,worldEntries,setWorldEntries,bindings,setBindings,onClose}:{
+  person:Person; displayName:(p:Person)=>string
+  worldEntries:WorldEntry[]; setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>
+  bindings:Record<Person,PersonBinding>; setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
+  onClose:()=>void
+}) {
+  useEffect(()=>{
+    const un=pushBackHandler(()=>{onClose();return true})
+    return un
+  },[onClose])
+  return <div className="chat-config-backdrop" onClick={onClose}>
+    <section className="chat-config-panel" role="dialog" aria-label="当前助手的世界书与 MCP" onClick={e=>e.stopPropagation()}>
+      <header className="chat-config-head"><div><b>{displayName(person)} · 世界书 / MCP</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭设置">×</button></header>
+      <div className="chat-config-body">
+        <WorldMcpMatrix mode="bind" person={person} worldEntries={worldEntries} setWorldEntries={setWorldEntries} bindings={bindings} setBindings={setBindings}/>
+      </div>
+    </section>
   </div>
 }
 
