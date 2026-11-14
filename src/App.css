@@ -1054,7 +1054,8 @@ details[open]>summary .fold-chevron{transform:rotate(90deg)}
 .vendor-key-row{display:grid;grid-template-columns:auto minmax(0,.8fr) minmax(0,1.2fr) 24px;align-items:center;gap:5px;min-width:0;margin:5px 0}
 .vendor-key-row input{width:100%;min-width:0;box-sizing:border-box}
 .vendor-key-no{flex:0 0 auto;font-size:10px;color:#8b6c4a}
-.shell .settings-screen .vendor-key-row button{width:26px;height:26px;padding:0!important;border:0!important;border-radius:7px!important;background:transparent!important;box-shadow:none!important;color:var(--muted);font-size:16px}
+/* 只收窄行尾的删除按钮；直接子代选择器避免把行内 SoftSelect（角色下拉）也压成 26px 导致「备用」被截断 */
+.shell .settings-screen .vendor-key-row>button{width:26px;height:26px;padding:0!important;border:0!important;border-radius:7px!important;background:transparent!important;box-shadow:none!important;color:var(--muted);font-size:16px}
 .vendor-key-actions{display:flex;align-items:center;gap:8px;margin-top:7px}
 .vendor-key-actions small{font-size:10px;color:var(--muted)}
 .shell .settings-screen button.vendor-remove{display:block;margin-top:12px;color:#a05a4a!important}
@@ -1142,7 +1143,10 @@ details[open]>summary .fold-chevron{transform:rotate(90deg)}
 .vendor-detail-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line,#e6ded2);background:var(--surface,#fbf8f2)}
 .vendor-detail-head b{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell .settings-screen .vendor-detail-head button{padding:3px 8px!important;border:0!important;border-radius:8px!important;background:transparent!important;box-shadow:none!important;color:var(--muted,#8a7d6d);font-size:11px}
-.vendor-key-row{grid-template-columns:auto 54px minmax(0,.7fr) minmax(0,1.3fr) 24px!important}
+.vendor-key-row{grid-template-columns:auto 62px minmax(0,.7fr) minmax(0,1.3fr) 24px!important}
+/* Mist 主题把 .shell 内所有按钮抬到 14.5px/36px，「备用」在 54px 列里会被截成「备」，
+   这里给角色下拉单独收窄字号与内边距（选择器权重高于 mist.css 的 .shell .soft-select-trigger）。 */
+.shell .settings-screen .vendor-key-row .vendor-key-role>button.soft-select-trigger{min-height:30px;gap:2px;padding:4px 5px!important;font-size:11px!important}
 .shell .settings-screen .vendor-key-row select.vendor-key-role{width:100%;min-width:0;padding:6px 2px!important;border:1px solid var(--line,#e3ddd3)!important;border-radius:8px!important;background:var(--field,#fff)!important;color:var(--ink,#403b35)!important;box-shadow:none!important;font-size:10.5px}
 .tray-key-hint{margin:0 0 8px;font-size:10px;line-height:1.5;color:var(--muted,#8a7d6d)}
 
