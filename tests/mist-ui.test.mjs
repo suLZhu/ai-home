@@ -213,7 +213,7 @@ test('世界书与 MCP 合并成一栏，设置页与聊天齿轮共用两栏页
   const app = read('src/App.tsx')
   const css = read('src/App.css')
   assert.match(app, /label:'世界书 \/ MCP'/)
-  assert.match(app, /section==='bind'&&<WorldMcpMatrix mode="pool"/)
+  assert.match(app, /section==='bind'&&<><WorldMcpMatrix mode="pool"/)
   assert.match(app, /function WorldMcpMatrix/)
   assert.match(app, /mode==='bind'&&person\?isWorldEntryBound/)
   assert.match(app, /<ChatBindPanel person=\{chatPerson\}/)
@@ -230,4 +230,13 @@ test('输入栏图标更紧凑，点图标会浮出文字说明', () => {
   assert.match(css, /\.compose-tool-hint\{position:absolute/)
   assert.match(css, /\.compose-box button\.compose-tool-icon\{width:36px!important/)
   assert.match(css, /\.compose-box \.compose-icons\{gap:0\}/)
+})
+
+test('世界书 / MCP 页面保留完整的新增与编辑入口', () => {
+  const app = read('src/App.tsx')
+  // 两栏勾选清单之外，必须继续渲染资源库（世界书 / MCP 两个 tab），否则没地方添加。
+  assert.match(app, /initialTab="world" tabs=\{\['world','mcp'\]\}/)
+  assert.match(app, /function ResourceLibrary/)
+  assert.match(app, /tabs\?: Array<'model'\|'world'\|'mcp'>/)
+  assert.match(app, /\.filter\(\(\[key\]\)=>allowedTabs\.includes\(key\)\)/)
 })
