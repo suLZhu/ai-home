@@ -1705,3 +1705,18 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .fullscreen-chat .tray-switch:checked{background:var(--accent,#8b593b)!important}
 .shell .fullscreen-chat .tray-switch:checked::after{transform:translateX(16px)}
 .tray-empty{margin:4px 0;font-size:10.5px}
+
+/* 输入栏微调：图标行收窄 + 发送键正圆，避免发送键顶出内边距 */
+.shell .fullscreen-chat .compose-icons{gap:4px}
+.shell .fullscreen-chat button.compose-tool-icon{width:34px!important;height:34px!important;border-radius:10px!important}
+.shell .fullscreen-chat .compose-tool-icon-glyph{width:19px;height:19px}
+.shell .fullscreen-chat .compose-box .send-button{width:38px!important;height:38px!important;min-width:38px!important;border-radius:50%!important;padding:0!important;margin-left:6px}
+.shell .fullscreen-chat .compose-box .send-button .send-icon{width:18px;height:18px}
+.shell .fullscreen-chat .compose-send{gap:0}
+
+/* 最终尺寸：40px 触摸热区 + 38px 圆形发送键，六个图标刚好排满一行不溢出 */
+.shell .fullscreen-chat .compose-box .compose-icons{gap:2px;flex:0 0 auto}
+.shell .fullscreen-chat .compose-box button.compose-tool-icon{width:40px!important;height:40px!important;min-width:40px!important;border-radius:50%!important}
+.shell .fullscreen-chat .compose-tool-icon-glyph{width:20px;height:20px}
+.shell .fullscreen-chat .compose-box .send-button{width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:50%!important;margin-left:2px}
+.shell .fullscreen-chat .compose-box .send-button .send-icon{width:18px;height:18px}

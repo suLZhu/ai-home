@@ -262,3 +262,11 @@
 }
 .shell .brand-about-ornamental>span { font-size:var(--type-caption);color:var(--text-secondary); }
 .shell .brand-about-ornamental img { width:min(48%,180px);height:auto;border-radius:var(--radius-md); }
+
+/* ── 输入栏视觉收尾：图标 34px 圆钮、发送键 38px 正圆，行内不溢出 ── */
+.shell .fullscreen-chat button.compose-tool-icon{width:34px!important;height:34px!important;min-width:34px!important;border-radius:50%!important;opacity:1}
+.shell .fullscreen-chat .compose-icons{gap:4px}
+.shell .fullscreen-chat .compose-tool-icon-glyph{width:19px;height:19px}
+.shell .fullscreen-chat .compose-box .send-button{width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:50%!important;margin-left:6px}
+.shell .fullscreen-chat .compose-box .send-button .send-icon{width:18px;height:18px}
+.shell .fullscreen-chat .compose-send{gap:0}
