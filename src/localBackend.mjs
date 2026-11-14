@@ -328,9 +328,66 @@ async function handleModels(init) {
   }
 }
 
+// ── 本地 MCP 客户端：JSON-RPC over Streamable HTTP ─────────────────────────
+// WebView 里直接 fetch 会被远端 CORS 拦，所以优先走 Android 原生桥 AiHomeSystem.httpPost；
+// 浏览器里退回 fetch（能否连通取决于对方是否允许跨域）。
+function mcpHttp(url, headers, body) {
+  const sys = typeof window !== 'undefined' ? window.AiHomeSystem : null
+  if (sys && typeof sys.httpPost === 'function') {
+    const raw = sys.httpPost(url, JSON.stringify(headers || {}), body)
+    let parsed
+    try { parsed = JSON.parse(raw) } catch { throw new Error('原生网络桥返回异常') }
+    if (parsed.error) throw new Error(parsed.error)
+    return parsed
+  }
+  return fetch(url, { method: 'POST', headers, body }).then(async (res) => {
+    const text = await res.text()
+    const hs = {}
+    res.headers.forEach((v, k) => { hs[k.toLowerCase()] = v })
+    return { status: res.status, headers: hs, body: text }
+  })
+}
+
+function mcpParse(text) {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+  if (raw.startsWith('{')) { try { return JSON.parse(raw) } catch { /* 继续按 SSE 解 */ } }
+  for (const line of raw.split(/\r?\n/)) {
+    const m = line.match(/^data:\s*(.+)$/)
+    if (!m) continue
+    const data = m[1].trim()
+    if (!data || data === '[DONE]') continue
+    try { return JSON.parse(data) } catch { /* 下一条 */ }
+  }
+  return null
+}
+
+async function mcpRpc(url, token, payload, sessionId) {
+  const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }
+  if (token) headers.Authorization = 'Bearer ' + token
+  if (sessionId) headers['mcp-session-id'] = sessionId
+  const res = await mcpHttp(url, headers, JSON.stringify(payload))
+  const sid = (res.headers && (res.headers['mcp-session-id'] || res.headers['Mcp-Session-Id'])) || ''
+  return { res, sid, data: mcpParse(res.body) }
+}
+
+async function mcpOpen(url, token) {
+  const init = await mcpRpc(url, token, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'ai-home', version: '0.1.0' } } })
+  if (init.data && init.data.error) throw new Error(init.data.error.message || 'MCP 初始化失败')
+  const sid = init.sid
+  await mcpRpc(url, token, { jsonrpc: '2.0', method: 'notifications/initialized' }, sid).catch(() => {})
+  return sid
+}
+
+async function mcpTools(url, token) {
+  const sid = await mcpOpen(url, token)
+  const out = await mcpRpc(url, token, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, sid)
+  if (out.data && out.data.error) throw new Error(out.data.error.message || '获取工具失败')
+  return (out.data && out.data.result && out.data.result.tools) || []
+}
+
 // ── 服务端专属能力的统一降级错误 ───────────────────────────────────────────
 const DEGRADED = {
-  mcp: '本地模式暂不支持连接/执行 MCP 工具（需要后端执行器）。在设置里配置云服务器地址后可用。',
   agent: '本地模式暂不支持后台 Agent 运行（需要后端执行器）。配置云服务器后可用。',
 }
 
@@ -656,7 +713,13 @@ export async function localHandle(path, init) {
 
     // ── MCP 配置（本地保存配置；连接与执行需要后端执行器 → 明确降级） ──
     if (p === '/api/mcp/test' && method === 'POST') {
-      return json(502, { ok: false, error: '本地模式不连接远程 MCP，测试链接需要云端/服务端模式' })
+      try {
+        const b = await readBody(init)
+        const url = String(b.url || '').trim()
+        if (!/^https:\/\//i.test(url)) return json(400, { ok: false, error: '远程 MCP 必须使用 HTTPS' })
+        const tools = await mcpTools(url, String(b.token || '').trim())
+        return json(200, { ok: true, count: tools.length })
+      } catch (e) { return json(502, { ok: false, error: e.message || '连接失败' }) }
     }
     if (p === '/api/mcp' && method === 'GET') {
       const person = q.get('person') || ''
@@ -714,7 +777,22 @@ export async function localHandle(path, init) {
       return json(200, { connection: { id: all[i].id, person, name, url, transport: 'httpStream', enabled, updated_at: all[i].updated_at } })
     }
     if (mcpMatch && method === 'POST' && ['tools', 'call'].includes(mcpMatch[2])) {
-      return json(502, { error: DEGRADED.mcp })
+      try {
+        const b = await readBody(init)
+        const person = String(b.person || '')
+        if (!person) return json(400, { error: '必须指定人物身份' })
+        const row = readJSON(K.mcp, []).find((c) => c && c.id === mcpMatch[1] && c.person === person)
+        if (!row) return json(404, { error: '此 MCP 没有绑定到当前人物' })
+        const tools = await mcpTools(row.url, row.token)
+        if (mcpMatch[2] === 'tools') return json(200, { tools: tools.map((t) => ({ name: t.name, description: t.description || '', inputSchema: t.inputSchema })) })
+        const name = String(b.name || '')
+        if (!name) return json(400, { error: '工具名称无效' })
+        if (!tools.some((t) => t.name === name)) return json(403, { error: '该工具不属于当前人物绑定的 MCP 服务' })
+        const sid = await mcpOpen(row.url, row.token)
+        const out = await mcpRpc(row.url, row.token, { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: b.arguments && typeof b.arguments === 'object' ? b.arguments : {} } }, sid)
+        if (out.data && out.data.error) return json(502, { error: out.data.error.message || '工具调用失败' })
+        return json(200, { result: out.data && out.data.result })
+      } catch (e) { return json(502, { error: e.message || 'MCP 调用失败' }) }
     }
 
     // ── 定时任务 / 工作流：纯本机调度，不需要云端常驻服务 ──

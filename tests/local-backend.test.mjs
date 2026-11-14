@@ -195,7 +195,7 @@ test('记忆检索：镜像会话键按关键词打分返回，支持中文键�
   assert.equal(shortQuery.status, 400)
 })
 
-test('降级：MCP 执行 / 后台 Agent 明确报错；定时任务已由本地调度器应答，不再要求云端', async () => {
+test('降级：后台 Agent 明确报错；MCP 在本地真连；定时任务已由本地调度器应答', async () => {
   // 本地模式已支持定时任务：空请求体只做参数校验，绝不伪装成功也不提示「配置云服务器」。
   const tasks = await body('/api/tasks', { method: 'POST', body: '{}' })
   assert.equal(tasks.status, 400)
@@ -206,9 +206,10 @@ test('降级：MCP 执行 / 后台 Agent 明确报错；定时任务已由本地
   assert.equal(wf.status, 400)
   assert.doesNotMatch(wf.data.error, /云服务器|暂不支持/)
 
+  // 本地模式现在会真连远程 MCP；未知/未绑定的服务是 404，而不是「不支持」。
   const mcp = await body('/api/mcp/00000000-0000-4000-8000-000000000000/call', { method: 'POST', body: '{}' })
-  assert.equal(mcp.status, 502)
-  assert.match(mcp.data.error, /MCP/)
+  assert.equal(mcp.status, 400)
+  assert.match(mcp.data.error, /人物身份/)
 
   const run = await body('/api/agent/runs', { method: 'POST', body: '{}' })
   assert.equal(run.status, 400)

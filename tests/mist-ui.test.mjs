@@ -304,3 +304,16 @@ test('世界书 / MCP 的新增表单各自独立成页', () => {
   assert.match(app, /＋ 添加 MCP 服务/)
   assert.match(app, /mcp-list-head/)
 })
+
+test('本地模式真连远程 MCP：原生 HTTP 桥 + JSON-RPC 客户端', () => {
+  const local = read('src/localBackend.mjs')
+  const java = read('android/app/src/main/java/com/sulzhu/aihome/SystemBridge.java')
+  assert.match(local, /function mcpHttp\(/)
+  assert.match(local, /sys\.httpPost\(url, JSON\.stringify\(headers \|\| \{\}\)/, '优先走原生桥')
+  assert.match(local, /async function mcpTools\(/)
+  assert.match(local, /method: 'tools\/list'/)
+  assert.match(local, /method: 'tools\/call'/)
+  assert.doesNotMatch(local, /本地模式暂不支持连接\/执行 MCP/)
+  assert.match(java, /public String httpPost\(String url, String headersJson, String body\)/)
+  assert.match(java, /setRequestProperty\("Accept", "application\/json, text\/event-stream"\)/)
+})
