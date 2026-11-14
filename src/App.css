@@ -2041,3 +2041,29 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-sidebar .sidebar-conv-name{padding:0!important;font-size:10.5px!important;line-height:1.1!important}
 .shell .app-sidebar .sidebar-conv-edit,.shell .app-sidebar .sidebar-conv-del{width:16px!important;height:16px!important;min-height:16px!important;font-size:10px!important;padding:0!important}
 .shell .app-sidebar .sidebar-conv-new{height:24px!important;min-height:24px!important;padding:2px 6px!important;font-size:10px!important;border-radius:7px!important}
+
+/* 百宝箱：标题居中、去掉英文，条目压成窄长条；助手工具同样压条 */
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head{justify-content:center!important;text-align:center;margin-bottom:4px!important}
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:none!important}
+.shell .app-sidebar .sidebar-links{gap:2px!important}
+.shell .app-sidebar .sidebar-link{height:28px!important;min-height:28px!important;padding:2px 8px!important;border-radius:7px!important;gap:8px!important;align-items:center!important}
+.shell .app-sidebar .sidebar-link>span:last-child{display:flex;align-items:center;min-width:0}
+.shell .app-sidebar .sidebar-link small{display:none!important}
+.shell .app-sidebar .sidebar-link b{font-size:12px!important;line-height:1!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shell .app-sidebar .sidebar-link-icon{font-size:14px!important;width:18px!important;flex:0 0 18px;text-align:center}
+.shell .app-sidebar .sidebar-assistant-tool{height:28px!important;min-height:28px!important;padding:2px 8px!important;border-radius:7px!important}
+.shell .app-sidebar .sidebar-assistant-tool>b{font-size:12px!important}
+.shell .app-sidebar .sidebar-assistant-tool>small{font-size:9px!important}
+
+/* 百宝箱：标题居中、去掉英文；条目压成窄长条并隐藏「娱乐房模块」 */
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head{justify-content:center!important;text-align:center;margin-bottom:4px!important}
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:none!important}
+.shell .app-sidebar .sidebar-links{gap:2px!important}
+.shell .app-sidebar .sidebar-link{height:28px!important;min-height:28px!important;padding:2px 8px!important;border-radius:7px!important;gap:8px!important;align-items:center!important}
+.shell .app-sidebar .sidebar-link>span:last-child{display:flex;align-items:center;min-width:0}
+.shell .app-sidebar .sidebar-link small{display:none!important}
+.shell .app-sidebar .sidebar-link b{font-size:12px!important;line-height:1!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shell .app-sidebar .sidebar-link-icon{font-size:14px!important;width:18px!important;flex:0 0 18px;text-align:center}
+.shell .app-sidebar .sidebar-assistant-tool{height:28px!important;min-height:28px!important;padding:2px 8px!important;border-radius:7px!important}
+.shell .app-sidebar .sidebar-assistant-tool>b{font-size:12px!important}
+.shell .app-sidebar .sidebar-assistant-tool>small{font-size:9px!important}
