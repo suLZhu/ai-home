@@ -270,7 +270,8 @@ test('世界书编辑器：去掉粘滞/冷却/延迟，数字可清空，绑定
 test('MCP 服务改成与世界书一致的折叠卡片，Token 只有一个输入框', () => {
   const app = read('src/App.tsx')
   assert.match(app, /className="mcp-card-toggle"/)
-  assert.match(app, /mcp-card-tools/)
+  assert.match(app, /mcp-card-main/)
+  assert.match(app, /mcp-card-status/)
   assert.match(app, /className="mcp-enable-row">启用<input/)
   assert.match(app, /'修改 MCP 服务' : '添加 MCP 服务'/)
   assert.match(app, /method: 'PUT'/)
@@ -281,4 +282,13 @@ test('MCP 服务改成与世界书一致的折叠卡片，Token 只有一个输�
   const server = read('src/server.mjs')
   assert.match(local, /method === 'PUT' && !mcpMatch\[2\]/)
   assert.match(server, /req.method === 'PUT' && !mcpMatch\[2\]/)
+  // 添加不再选归属助手；卡片按「名称+地址」合并，显示工具数与连通状态，并有测试链接
+  assert.doesNotMatch(app, /归属助手<SoftSelect value=\{mcpDraft\.owner\}/)
+  assert.match(app, /const mcpGroups = useMemo/)
+  assert.match(app, /mcp-card-status/)
+  assert.match(app, /'已连通'/)
+  assert.match(app, /'测试链接'/)
+  assert.match(app, /\/api\/mcp\/test/)
+  assert.match(server, /url\.pathname === '\/api\/mcp\/test'/)
+  assert.match(local, /p === '\/api\/mcp\/test'/)
 })

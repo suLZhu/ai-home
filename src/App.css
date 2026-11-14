@@ -1805,3 +1805,14 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .mcp-enable-row{display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;width:auto;font-size:12px;color:var(--muted,#8a7d6d)}
 .mcp-enable-row .tray-switch{flex:0 0 38px}
 .mcp-empty{margin:6px 0;font-size:11px}
+
+/* MCP 卡片：名称/工具数两行 + 连通状态 + 测试结果 */
+.shell .mcp-tool-picker .mcp-card-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.shell .mcp-tool-picker .mcp-card-main b{font-weight:500;font-size:13.5px;color:var(--ink,#302c37);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .mcp-tool-picker .mcp-card-main small{font-size:11px;color:var(--muted,#8a7d6d)}
+.shell .mcp-tool-picker .mcp-card-status{flex:0 0 auto;font-size:11px;color:var(--muted,#8a7d6d);white-space:nowrap}
+.shell .mcp-tool-picker .mcp-card-status.ok{color:var(--ok,#4f7d62)}
+.shell .mcp-tool-picker .mcp-card-status.bad{color:var(--danger,#ac5f68)}
+.mcp-test{display:block;margin-top:6px;font-size:11px;color:var(--muted,#8a7d6d)}
+.mcp-test.ok{color:var(--ok,#4f7d62)}
+.mcp-test.bad{color:var(--danger,#ac5f68)}

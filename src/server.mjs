@@ -620,6 +620,17 @@ const apiServer = createServer(async (req, res) => {
     return send(res,result.changes?200:404,result.changes?{ok:true}:{error:'账目不存在'})
   }
 
+  if (url.pathname === '/api/mcp/test' && req.method === 'POST') {
+    try {
+      const body = await readBody(req)
+      const remote = validateRemoteUrl(String(body.url || '').trim())
+      const token = String(body.token || '').trim()
+      if (token.length > 8192) return send(res, 400, { ok: false, error: 'Token 长度超出限制' })
+      const row = { url: remote.toString(), token_enc: encryptSecret(JSON.stringify({ token, headers: {} })), enabled: 1 }
+      const result = await withMcpClient(row, client => client.listTools())
+      return send(res, 200, { ok: true, count: result.tools.length })
+    } catch (error) { return send(res, error.status || 502, { ok: false, error: error.message || '连接失败' }) }
+  }
   if (url.pathname === '/api/mcp' && req.method === 'GET') {
     const person = url.searchParams.get('person')
     if (!isValidAssistantId(person)) return send(res, 400, { error: '人物身份无效' })

@@ -655,6 +655,9 @@ export async function localHandle(path, init) {
     }
 
     // ── MCP 配置（本地保存配置；连接与执行需要后端执行器 → 明确降级） ──
+    if (p === '/api/mcp/test' && method === 'POST') {
+      return json(502, { ok: false, error: '本地模式不连接远程 MCP，测试链接需要云端/服务端模式' })
+    }
     if (p === '/api/mcp' && method === 'GET') {
       const person = q.get('person') || ''
       if (!person) return json(400, { error: '人物身份无效' })

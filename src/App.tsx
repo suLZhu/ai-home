@@ -3225,8 +3225,20 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
   // 已添加的服务收进一个下拉：默认只占一行，选中才展开详情与移除按钮。
   const [mcpOpen, setMcpOpen] = useState('')
   const [mcpCounts, setMcpCounts] = useState<Record<string, number | undefined>>({})
-  const [mcpEditId, setMcpEditId] = useState('')
+  const [mcpStatus, setMcpStatus] = useState<Record<string, 'ok' | 'fail'>>({})
+  const [mcpEdit, setMcpEdit] = useState<Array<{ id: string; person: Person }>>([])
+  const [mcpTest, setMcpTest] = useState<{ busy: boolean; ok?: boolean; message: string }>({ busy: false, message: '' })
   const mcp = useMcpLibrary()
+  // 同一服务会为每位助手各存一条连接，这里按「名称 + 地址」合成一张卡片。
+  const mcpGroups = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; url: string; items: McpLibraryItem[] }>()
+    for (const c of mcp.connections) {
+      const key = c.name + '|' + c.url
+      if (!map.has(key)) map.set(key, { key, name: c.name, url: c.url, items: [] })
+      map.get(key)!.items.push(c)
+    }
+    return [...map.values()]
+  }, [mcp.connections])
   const saveProfile = (e: FormEvent) => {
     e.preventDefault()
     if (!draft.name.trim() || !draft.endpoint.trim() || !draft.model.trim()) return
@@ -3239,58 +3251,79 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     setModelProfiles(old => old.filter(p => p.id !== id))
     setBindings(old => Object.fromEntries(ASSISTANT_PEOPLE.map(p => [p, old[p]?.modelProfileId === id ? { ...(old[p] || emptyBinding()), modelProfileId: '' } : (old[p] || emptyBinding())])) as Record<Person,PersonBinding>)
   }
+  const testMcp = async () => {
+    setMcpTest({ busy: true, message: '正在连接…' })
+    try {
+      const r = await apiFetch('/api/mcp/test', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: mcpDraft.url, token: mcpDraft.token }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || !d.ok) throw new Error(d.error || '连接失败')
+      setMcpTest({ busy: false, ok: true, message: '已连通 · 工具 ' + d.count })
+    } catch (err) { setMcpTest({ busy: false, ok: false, message: err instanceof Error ? err.message : '连接失败' }) }
+  }
   const addMcp = async (e: FormEvent) => {
     e.preventDefault(); setMcpBusy(true); mcp.setError('')
-    const owners = mcpDraft.owner === 'all' ? ASSISTANT_PEOPLE : [mcpDraft.owner]
     try {
-      if (mcpEditId) {
-        // 修改已有服务：PUT 保持 id 不变，聊天里的绑定不会失效
-        const r = await apiFetch('/api/mcp/' + encodeURIComponent(mcpEditId), { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: mcpDraft.owner, name: mcpDraft.name, url: mcpDraft.url, token: mcpDraft.token }) })
-        const d = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(d.error || '修改 MCP 失败')
+      if (mcpEdit.length) {
+        // 修改：逐个助手 PUT，id 不变，聊天里的绑定不失效
+        for (const it of mcpEdit) {
+          const r = await apiFetch('/api/mcp/' + encodeURIComponent(it.id), { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: it.person, name: mcpDraft.name, url: mcpDraft.url, token: mcpDraft.token }) })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) throw new Error(d.error || '修改 MCP 失败')
+        }
+        setMcpEdit([])
       } else {
-        for (const person of owners) {
+        // 不再选归属助手：一次为所有助手各建一条，聊天里再按助手开关
+        for (const person of ASSISTANT_PEOPLE) {
           const r = await apiFetch('/api/mcp', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, name: mcpDraft.name, url: mcpDraft.url, transport: 'httpStream', token: mcpDraft.token }) })
           const d = await r.json().catch(() => ({}))
           if (!r.ok) throw new Error(d.error || '保存 MCP 失败')
         }
       }
       setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
-      setMcpEditId('')
+      setMcpTest({ busy: false, message: '' })
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
     finally { setMcpBusy(false) }
   }
-  const toggleMcpCard = (c: McpLibraryItem) => {
-    const key = c.person + ':' + c.id
-    const open = mcpOpen === key
-    setMcpOpen(open ? '' : key)
-    if (!open && mcpCounts[key] === undefined) {
-      apiFetch('/api/mcp/' + c.id + '/tools', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
-        .then(async (r) => { const d = await r.json().catch(() => ({})); setMcpCounts((m) => ({ ...m, [key]: r.ok && Array.isArray(d.tools) ? d.tools.length : undefined })) })
-        .catch(() => { /* 拉不到工具数就保持「—」 */ })
-    }
+  const toggleMcpCard = (g: { key: string; items: McpLibraryItem[] }) => {
+    const open = mcpOpen === g.key
+    setMcpOpen(open ? '' : g.key)
+    if (open) return
+    const c = g.items[0]
+    if (!c) return
+    apiFetch('/api/mcp/' + c.id + '/tools', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}))
+        const n = r.ok && Array.isArray(d.tools) ? d.tools.length : undefined
+        setMcpCounts((m) => ({ ...m, [g.key]: n }))
+        setMcpStatus((m) => ({ ...m, [g.key]: n === undefined ? 'fail' : 'ok' }))
+      })
+      .catch(() => setMcpStatus((m) => ({ ...m, [g.key]: 'fail' })))
   }
-  const toggleMcpEnabled = async (c: McpLibraryItem, enabled: boolean) => {
+  const toggleGroupEnabled = async (g: { items: McpLibraryItem[] }, enabled: boolean) => {
     mcp.setError('')
     try {
-      const r = await apiFetch('/api/mcp/' + c.id, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person, enabled }) })
-      const d = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(d.error || '切换启用失败')
+      for (const c of g.items) {
+        const r = await apiFetch('/api/mcp/' + c.id, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person, enabled }) })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d.error || '切换启用失败')
+      }
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
   }
-  const startEditMcp = (c: McpLibraryItem) => {
-    setMcpEditId(c.id)
-    setMcpDraft({ name: c.name, url: c.url, token: '', owner: c.person })
+  const startEditMcp = (g: { name: string; url: string; items: McpLibraryItem[] }) => {
+    setMcpEdit(g.items.map((c) => ({ id: c.id, person: c.person })))
+    setMcpDraft({ name: g.name, url: g.url, token: '', owner: 'all' })
     document.querySelector('.resource-form')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
-  const removeMcp = async (c: McpLibraryItem) => {
-    if (!window.confirm('移除「' + c.name + '」（' + displayName(c.person) + '）？')) return
+  const removeMcp = async (g: { name: string; items: McpLibraryItem[] }) => {
+    if (!window.confirm('移除「' + g.name + '」？（所有助手上的这条服务都会删除）')) return
     mcp.setError('')
     try {
-      const r = await apiFetch('/api/mcp/' + c.id, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '移除失败') }
+      for (const c of g.items) {
+        const r = await apiFetch('/api/mcp/' + c.id, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '移除失败') }
+      }
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
   }
@@ -3314,36 +3347,37 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     </>}
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
     {tab==='mcp' && <>
-      <form className="resource-form" onSubmit={addMcp}><h4>{mcpEditId ? '修改 MCP 服务' : '添加 MCP 服务'}</h4>
+      <form className="resource-form" onSubmit={addMcp}><h4>{mcpEdit.length ? '修改 MCP 服务' : '添加 MCP 服务'}</h4>
         <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
         <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
-        <label>Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password"/></label>
-        <label>归属助手<SoftSelect value={mcpDraft.owner} onChange={v=>setMcpDraft({...mcpDraft,owner:v})} options={[{value:'all',label:'全部助手（一次添加）'},...ASSISTANT_PEOPLE.map(p=>({value:p,label:displayName(p)}))]}/></label>
-        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEditId?'保存修改':'添加服务')}</button>{mcpEditId&&<button type="button" onClick={()=>{setMcpEditId('');setMcpDraft({name:'',url:'',token:'',owner:'all'})}}>取消</button>}</div>
-        <small>服务端按助手隔离 MCP 调用（安全边界保留）。「全部助手」会为每位助手各建一条连接；聊天窗口里仍可单独勾选某个助手是否启用。</small>
+        <label>Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/></label>
+        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button>{mcpEdit.length>0&&<button type="button" onClick={()=>{setMcpEdit([]);setMcpDraft({name:'',url:'',token:'',owner:'all'});setMcpTest({busy:false,message:''})}}>取消</button>}</div>
+        {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?'✓ ':'✗ '}{mcpTest.message}</small>}
+        <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
       </form>
-      {/* 已添加的服务：折叠卡片，点三角展开详情 / 修改 / 删除 */}
       <div className="mcp-tool-picker">
         {mcp.error && <p className="mcp-error">{mcp.error}</p>}
-        {mcp.connections.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，先在上面添加。</p>}
-        {mcp.connections.map((c) => {
-          const key = c.person + ':' + c.id
-          const open = mcpOpen === key
-          return <article className={'mcp-card' + (open ? ' open' : '')} key={key}>
-            <button type="button" className="mcp-card-toggle" aria-expanded={open} onClick={() => toggleMcpCard(c)}>
-              <b>{c.name}</b>
-              <span className="mcp-card-tools">{mcpCounts[key] === undefined ? '工具 —' : '工具 ' + mcpCounts[key]}</span>
+        {mcpGroups.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，先在上面添加。</p>}
+        {mcpGroups.map((g) => {
+          const open = mcpOpen === g.key
+          const count = mcpCounts[g.key]
+          const status = mcpStatus[g.key]
+          const enabled = g.items.every((c) => c.enabled !== false)
+          return <article className={'mcp-card' + (open ? ' open' : '')} key={g.key}>
+            <button type="button" className="mcp-card-toggle" aria-expanded={open} onClick={() => toggleMcpCard(g)}>
+              <span className="mcp-card-main"><b>{g.name}</b><small>{count === undefined ? '工具 —' : '工具 ' + count + '/' + count}</small></span>
+              <span className={'mcp-card-status' + (status === 'ok' ? ' ok' : status === 'fail' ? ' bad' : '')}>{status === 'ok' ? '已连通' : status === 'fail' ? '未连通' : '未测试'}</span>
               <span className="mcp-card-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
             </button>
             {open && <div className="mcp-card-body">
-              <small>{displayName(c.person)} · {c.url}</small>
-              <label className="mcp-enable-row">启用<input type="checkbox" className="tray-switch" checked={c.enabled !== false} onChange={e => void toggleMcpEnabled(c, e.target.checked)}/></label>
-              <div className="world-actions"><button type="button" onClick={() => startEditMcp(c)}>修改设置</button><button type="button" onClick={() => void removeMcp(c)}>删除</button></div>
+              <small>{g.items.map((c) => displayName(c.person)).join('、')} · {g.url}</small>
+              <label className="mcp-enable-row">启用<input type="checkbox" className="tray-switch" checked={enabled} onChange={e => void toggleGroupEnabled(g, e.target.checked)}/></label>
+              <div className="world-actions"><button type="button" onClick={() => startEditMcp(g)}>修改设置</button><button type="button" onClick={() => void removeMcp(g)}>删除</button></div>
             </div>}
           </article>
         })}
       </div>
-      </>}
+    </>}
   </div>
 }
 
