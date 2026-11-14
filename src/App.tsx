@@ -2250,10 +2250,6 @@ function ToolCallLiveBar({conversationId}:{conversationId:string}) {
 const DEFAULT_AVATAR="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23ded7ee'/%3E%3Ccircle cx='32' cy='25' r='11' fill='%238b7fb8'/%3E%3Cpath d='M10 57c4-12.5 13-19 22-19s18 6.5 22 19z' fill='%238b7fb8'/%3E%3C/svg%3E"
 
 // 消息操作栏的线性图标（低对比度轻量风格，颜色跟随 currentColor / 主题变量）。
-const IconCopy=()=><svg viewBox="0 0 24 24" width="15" height="15" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5.5 15A2.5 2.5 0 0 1 3 12.5v-7A2.5 2.5 0 0 1 5.5 3h7A2.5 2.5 0 0 1 15 5.5"/></svg>
-const IconEdit=()=><svg viewBox="0 0 24 24" width="15" height="15" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19.2 8.8a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M14.5 6.5l3 3"/></svg>
-const IconRegen=()=><svg viewBox="0 0 24 24" width="15" height="15" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20.5 4.5V10H15"/></svg>
-const IconTrash=()=><svg viewBox="0 0 24 24" width="15" height="15" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6.5h16"/><path d="M9.5 6.5V5a1.2 1.2 0 0 1 1.2-1.2h2.6A1.2 1.2 0 0 1 14.5 5v1.5"/><path d="M6.5 6.5l.8 11.6A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.9l.8-11.6"/><path d="M10.4 10v6M13.6 10v6"/></svg>
 
 // 微信式表情面板：内置表情集（分类顺序≈微信：面孔→手势→动物→食物→活动→符号）与搜索关键词表。
 const STICKERS=['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','☺️','😚','😋','😛','😜','🤪','😝','🤗','🤭','🫢','🤫','🤔','🫡','🤐','😶','😐','😑','😬','🙄','😯','😪','😮','😴','🤤','😌','😔','😏','🥲','😢','😭','😮‍💨','😲','😵','😵‍💫','🤠','😎','🤓','🧐','😕','🫤','😟','🙁','☹️','😰','😨','🥶','🥵','😱','😣','😫','😩','😖','😞','😤','😠','😡','🤬','🤯','😳','🥴','🤢','🤮','😷','🤒','🤕','👋','🤚','👌','🤌','✌️','🤞','🫰','🤟','🤙','👍','👎','🫱','🫲','🙏','💪','🙌','👏','🫶','🤝','🖖','☝️','👇','👈','👉','🧑','👨','👩','🧔','👦','👧','🕺','💃','🧎','🧘','🙇','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🦄','🐝','🦋','🐢','🐍','🐙','🐧','🐦','🦅','🦉','🐞','🐟','🐠','🐬','🐳','🦈','🐊','🐉','🐲','🌵','🌴','🌳','🍀','🍁','🍂','🌿','🌷','🌹','🌺','🌻','🌼','🌸','🍉','🍓','🍒','🍑','🍊','🍋','🍌','🍇','🥝','🍅','🥑','🍞','🍔','🍟','🍕','🌭','🌮','🌯','🥪','🍜','🍛','🍚','🍣','🍤','🍳','🥞','🧀','🍰','🎂','🍪','☕','🍵','🍺','🍻','🥂','🍷','🥤','⚽','🏀','🎾','🏈','⚾','🎮','🎯','🎤','🎧','🎵','🎶','📷','📺','🎬','🎭','🎨','🎪','🎠','🎡','🎢','🎉','🎊','🎁','🎈','🏆','🥇','🎿','🛷','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','⭐','🌟','✨','💫','🔥','💧','🌈','❄️','☀️','🌙','⚡','🌊','💯','❗','❓','✅','❌','⭕','🚫','💤','💌','📜','📌','📍','🔔']
@@ -2726,12 +2722,12 @@ function Chat(p: any) {
         </div>
           </>}
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
-          <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
-          <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>
-          {m.role==='assistant'&&<button type="button" className="message-action" title={canRegenerate?'重新生成':'只有最新一条回复可以重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
+          <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<span className="message-action-label">复制</span>}</button>
+          <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><span className="message-action-label">修改</span></button>
+          {m.role==='assistant'&&<button type="button" className="message-action" title={canRegenerate?'重新生成':'只有最新一条回复可以重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><span className="message-action-label">重生成</span></button>}
           {armed
             ? <button type="button" className="message-action danger armed" title="再点一次确认删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-armed-text">删除？</span></button>
-            : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><IconTrash/></button>}
+            : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-label">删除</span></button>}
           {m.role==='assistant'&&tokenSummary&&<details className="message-tech inline">
             <summary>{tokenSummary.label}</summary>
             <div className="message-tech-body">
