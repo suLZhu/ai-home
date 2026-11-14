@@ -155,15 +155,14 @@
 .shell.theme-night .fullscreen-chat .compose-box .send-button { color:#1b1f2b!important; }
 .shell .compose-more-actions button { border:1px solid var(--border-subtle)!important;background:var(--field)!important;color:var(--text-primary)!important;font-size:var(--type-button)!important; }
 
-/* ── 消息操作：默认隐藏，桌面 hover / Android 长按 / 键盘聚焦才出现 ─── */
-.shell .message-stack .message-actions { opacity:0;pointer-events:none;transition:opacity .15s ease; }
-.shell .message-row:hover .message-actions,
-.shell .message-row.actions-open .message-actions,
-.shell .message-actions:focus-within { opacity:1;pointer-events:auto; }
-@media (hover:none) {
-  .shell .message-row:hover:not(.actions-open) .message-actions { opacity:0;pointer-events:none; }
-}
+/* ── 消息操作：常驻在气泡正下方（复制/修改/重新生成/删除 + Token），不再靠 hover 才出现 ─── */
+.shell .message-stack .message-actions { opacity:.9;pointer-events:auto;transition:opacity .15s ease; }
+.shell .message-row:hover .message-actions { opacity:1; }
 .shell .message-action { color:var(--text-secondary)!important; }
+/* Token 用量贴在操作图标后面同一行，不单独占一块、也不和气泡隔很远 */
+.shell .message-stack .message-actions .message-tech { margin:0 0 0 3px;display:inline-flex;align-items:center;line-height:1; }
+.shell .message-stack .message-actions .message-tech>summary { gap:2px;padding:0;font-size:var(--type-meta); }
+.shell .message-stack .message-actions .message-tech>summary::after { font-size:var(--type-meta); }
 
 /* ── 技术信息：默认只留一行弱状态，展开后才是完整数据 ───────────────── */
 .shell .message-usage { display:none!important; }
@@ -227,7 +226,7 @@
 .shell .syscap-foot button { font-size:var(--type-button)!important; }
 
 /* ── 系统字体放大安全网：不固定高度、允许换行、气泡按视口比例收缩 ──── */
-.shell :is(button,.kelivo-row,.syscap-row,.soft-select-trigger):not(.message-action):not(.btn-icon) { height:auto;min-height:36px; }
+.shell :is(button,.kelivo-row,.syscap-row,.soft-select-trigger):not(.message-action):not(.btn-icon):not(.message-avatar):not(.chat-avatar) { height:auto;min-height:36px; }
 .shell :is(button,label,.kelivo-row-label,.syscap-label,.syscap-status,.message-tech-body span) { overflow-wrap:anywhere; }
 .shell .bubble { height:auto;max-width:min(80vw,320px)!important;overflow-x:hidden; }
 .shell .message-stack { min-width:0; }

@@ -1535,6 +1535,25 @@ export default function App() {
     } finally { regenLockRef.current = false }
   }
 
+  // 用户消息「保存并重发」：改文字 → 丢掉这条之后的旧回复 → 以这条为历史末尾重新请求一次回答。
+  async function resendUserMessage(messageId: string, newText: string): Promise<'ok'|'fail'|'noop'> {
+    const text = newText.trim()
+    if (!messageId || !text) return 'fail'
+    if (sending || regenLockRef.current) return 'noop'
+    const target = person
+    const convId = activeConversationIds[target] || ''
+    const list = (conversations[target]||[]).find(c=>c.id===convId)?.messages || (convId===activeConversationIds[target]?messages[target]:[])
+    const idx = list.findIndex(m => m && m.id === messageId)
+    if (idx < 0 || list[idx].role !== 'user') return 'fail'
+    editMessage(messageId, text)
+    const after = list.slice(idx + 1).map(m => m.id).filter((id): id is string => !!id)
+    if (after.length) deleteMessages(after)
+    regenLockRef.current = true
+    try {
+      return await send(text, [], { conversationId: convId, historyEndIndex: idx, insertUser: false })
+    } finally { regenLockRef.current = false }
+  }
+
   function addTask() {
     const text = draft.trim()
     if (!text) return
@@ -1658,7 +1677,7 @@ export default function App() {
         personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} customAssets={customAssets}
         pendingSends={pendingSends}
         enqueuePending={enqueuePending} flushPending={flushPending} cancelPending={cancelPending} editPendingText={editPendingText} stopGeneration={stopGeneration}
-        editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} translateReasoning={translateReasoningText}
+        editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} resendUserMessage={resendUserMessage} translateReasoning={translateReasoningText}
         tasks={tasks} addTask={addTask}
         userSettings={userSettings} setUserSettings={setUserSettings}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
@@ -1811,6 +1830,7 @@ function Room(props: {
   deleteMessage: (messageId:string)=>void,
   deleteMessages: (ids:string[])=>void,
   regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>,
+  resendUserMessage: (messageId:string,newText:string)=>Promise<'ok'|'fail'|'noop'>,
   translateReasoning: (text:string)=>Promise<string>
 }) {
   // 历史会话与工作区都默认展开：进来直接看到对话框名称与小程序。折叠偏好存本机，
@@ -2385,7 +2405,7 @@ function Chat(p: any) {
   const delArmTimerRef=useRef<number|undefined>(undefined)
   const pressStartRef=useRef(0)
   // 触屏长按只展开这一条消息的操作栏；多选删除改由顶栏入口触发，原有多选逻辑不变。
-  const [actionsOpenId,setActionsOpenId]=useState<string|null>(null)
+  // 多选就靠长按气泡进入：不再有「操作面板展开」这个中间态。
   const composeTextRef=useRef<HTMLTextAreaElement|null>(null)
   // 输入框单行起步、随内容增高，超过 120px 后内部滚动（不撑开整张聊天页）。
   useEffect(()=>{
@@ -2455,6 +2475,13 @@ function Chat(p: any) {
     finally{setTranslatingId(null)}
   }
   function saveEdit(){if(!editingId)return;const text=editDraft.trim();if(!text)return;p.editMessage(editingId,text);setEditingId(null);setEditDraft('')}
+  // 用户消息专用：改完文字后，把这条之后的旧回复全部丢掉并重新请求一次回答。
+  async function saveEditAndResend(m:ChatMessage){
+    const text=editDraft.trim()
+    if(!m.id||!text||p.sending)return
+    setEditingId(null);setEditDraft('')
+    await p.resendUserMessage(m.id,text)
+  }
   function cancelEdit(){setEditingId(null);setEditDraft('')}
   // 单条删除：轻量二次确认——第一次点垃圾桶变红「删除？」，3 秒内再点一次才执行。
   function removeMessage(m:ChatMessage){
@@ -2488,19 +2515,18 @@ function Chat(p: any) {
     p.deleteMessages(selectedIds)
     exitSelect()
   }
-  // 触屏长按展开这条消息的复制/修改/删除操作（松手后的 click 由 pressStartRef 吞掉）。
+  // 触屏长按气泡 = 进入多选并选中这条；松手后的 click 由 pressStartRef 吞掉。
   // 时间戳用事件自带的 e.timeStamp（同一单调时钟），避免在组件体内调用 Date.now。
   function bubblePointerDown(e:React.PointerEvent,m:ChatMessage){
     pressStartRef.current=e.timeStamp
     if(e.pointerType!=='touch'||!m.id||selectMode)return
     const targetId=m.id
     if(longPressRef.current)window.clearTimeout(longPressRef.current)
-    longPressRef.current=window.setTimeout(()=>{setActionsOpenId(targetId)},480)
+    longPressRef.current=window.setTimeout(()=>{enterSelect(targetId)},480)
   }
   function bubblePointerEnd(){if(longPressRef.current){window.clearTimeout(longPressRef.current);longPressRef.current=undefined}}
   function bubbleClick(e:React.MouseEvent,m:ChatMessage){
     if(e.timeStamp-pressStartRef.current>420){pressStartRef.current=0;return} // 长按刚触发，吞掉这次 click
-    if(actionsOpenId&&actionsOpenId!==m.id)setActionsOpenId(null)
     if(selectMode){if(m.id)toggleSelect(m.id)}
   }
   const lastMessage=currentMessages[currentMessages.length-1]
@@ -2675,12 +2701,12 @@ function Chat(p: any) {
     const shownContent=m.role==='assistant'?cleanupMessageText(m.content||''):(m.content||'')
     const shownReasoning=m.role==='assistant'?cleanupMessageText(m.reasoning||''):(m.reasoning||'')
     const tokenSummary=m.role==='assistant'&&m.usage?summarizeTokenUsage(m.usage):null
-    return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')+(actionsOpenId===m.id?' actions-open':'')} key={i} data-message-id={m.id||undefined}>
+    return <div className={'message-row '+m.role+(inSelect?' select-mode':'')+(selected?' is-selected':'')+(searchCurrentId&&m.id===searchCurrentId?' search-current':'')} key={i} data-message-id={m.id||undefined}>
       {inSelect&&canAct&&<button type="button" className={'msg-check'+(selected?' on':'')} role="checkbox" aria-checked={selected} aria-label={selected?'取消选择这条消息':'选择这条消息'} onClick={()=>toggleSelect(m.id!)}>{selected?'✓':''}</button>}
       {m.role==='assistant'&&<button type="button" className="message-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button>}
       <div className={'message-stack '+(m.role==='user'?'stack-end':'stack-start')}>
         {isEditing
-          ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button><button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
+          ? <div className="message-edit"><textarea value={editDraft} onChange={e=>setEditDraft(e.target.value)} rows={3} aria-label="修改消息内容" placeholder="修改这条消息的文字…（只改文字，不重新发送）"/><div className="message-edit-actions"><button type="button" onClick={cancelEdit}>取消</button>{m.role==='user'&&<button type="button" disabled={!editDraft.trim()||p.sending} onClick={()=>void saveEditAndResend(m)}>保存并重发</button>}<button type="button" className="primary" disabled={!editDraft.trim()} onClick={saveEdit}>保存</button></div></div>
           : <>
             {shownReasoning?<details className="reasoning">
               <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
@@ -2702,27 +2728,27 @@ function Chat(p: any) {
         {!isEditing&&canAct&&!inSelect&&<div className="message-actions">
           <button type="button" className="message-action" title="复制" aria-label="复制消息" disabled={!m.content} onClick={()=>void copyMessage(m)}>{copiedId===m.id?<span className="message-action-done" aria-hidden="true">✓</span>:<IconCopy/>}</button>
           <button type="button" className="message-action" title="修改" aria-label="修改这条消息" onClick={()=>startEdit(m)}><IconEdit/></button>
-          {m.role==='assistant'&&isLast&&<button type="button" className="message-action" title={p.sending?'正在生成，稍后再试':'重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
+          {m.role==='assistant'&&<button type="button" className="message-action" title={canRegenerate?'重新生成':'只有最新一条回复可以重新生成'} aria-label="重新生成回复" disabled={!canRegenerate} onClick={()=>void regenerate(m)}><IconRegen/></button>}
           {armed
             ? <button type="button" className="message-action danger armed" title="再点一次确认删除这条消息" onClick={()=>removeMessage(m)}><span className="message-action-armed-text">删除？</span></button>
             : <button type="button" className="message-action danger" title="删除这条消息" aria-label="删除这条消息" onClick={()=>removeMessage(m)}><IconTrash/></button>}
+          {m.role==='assistant'&&tokenSummary&&<details className="message-tech inline">
+            <summary>{tokenSummary.label}</summary>
+            <div className="message-tech-body">
+              {tokenSummary.rows.map(r=><span key={r.label}>{r.label}：{r.value}</span>)}
+              {estimatedCost(m.usage!)!==null&&<span>≈ ¥{estimatedCost(m.usage!)!.toFixed(4)}</span>}
+              {p.lastRouteInfo&&<span>{p.lastRouteInfo}</span>}
+            </div>
+          </details>}
         </div>}
         {m.role==='user'&&m.contextNote&&<div className="message-context-note" title="发送时附带的本地上下文（仅注入模型提示词，不显示在气泡内）">{m.contextNote}</div>}
-        {m.role==='assistant'&&tokenSummary&&<details className="message-tech">
-          <summary>{tokenSummary.label}<span className="fold-chevron" aria-hidden="true">›</span></summary>
-          <div className="message-tech-body">
-            {tokenSummary.rows.map(r=><span key={r.label}>{r.label}：{r.value}</span>)}
-            {estimatedCost(m.usage!)!==null&&<span>≈ ¥{estimatedCost(m.usage!)!.toFixed(4)}</span>}
-            {p.lastRouteInfo&&<span>{p.lastRouteInfo}</span>}
-          </div>
-        </details>}
       </div>
       {m.role==='user'&&<button type="button" className="message-avatar message-avatar-me avatar-link" title="我的头像 · 点开助手档案的用户设置" aria-label="我的头像" onClick={()=>p.openAssistantProfile(true)}>{userAvatar?<img src={userAvatar} alt=""/>:myName.slice(0,1)}</button>}
     </div>
   }
   return <div className="fullscreen-chat">
     {/* 全面屏顶栏：不铺返回/会话控件。历史会话从左侧抽屉点选，返回房间走系统返回手势或抽屉底部入口。 */}
-    <header className="chat-header"><span className="chat-header-spacer" aria-hidden="true"/><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className="btn-icon select-toggle" aria-label="多选消息" title="多选消息" onClick={()=>enterSelect()}>☑</button><button type="button" className="btn-icon" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>⇄</button></span></header>
+    <header className="chat-header"><span className="chat-header-spacer" aria-hidden="true"/><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className="btn-icon" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>⇄</button></span></header>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}

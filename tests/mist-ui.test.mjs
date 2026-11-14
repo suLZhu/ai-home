@@ -62,20 +62,30 @@ test('App 内字体大小写进 --font-scale，形状/间距 tokens 与颜色解
     'system-ui,"Noto Sans SC",sans-serif')
 })
 
-test('聊天技术信息默认折叠、操作栏默认隐藏、输入框单行起步', () => {
+test('聊天技术信息折叠、操作栏常驻在气泡下方、输入框单行起步', () => {
   const app = read('src/App.tsx')
-  assert.match(app, /<details className="message-tech">/)
+  assert.match(app, /<details className="message-tech inline">/)
   // P1-6：默认只显示「Token 644 ›」轻量入口，展开明细由纯函数汇总（无缓存不显示缓存行）。
   assert.match(app, /<summary>\{tokenSummary\.label\}/)
   assert.match(app, /summarizeTokenUsage\(m\.usage\)/)
   assert.match(app, /message-tech-body/)
   assert.match(app, /p\.lastRouteInfo&&<span>\{p\.lastRouteInfo\}<\/span>/, '线路信息保留在详情里')
-  assert.match(app, /actionsOpenId===m\.id\?' actions-open'/, '长按展开操作栏')
+  // 长按气泡 = 进入多选；操作栏不再靠 actionsOpenId 展开。
+  assert.match(app, /longPressRef\.current=window\.setTimeout\(\(\)=>\{enterSelect\(targetId\)\},480\)/)
+  assert.doesNotMatch(app, /actionsOpenId/, '不再需要长按展开的操作面板状态')
+  assert.doesNotMatch(app, /select-toggle/, '顶栏的 ☑ 多选按钮已移除')
+  // 用户消息的修改有两个出口：只保存 / 保存并重发。
+  assert.match(app, /保存并重发/)
+  assert.match(app, /resendUserMessage\(m\.id,text\)/)
   assert.match(app, /rows=\{1\}/)
   assert.match(app, /composeTextRef/)
   assert.match(app, /import '\.\/mist\.css'/)
   const css = read('src/mist.css')
-  assert.match(css, /\.message-stack \.message-actions \{ opacity:0;pointer-events:none/)
+  assert.match(css, /\.message-stack \.message-actions \{ opacity:\.9;pointer-events:auto/)
+  // Token 贴在操作图标同一行
+  assert.match(css, /\.message-actions \.message-tech \{ margin:0 0 0 3px;display:inline-flex/)
+  // 头像不受「按钮最小 36px」影响，保持正圆
+  assert.match(css, /:not\(\.message-avatar\):not\(\.chat-avatar\)/)
   assert.match(css, /font-size:var\(--type-body\)!important/)
   assert.match(css, /max-width:min\(80vw,320px\)!important/, '气泡上限按视口 80% 计，桌面再夹到 320px')
 })
