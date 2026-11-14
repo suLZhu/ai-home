@@ -2027,3 +2027,11 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:none!important}
 .shell .app-sidebar .sidebar-conv-edit{display:none!important}
 .shell .app-sidebar .sidebar-conv-row{gap:4px}
+
+/* 侧边栏 = 屏幕 1/2，宽度回来后恢复次要信息 */
+.shell .app-sidebar{width:50vw!important;padding-left:8px!important;padding-right:8px!important}
+.shell .app-sidebar .sidebar-conv-edit{display:inline-flex!important}
+.shell .app-sidebar .sidebar-link small{display:block!important;font-size:8.5px!important}
+.shell .app-sidebar .sidebar-treasure .sidebar-section-head small{display:inline!important}
+.shell .app-sidebar .sidebar-assistant-tool>small{display:block!important;font-size:8.5px!important}
+.shell .app-sidebar .sidebar-combined-head small,.shell .app-sidebar .sidebar-section-head small{max-width:72px}
