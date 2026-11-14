@@ -35,13 +35,6 @@ type Props = {
   setSubscriptions: Dispatch<SetStateAction<SubscriptionAccount[]>>
 }
 
-const TABS = [
-  { id: 'all', label: '全部' },
-  { id: 'gpt', label: 'ChatGPT' },
-  { id: 'claude', label: 'Claude' },
-  { id: 'grok', label: 'Grok' },
-]
-
 const ROWS = [
   { id: 'gpt', name: 'ChatGPT', sub: 'GPT / Codex 订阅', mark: '◎' },
   { id: 'claude', name: 'Claude', sub: 'Pro / Max 订阅', mark: '✳' },
@@ -69,7 +62,6 @@ async function fetchRemoteModels(endpoint: string, token: string): Promise<strin
 }
 
 export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, subscriptions, setSubscriptions }: Props) {
-  const [tab, setTab] = useState('all')
   const [busy, setBusy] = useState('')
   const [menu, setMenu] = useState('')
   const [errorInfo, setErrorInfo] = useState<LoginErrorInfo | null>(null)
@@ -77,7 +69,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   const [modelOpen, setModelOpen] = useState('')
   const [customModel, setCustomModel] = useState('')
   const [modelNote, setModelNote] = useState('')
-  const rows = tab === 'all' ? ROWS : ROWS.filter(r => r.id === tab)
+  // 可登录的渠道只有这三家，全部直接列出来；不再做无意义的分类筛选条。
+  const rows = ROWS
   const accountOf = (id: string) => subscriptions.find(s => s.channelId === id)
 
   // 凭据只有一份：订阅登录拿到的令牌直接进供应商的多 KEY 队列；
@@ -200,11 +193,6 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
         <b>账号登录</b>
         <p className="account-page-lead">登录订阅账号后，模型会自动出现在聊天的模型面板里，和填 API 一样直接选。</p>
       </header>
-      <div className="account-tabs" role="tablist" aria-label="账号登录渠道">
-        {TABS.map(t => <button type="button" role="tab" aria-selected={tab === t.id} key={t.id}
-          className={'account-tab' + (tab === t.id ? ' active' : '')}
-          onClick={() => { setTab(t.id); setErrorInfo(null); setShowErrorDetail(false); setMenu(''); setModelOpen('') }}>{t.label}</button>)}
-      </div>
       <div className="account-rows">
         {rows.map(r => {
           const a = accountOf(r.id)

@@ -165,4 +165,7 @@ test('订阅账号直接作为设置页内容渲染，不再从底部弹半屏�
   assert.doesNotMatch(sub, /account-login-layer|account-login-sheet/, '不应再有全屏遮罩 + 底部面板')
   assert.match(css, /\.shell #subscription-accounts\.account-login-page\{/)
   assert.doesNotMatch(css, /account-login-layer|account-login-sheet/)
+  // 只有三家可登录渠道，不再保留「全部 / ChatGPT / Claude / Grok」分类筛选条。
+  assert.doesNotMatch(sub, /account-tabs|account-tab\b/)
+  assert.doesNotMatch(css, /account-tabs|account-tab\b/)
 })

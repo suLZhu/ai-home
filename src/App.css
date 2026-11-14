@@ -1455,11 +1455,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell #subscription-accounts .account-page-head{display:flex;flex-direction:column;gap:5px;margin:0 0 12px}
 .shell #subscription-accounts .account-page-head>b{font-size:15px;font-weight:600;color:#403b35}
 .shell #subscription-accounts .account-page-lead{margin:0;font-size:11px;line-height:1.6;color:#9a9186}
-.shell #subscription-accounts .account-tabs{flex:0 0 auto;display:flex;align-items:center;gap:4px;padding:0 0 12px;overflow-x:auto;scrollbar-width:none}
-.shell #subscription-accounts .account-tabs::-webkit-scrollbar{display:none}
-.shell #subscription-accounts button.account-tab{flex:0 0 auto;padding:7px 13px!important;border:0!important;border-radius:999px!important;background:transparent!important;box-shadow:none!important;font-size:12px;color:#8a8378;white-space:nowrap;cursor:pointer}
-.shell #subscription-accounts button.account-tab.active{background:#f6e6db!important;color:#8b593b!important;font-weight:600}
-.shell #subscription-accounts .account-rows{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid #f0e7dc}
+.shell #subscription-accounts .account-rows{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding-top:0;border-top:0}
 .shell #subscription-accounts .account-row-wrap{display:flex;flex-direction:column}
 .shell #subscription-accounts .account-row{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #f0e5d9!important;border-radius:12px!important;background:#fffdfa!important;box-shadow:none!important}
 .shell #subscription-accounts .account-mark{flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;border-radius:50%;background:#f3ece4;color:#4a423a;font-size:19px;line-height:1}
@@ -1540,10 +1536,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell #subscription-accounts.account-login-page{padding:14px;border:1px solid #eeeae4!important;border-radius:18px!important;background:#fff!important;box-shadow:none!important}
 .shell #subscription-accounts .account-page-head>b{font-size:14.5px;color:#302b26}
 .shell #subscription-accounts .account-page-lead{font-size:10.5px;color:#9a9186}
-.shell #subscription-accounts .account-tabs{gap:6px;padding:0 0 12px}
-.shell #subscription-accounts button.account-tab{padding:6px 13px!important;background:#f6f4f1!important;color:#8e867b!important;font-size:11.5px}
-.shell #subscription-accounts button.account-tab.active{background:#8b593b!important;color:#fff!important;font-weight:600}
-.shell #subscription-accounts .account-rows{gap:9px;padding-top:12px;border-top:1px solid #f3efe9}
+.shell #subscription-accounts .account-rows{gap:9px;padding-top:0;border-top:0}
 .shell #subscription-accounts .account-row{gap:11px;padding:11px 12px;border:1px solid #eeeae4!important;border-radius:13px!important;background:#fff!important}
 .shell #subscription-accounts .account-mark{width:34px;height:34px;border-radius:10px;background:#f2eee9;color:#6b5b4d;font-size:17px}
 .shell #subscription-accounts .account-mark.mark-gpt{background:#eaf4ee;color:#3f7a5a}
