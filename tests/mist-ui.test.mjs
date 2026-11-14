@@ -266,3 +266,19 @@ test('世界书编辑器：去掉粘滞/冷却/延迟，数字可清空，绑定
   assert.match(wb, /world-entry-caret/)
   assert.match(wb, /aria-expanded=\{openId===e\.id\}/)
 })
+
+test('MCP 服务改成与世界书一致的折叠卡片，Token 只有一个输入框', () => {
+  const app = read('src/App.tsx')
+  assert.match(app, /className="mcp-card-toggle"/)
+  assert.match(app, /mcp-card-tools/)
+  assert.match(app, /className="mcp-enable-row">启用<input/)
+  assert.match(app, /'修改 MCP 服务' : '添加 MCP 服务'/)
+  assert.match(app, /method: 'PUT'/)
+  assert.doesNotMatch(app, /Bearer Token/)
+  assert.doesNotMatch(app, /连接类型<SoftSelect/)
+  // 后端补了 PUT，编辑不会换 id、不会丢聊天绑定
+  const local = read('src/localBackend.mjs')
+  const server = read('src/server.mjs')
+  assert.match(local, /method === 'PUT' && !mcpMatch\[2\]/)
+  assert.match(server, /req.method === 'PUT' && !mcpMatch\[2\]/)
+})

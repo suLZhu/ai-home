@@ -654,6 +654,29 @@ const apiServer = createServer(async (req, res) => {
     const result = db.prepare('DELETE FROM mcp_connections WHERE id=? AND person=?').run(mcpMatch[1], body.person)
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '未找到该人物绑定的 MCP 服务' })
   }
+  if (mcpMatch && req.method === 'PUT' && !mcpMatch[2]) {
+    try {
+      const body = await readBody(req)
+      const person = body.person
+      if (!isValidAssistantId(person)) return send(res, 400, { error: '必须指定人物身份' })
+      const row = db.prepare('SELECT * FROM mcp_connections WHERE id=? AND person=?').get(mcpMatch[1], person)
+      if (!row) return send(res, 404, { error: '未找到该人物绑定的 MCP 服务' })
+      const name = String(body.name ?? row.name).trim().slice(0, 120)
+      if (!name) return send(res, 400, { error: '请填写服务名称' })
+      const remote = validateRemoteUrl(String(body.url ?? row.url).trim())
+      const enabled = body.enabled === undefined ? row.enabled !== 0 : (body.enabled ? 1 : 0)
+      const token = body.token === undefined ? null : String(body.token || '').trim()
+      if (token !== null && token.length > 8192) return send(res, 400, { error: 'Token 长度超出限制' })
+      const updatedAt = new Date().toISOString()
+      if (token === null) {
+        db.prepare('UPDATE mcp_connections SET name=?, url=?, enabled=?, updated_at=? WHERE id=? AND person=?').run(name, remote.toString(), enabled, updatedAt, mcpMatch[1], person)
+      } else {
+        db.prepare('UPDATE mcp_connections SET name=?, url=?, enabled=?, token_enc=?, updated_at=? WHERE id=? AND person=?').run(name, remote.toString(), enabled, encryptSecret(JSON.stringify({ token, headers: {} })), updatedAt, mcpMatch[1], person)
+      }
+      const next = db.prepare('SELECT * FROM mcp_connections WHERE id=? AND person=?').get(mcpMatch[1], person)
+      return send(res, 200, { connection: publicMcp(next) })
+    } catch (error) { return send(res, error.status || 400, { error: error.message || '更新 MCP 配置失败' }) }
+  }
   if (mcpMatch && req.method === 'POST' && ['tools','call'].includes(mcpMatch[2])) {
     try {
       const body = await readBody(req)

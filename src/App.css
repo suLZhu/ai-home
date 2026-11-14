@@ -1792,3 +1792,16 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .settings-screen{padding-top:8px!important}
 .shell .settings-heading{padding-top:0!important;margin-bottom:8px!important}
 .shell .settings-heading h2{margin:2px 0 4px!important}
+
+/* MCP 列表：与世界书一致——折叠卡片，只显示名称 + 工具数 + 三角 */
+.shell .mcp-tool-picker .mcp-card{border:1px solid var(--line,#e6ded2);border-radius:12px;margin:6px 0;overflow:hidden;background:var(--card,#fffdf9)}
+.shell .mcp-tool-picker .mcp-card-toggle{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left;font-size:13.5px;color:var(--ink,#302c37);cursor:pointer}
+.shell .mcp-tool-picker .mcp-card-toggle b{flex:1;min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .mcp-tool-picker .mcp-card-tools{flex:0 0 auto;font-size:11px;color:var(--muted,#8a7d6d)}
+.shell .mcp-tool-picker .mcp-card-caret{flex:0 0 auto;font-size:11px;color:var(--muted,#8a7d6d)}
+.shell .mcp-tool-picker .mcp-card.open .mcp-card-toggle{border-bottom:1px solid var(--line,#e6ded2)!important}
+.mcp-card-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+.mcp-card-body>small{font-size:11px;color:var(--muted,#8a7d6d);overflow-wrap:anywhere}
+.mcp-enable-row{display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;width:auto;font-size:12px;color:var(--muted,#8a7d6d)}
+.mcp-enable-row .tray-switch{flex:0 0 38px}
+.mcp-empty{margin:6px 0;font-size:11px}

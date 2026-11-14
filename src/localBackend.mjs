@@ -692,6 +692,24 @@ export async function localHandle(path, init) {
       try { writeJSON(K.mcp, next) } catch { return json(500, { error: '本地存储写入失败' }) }
       return json(200, { ok: true })
     }
+    if (mcpMatch && method === 'PUT' && !mcpMatch[2]) {
+      const b = await readBody(init)
+      const person = String(b.person || '')
+      if (!person) return json(400, { error: '必须指定人物身份' })
+      const all = readJSON(K.mcp, [])
+      const i = all.findIndex(c => c && c.id === mcpMatch[1] && c.person === person)
+      if (i < 0) return json(404, { error: '未找到该人物绑定的 MCP 服务' })
+      const name = String(b.name ?? all[i].name).trim().slice(0, 120)
+      if (!name) return json(400, { error: '请填写服务名称' })
+      const url = String(b.url ?? all[i].url).trim()
+      if (!/^https?:\/\//i.test(url)) return json(400, { error: '主机地址需以 http:// 或 https:// 开头' })
+      const token = b.token === undefined ? all[i].token : String(b.token || '').trim()
+      if (token.length > 8192) return json(400, { error: 'Token 长度超出限制' })
+      const enabled = b.enabled === undefined ? all[i].enabled !== false : !!b.enabled
+      all[i] = { ...all[i], name, url, transport: 'httpStream', enabled, token, updated_at: nowISO() }
+      try { writeJSON(K.mcp, all) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { connection: { id: all[i].id, person, name, url, transport: 'httpStream', enabled, updated_at: all[i].updated_at } })
+    }
     if (mcpMatch && method === 'POST' && ['tools', 'call'].includes(mcpMatch[2])) {
       return json(502, { error: DEGRADED.mcp })
     }

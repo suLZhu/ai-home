@@ -2118,7 +2118,7 @@ function MCPSettings({person,personLabel}:{person:Person;personLabel?:(p:Person)
   const [connections,setConnections] = useState<MCPConnection[]>([])
   const [name,setName] = useState('')
   const [url,setUrl] = useState('')
-  const [transport,setTransport] = useState('httpStream')
+  const transport = 'httpStream'
   const [token,setToken] = useState('')
   const [busy,setBusy] = useState(false)
   const [error,setError] = useState('')
@@ -2168,7 +2168,7 @@ function MCPSettings({person,personLabel}:{person:Person;personLabel?:(p:Person)
       {(tools[c.id]||[]).length>0&&<button type="button" className="mcp-tools-toggle" aria-expanded={!!expandedTools[c.id]} onClick={()=>setExpandedTools(old=>({...old,[c.id]:!old[c.id]}))}><span>{expandedTools[c.id]?'收起工具列表':'展开工具列表'}</span><span className="mcp-tools-count">{tools[c.id].length} 个工具</span><span className="mcp-tools-chevron">{expandedTools[c.id]?'−':'＋'}</span></button>}
       {expandedTools[c.id]&&(tools[c.id]||[]).map(t=><div className="mcp-tool" key={t.name}><b>{t.name}</b>{t.description&&<p>{t.description}</p>}<label>调用参数（JSON）<textarea value={args[c.id+':'+t.name]??'{}'} onChange={e=>setArgs(old=>({...old,[c.id+':'+t.name]:e.target.value}))} rows={3}/></label><button type="button" className="mcp-action" disabled={busy} onClick={()=>callTool(c,t)}>调用工具</button>{results[c.id+':'+t.name]&&<pre>{results[c.id+':'+t.name]}</pre>}</div>)}
     </section>)}
-    <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>连接类型<SoftSelect value={transport} onChange={setTransport} options={[{value:'httpStream',label:'Streamable HTTP（HTTP 流式）'}]}/></label><label>Bearer Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="password" autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
+    <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="password" autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
 }
 
 function Editor({title,value,onChange,placeholder}:{title:string,value:string,onChange:(v:string)=>void,placeholder:string}) {
@@ -3223,7 +3223,9 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
   const [mcpDraft, setMcpDraft] = useState({ name: '', url: '', token: '', owner: 'all' })
   const [mcpBusy, setMcpBusy] = useState(false)
   // 已添加的服务收进一个下拉：默认只占一行，选中才展开详情与移除按钮。
-  const [mcpSelected, setMcpSelected] = useState('')
+  const [mcpOpen, setMcpOpen] = useState('')
+  const [mcpCounts, setMcpCounts] = useState<Record<string, number | undefined>>({})
+  const [mcpEditId, setMcpEditId] = useState('')
   const mcp = useMcpLibrary()
   const saveProfile = (e: FormEvent) => {
     e.preventDefault()
@@ -3241,15 +3243,47 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     e.preventDefault(); setMcpBusy(true); mcp.setError('')
     const owners = mcpDraft.owner === 'all' ? ASSISTANT_PEOPLE : [mcpDraft.owner]
     try {
-      for (const person of owners) {
-        const r = await apiFetch('/api/mcp', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, name: mcpDraft.name, url: mcpDraft.url, transport: 'httpStream', token: mcpDraft.token }) })
+      if (mcpEditId) {
+        // 修改已有服务：PUT 保持 id 不变，聊天里的绑定不会失效
+        const r = await apiFetch('/api/mcp/' + encodeURIComponent(mcpEditId), { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: mcpDraft.owner, name: mcpDraft.name, url: mcpDraft.url, token: mcpDraft.token }) })
         const d = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(d.error || '保存 MCP 失败')
+        if (!r.ok) throw new Error(d.error || '修改 MCP 失败')
+      } else {
+        for (const person of owners) {
+          const r = await apiFetch('/api/mcp', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person, name: mcpDraft.name, url: mcpDraft.url, transport: 'httpStream', token: mcpDraft.token }) })
+          const d = await r.json().catch(() => ({}))
+          if (!r.ok) throw new Error(d.error || '保存 MCP 失败')
+        }
       }
       setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
+      setMcpEditId('')
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
     finally { setMcpBusy(false) }
+  }
+  const toggleMcpCard = (c: McpLibraryItem) => {
+    const key = c.person + ':' + c.id
+    const open = mcpOpen === key
+    setMcpOpen(open ? '' : key)
+    if (!open && mcpCounts[key] === undefined) {
+      apiFetch('/api/mcp/' + c.id + '/tools', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
+        .then(async (r) => { const d = await r.json().catch(() => ({})); setMcpCounts((m) => ({ ...m, [key]: r.ok && Array.isArray(d.tools) ? d.tools.length : undefined })) })
+        .catch(() => { /* 拉不到工具数就保持「—」 */ })
+    }
+  }
+  const toggleMcpEnabled = async (c: McpLibraryItem, enabled: boolean) => {
+    mcp.setError('')
+    try {
+      const r = await apiFetch('/api/mcp/' + c.id, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person, enabled }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || '切换启用失败')
+      await mcp.refresh()
+    } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
+  }
+  const startEditMcp = (c: McpLibraryItem) => {
+    setMcpEditId(c.id)
+    setMcpDraft({ name: c.name, url: c.url, token: '', owner: c.person })
+    document.querySelector('.resource-form')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
   const removeMcp = async (c: McpLibraryItem) => {
     if (!window.confirm('移除「' + c.name + '」（' + displayName(c.person) + '）？')) return
@@ -3280,23 +3314,36 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     </>}
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
     {tab==='mcp' && <>
-      <form className="resource-form" onSubmit={addMcp}><h4>添加 MCP 服务</h4>
+      <form className="resource-form" onSubmit={addMcp}><h4>{mcpEditId ? '修改 MCP 服务' : '添加 MCP 服务'}</h4>
         <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
         <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
-        <label>Bearer Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password"/></label>
+        <label>Token（可选）<input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="password" autoComplete="new-password"/></label>
         <label>归属助手<SoftSelect value={mcpDraft.owner} onChange={v=>setMcpDraft({...mcpDraft,owner:v})} options={[{value:'all',label:'全部助手（一次添加）'},...ASSISTANT_PEOPLE.map(p=>({value:p,label:displayName(p)}))]}/></label>
-        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在添加…':'添加服务'}</button></div>
+        <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEditId?'保存修改':'添加服务')}</button>{mcpEditId&&<button type="button" onClick={()=>{setMcpEditId('');setMcpDraft({name:'',url:'',token:'',owner:'all'})}}>取消</button>}</div>
         <small>服务端按助手隔离 MCP 调用（安全边界保留）。「全部助手」会为每位助手各建一条连接；聊天窗口里仍可单独勾选某个助手是否启用。</small>
       </form>
-      {/* 已添加的工具收进下拉选框：默认只有一行，选中才展开详情与移除按钮。 */}
+      {/* 已添加的服务：折叠卡片，点三角展开详情 / 修改 / 删除 */}
       <div className="mcp-tool-picker">
         {mcp.error && <p className="mcp-error">{mcp.error}</p>}
-        <label>已添加的工具 · {mcp.connections.length} 个
-          <SoftSelect ariaLabel="选择已添加的 MCP 工具" value={mcpSelected} onChange={setMcpSelected} options={[{value:'',label:mcp.connections.length?'（选择查看或移除）':'还没有服务，先在上面添加'},...mcp.connections.map((c,i)=>({value:c.person+':'+c.id,label:poolLabel(i)+' '+c.name+' · '+displayName(c.person)}))]}/>
-        </label>
-        {mcpSelected&&(()=>{const c=mcp.connections.find(x=>x.person+':'+x.id===mcpSelected);return c?<article className="resource-row"><div><b>{c.name}</b><small>{displayName(c.person)} · {c.url}</small></div><div className="resource-row-actions"><button type="button" className="resource-remove" onClick={()=>{removeMcp(c);setMcpSelected('')}}>移除</button></div></article>:null})()}
+        {mcp.connections.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，先在上面添加。</p>}
+        {mcp.connections.map((c) => {
+          const key = c.person + ':' + c.id
+          const open = mcpOpen === key
+          return <article className={'mcp-card' + (open ? ' open' : '')} key={key}>
+            <button type="button" className="mcp-card-toggle" aria-expanded={open} onClick={() => toggleMcpCard(c)}>
+              <b>{c.name}</b>
+              <span className="mcp-card-tools">{mcpCounts[key] === undefined ? '工具 —' : '工具 ' + mcpCounts[key]}</span>
+              <span className="mcp-card-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
+            </button>
+            {open && <div className="mcp-card-body">
+              <small>{displayName(c.person)} · {c.url}</small>
+              <label className="mcp-enable-row">启用<input type="checkbox" className="tray-switch" checked={c.enabled !== false} onChange={e => void toggleMcpEnabled(c, e.target.checked)}/></label>
+              <div className="world-actions"><button type="button" onClick={() => startEditMcp(c)}>修改设置</button><button type="button" onClick={() => void removeMcp(c)}>删除</button></div>
+            </div>}
+          </article>
+        })}
       </div>
-    </>}
+      </>}
   </div>
 }
 
