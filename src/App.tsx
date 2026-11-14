@@ -1649,26 +1649,27 @@ export default function App() {
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
       <div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}>×</button></div>
       <div className="sidebar-scroll">
-        <section className="sidebar-section">
-          <div className="sidebar-section-head"><b>历史聊天</b><small>{displayName(person)}</small></div>
-          <div className="sidebar-conv-list">
-            {drawerConvs.map((c:Conversation)=>(
-              <div className={'sidebar-conv-row'+(c.id===drawerActiveId?' active':'')} key={c.id}>
-                {drawerRenameId===c.id
-                  ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
-                  : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
-                <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}>✎</button>
-                <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>drawerDelete(c.id)}>×</button>
-              </div>
-            ))}
-          </div>
-          <button type="button" className="sidebar-conv-new" onClick={drawerCreate}>＋ 新建对话</button>
-        </section>
-        <section className="sidebar-section sidebar-assistant-tools">
-          <div className="sidebar-section-head"><b>助手工具</b><small>{displayName(person)}</small></div>
-          <div className="sidebar-assistant-card">
-            <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('主动任务')}><span aria-hidden="true">◷</span><b>主动任务</b><small>定时 / 工作流</small></button>
-            <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('自主行动')}><span aria-hidden="true">☀</span><b>自主行动</b><small>自主行为面板</small></button>
+        <section className="sidebar-section sidebar-combined">
+          <div className="sidebar-combined-card">
+            <div className="sidebar-combined-head"><b>历史聊天</b><small>{displayName(person)}</small></div>
+            <div className="sidebar-conv-list">
+              {drawerConvs.map((c:Conversation)=>(
+                <div className={'sidebar-conv-row'+(c.id===drawerActiveId?' active':'')} key={c.id}>
+                  {drawerRenameId===c.id
+                    ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
+                    : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
+                  <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}>✎</button>
+                  <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>drawerDelete(c.id)}>×</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="sidebar-conv-new" onClick={drawerCreate}>＋ 新建对话</button>
+            <div className="sidebar-combined-sep" aria-hidden="true"/>
+            <div className="sidebar-combined-head"><b>助手工具</b><small>{displayName(person)}</small></div>
+            <div className="sidebar-assistant-card">
+              <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('主动任务')}><span aria-hidden="true">◷</span><b>主动任务</b><small>定时 / 工作流</small></button>
+              <button type="button" className="sidebar-assistant-tool" onClick={()=>openFunShortcut('自主行动')}><span aria-hidden="true">☀</span><b>自主行动</b><small>自主行为面板</small></button>
+            </div>
           </div>
         </section>
         <section className="sidebar-section">

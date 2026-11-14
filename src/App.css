@@ -1975,3 +1975,19 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .sidebar-assistant-tool>b{font-size:11.5px!important}
 .shell .sidebar-section-head b{font-size:11.5px!important}
 .shell .sidebar-section-head small{font-size:8.5px!important}
+
+/* 历史聊天 + 助手工具合成一个模块，内部行更小 */
+.shell .sidebar-combined{margin:0 0 6px!important}
+.shell .sidebar-combined-card{border:1px solid var(--line,#e6ded2);border-radius:12px;background:var(--card,#fffdf9);padding:5px 6px}
+.shell .sidebar-combined-head{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 3px;color:var(--muted,#8a7d6d);font-size:10px}
+.shell .sidebar-combined-head b{font-size:11px;font-weight:600;color:var(--ink,#302c37)}
+.shell .sidebar-combined-head small{font-size:8.5px}
+.shell .sidebar-combined-sep{height:1px;background:var(--line,#e6ded2);margin:5px 2px}
+.shell .sidebar-combined .sidebar-conv-row{padding:3px 6px!important;margin:0!important;border-radius:7px!important}
+.shell .sidebar-combined .sidebar-conv-row.active{background:#efeaf8!important}
+.shell .sidebar-combined .sidebar-conv-name{font-size:11px!important}
+.shell .sidebar-combined .sidebar-conv-new{padding:4px 6px!important;font-size:10.5px!important;margin-top:2px!important;border-radius:7px!important}
+.shell .sidebar-combined .sidebar-assistant-card{border:0!important;padding:0!important;background:transparent!important;gap:0!important}
+.shell .sidebar-combined .sidebar-assistant-tool{padding:4px 6px!important}
+.shell .sidebar-combined .sidebar-assistant-tool>b{font-size:11px!important}
+.shell .sidebar-combined .sidebar-assistant-tool>small{font-size:8.5px!important}
