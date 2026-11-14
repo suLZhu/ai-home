@@ -23,7 +23,6 @@ type Props = {
   onPatchBinding: (b: PersonBinding) => void
   onPick: (id: string) => void
   onClose: () => void
-  onOpenConfig: () => void
   subscriptionVendorIds?: string[]
   vendors: Vendor[]
   routeState: RouteState
@@ -57,7 +56,7 @@ function vendorInitial(name: string) {
 }
 
 export function ModelPickerSheet({
-  profiles, activeId, vendorKeys, binding, onPatchBinding, onPick, onClose, onOpenConfig,
+  profiles, activeId, vendorKeys, binding, onPatchBinding, onPick, onClose,
   subscriptionVendorIds, vendors, routeState, setRouteState, lastRouteInfo, person,
 }: Props) {
   const [query, setQuery] = useState('')
@@ -109,7 +108,7 @@ export function ModelPickerSheet({
       <div className="model-sheet-head">
         <button type="button" className="model-sheet-close" aria-label="关闭模型面板" onClick={onClose}>×</button>
         <b>选择模型</b>
-        <button type="button" className="model-sheet-setup" aria-label="完整绑定设置" title="完整绑定设置" onClick={onOpenConfig}>⚙</button>
+        <span aria-hidden="true"/>
       </div>
       {lastRouteInfo && <p className="model-sheet-routeinfo" data-route-info>{lastRouteInfo}</p>}
       <div className="model-sheet-search">

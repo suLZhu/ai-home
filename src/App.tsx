@@ -2274,8 +2274,6 @@ const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
-  const [configOpen,setConfigOpen]=useState(false)
-  const closeConfig=useCallback(()=>setConfigOpen(false),[])
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
   const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
   const [bindOpen,setBindOpen]=useState(false)
@@ -2299,9 +2297,6 @@ function Chat(p: any) {
     // 未来新增的小程序在这里按 id 分支即可，默认不动聊天窗口。
   }
   // 绑定条点哪一段，配置抽屉就定位到哪一段；seq 保证重复点同一段也会重新定位。
-  const [configFocus,setConfigFocus]=useState<''|'model'|'world'|'mcp'>('')
-  const [configSeq,setConfigSeq]=useState(0)
-  const openConfig=(focus:''|'model'|'world'|'mcp')=>{setConfigFocus(focus);setConfigSeq(n=>n+1);setConfigOpen(true)}
   // 顶栏不再显示只读状态条；绑定状态由输入栏小图标的角标与面板自己表达。
   const quickMcp=useMcpLibrary()
   const quickBinding:PersonBinding=p.bindings?.[chatPerson]||emptyBinding()
@@ -2828,8 +2823,7 @@ function Chat(p: any) {
       <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/>
     </form>}
     {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
-    {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} onOpenConfig={()=>{setTray('');openConfig('model')}} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
-    {configOpen&&<ChatConfigPanel key={configSeq} focus={configFocus} person={chatPerson} displayName={p.displayName} modelProfiles={p.modelProfiles} bindings={p.bindings} setBindings={p.setBindings} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} onClose={closeConfig}/>}
+    {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {bindOpen&&<ChatBindPanel person={chatPerson} displayName={p.displayName} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} bindings={p.bindings} setBindings={p.setBindings} onClose={()=>setBindOpen(false)}/>}
   </div>
 }
@@ -3304,54 +3298,6 @@ function ResourceLibrary({ initialTab, only, worldEntries, setWorldEntries, mode
 }
 
 // 聊天窗口的配置抽屉：只决定「当前助手」用哪套模型、哪几条世界书、哪几个 MCP。
-function ChatConfigPanel({ person, displayName, modelProfiles, bindings, setBindings, worldEntries, setWorldEntries, focus, onClose }: {
-  person: Person; displayName: (p: Person) => string
-  modelProfiles: ModelProfile[]; bindings: Record<Person,PersonBinding>; setBindings: React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>
-  worldEntries: WorldEntry[]; setWorldEntries: React.Dispatch<React.SetStateAction<WorldEntry[]>>
-  focus: ''|'model'|'world'|'mcp'; onClose: () => void
-}) {
-  // 从绑定条点进来时，把对应的那一段滚到眼前并短暂高亮；点「配置 ›」则正常从顶部看。
-  useEffect(()=>{
-    if(!focus)return
-    const el=document.querySelector('.chat-config-panel [data-part="'+focus+'"]')
-    if(!el)return
-    el.scrollIntoView({block:'start',behavior:'smooth'})
-    el.classList.add('chat-config-flash')
-    const t=window.setTimeout(()=>el.classList.remove('chat-config-flash'),1400)
-    return ()=>window.clearTimeout(t)
-  },[focus])
-  const mcp = useMcpLibrary()
-  const binding = bindings[person] || emptyBinding()
-  const mine = mcp.connections.filter(c => c.person === person)
-  const allIds = mine.map(c => c.id)
-  const mcpIds = binding.mcpIds === null ? allIds : binding.mcpIds
-  const patch = (next: PersonBinding) => setBindings(old => ({ ...old, [person]: next }))
-  useEffect(() => {
-    const un = pushBackHandler(() => { onClose(); return true })
-    return un
-  }, [onClose])
-  return <div className="chat-config-backdrop" onClick={onClose}>
-    <section className="chat-config-panel" role="dialog" aria-label="当前助手配置" onClick={e=>e.stopPropagation()}>
-      <header className="chat-config-head"><div><b>{displayName(person)} · 配置</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭配置">×</button></header>
-      <div className="chat-config-body">
-        <section className="chat-config-section" data-part="model"><h4>使用的模型</h4>
-          {modelProfiles.map(p=><label className="chat-config-option" key={p.id}><input type="radio" name="model-profile" checked={binding.modelProfileId===p.id} onChange={()=>patch({...binding,modelProfileId:p.id})}/><span>{p.name}<small>{p.model} · {p.endpoint}</small></span></label>)}
-        </section>
-        <section className="chat-config-section" data-part="world"><h4>世界书条目</h4>
-          {worldEntries.map(e=><label className="chat-config-option" key={e.id}><input type="checkbox" checked={isWorldEntryBound(e,person)} onChange={v=>setWorldEntries(old=>toggleWorldEntryBinding(old,person,e.id,v.target.checked))}/><span>{e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · {e.always?'常驻':'关键词触发'} · {e.boundCharacters?.map(displayName).join('、')||'未绑定'}</small></span></label>)}
-        </section>
-        <section className="chat-config-section" data-part="mcp"><h4>MCP 服务</h4>
-          {mcp.error&&<p className="mcp-error">{mcp.error}</p>}
-          {mine.map(c=><label className="chat-config-option" key={c.id}><input type="checkbox" checked={mcpIds.includes(c.id)} onChange={v=>patch(toggleMcpId(binding,c.id,v.target.checked,allIds))}/><span>{c.name}<small>{c.url}</small></span></label>)}
-        </section>
-      </div>
-    </section>
-  </div>
-}
-
-// ── API 服务器地址（开发者）──
-// 运行时覆盖优先级高于构建期 VITE_API_BASE_URL；留空 = 回退到构建期值或同源直连。
-// 只影响请求地址拼接，不改任何 /api/* 的业务语义；保存后立即 setApiBase 生效。
 function ApiBaseSettings({ onApplied }: { onApplied?: () => void } = {}) {
   const buildBase = (import.meta as any).env?.VITE_API_BASE_URL ?? ''
   const [draft, setDraft] = useState(() => { try { return localStorage.getItem(API_BASE_STORAGE_KEY) || '' } catch { return '' } })
