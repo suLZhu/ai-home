@@ -61,32 +61,51 @@ export function modelListUrl(vendor) {
   return joinEndpoint(base, suffix)
 }
 
-// 把 /models 返回的模型 ID 按系列折叠分组，参考设置页「Claude Haiku / Claude Opus」那种分组。
-// 纯函数，便于单测；组内保持上游返回顺序，组按名称稳定排序。
+// 把 /models 返回的模型 ID 按「大厂 / 大系列」折叠：GPT、Claude、DeepSeek… 各自一组，
+// 不再把 sonnet/opus、R1/V3.2/V4 这种版本差异拆成一条一个类。
+// 纯函数，便于单测；组内保持上游返回顺序，组按固定系列顺序排列，未知系列统一进「其他」。
+// 大系列识别：只看名字里有没有品牌标记（CLAUDE / GPT / GEMINI…），
+// 前面粘的「反重力」「按次」这类前缀一律不参与判断；中文品牌名也认。
+// 太短、容易误伤的别名（yi / phi / o1-o9）单独加边界保护。
+const familyRule = (id, label, words) => ({ id, label, re: new RegExp(words) })
+const MODEL_FAMILIES = [
+  familyRule('gpt', 'GPT', 'gpt|chatgpt|codex|davinci|(?:^|[^a-z0-9])o[1-9](?![0-9])'),
+  familyRule('claude', 'Claude', 'claude|sonnet|opus|haiku'),
+  familyRule('deepseek', 'DeepSeek', 'deepseek|深度求索'),
+  familyRule('gemini', 'Gemini', 'gemini|gemma|palm'),
+  familyRule('grok', 'Grok', 'grok'),
+  familyRule('qwen', 'Qwen', 'qwen|qwq|tongyi|通义'),
+  familyRule('glm', 'GLM', 'glm|chatglm|zhipu|智谱'),
+  familyRule('kimi', 'Kimi', 'kimi|moonshot|月之暗面'),
+  familyRule('llama', 'Llama', 'llama'),
+  familyRule('mistral', 'Mistral', 'mistral|mixtral|codestral|pixtral|magistral'),
+  familyRule('doubao', '豆包', 'doubao|豆包'),
+  familyRule('ernie', '文心', 'ernie|文心'),
+  familyRule('hunyuan', '混元', 'hunyuan|混元'),
+  familyRule('yi', 'Yi', '(?:^|[^a-z])yi(?:[^a-z]|$)'),
+  familyRule('command', 'Command', 'command'),
+  familyRule('phi', 'Phi', '(?:^|[^a-z])phi(?:[^a-z]|$)'),
+  familyRule('nova', 'Nova', 'nova'),
+  familyRule('jamba', 'Jamba', 'jamba'),
+]
+const OTHER_FAMILY = { id: 'other', label: '其他' }
+const FAMILY_ORDER = new Map([...MODEL_FAMILIES, OTHER_FAMILY].map((f, i) => [f.id, i]))
+
+function familyOf(id) {
+  const lower = id.toLowerCase()
+  return MODEL_FAMILIES.find(f => f.re.test(lower)) || OTHER_FAMILY
+}
+
 export function groupModels(ids) {
   const groups = new Map()
   for (const raw of Array.isArray(ids) ? ids : []) {
     const id = str(raw)
     if (!id) continue
-    const key = modelGroupKey(id)
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(id)
+    const family = familyOf(id)
+    if (!groups.has(family.id)) groups.set(family.id, { id: family.id, label: family.label, models: [] })
+    groups.get(family.id).models.push(id)
   }
-  return [...groups].map(([key, models]) => ({ id: key, label: modelGroupLabel(key), models }))
-    .sort((a, b) => a.label.localeCompare(b.label))
-}
-
-function modelGroupKey(id) {
-  const parts = id.split('/')
-  if (parts.length > 1) return parts[0]
-  return id.split(/[-_]/).filter(Boolean).slice(0, 2).join('-') || id
-}
-
-const GROUP_WORDS = { gpt: 'GPT', glm: 'GLM', qwen: 'Qwen', deepseek: 'DeepSeek', claude: 'Claude', ollama: 'Ollama', gemini: 'Gemini', moonshot: 'Moonshot', llama: 'Llama', mistral: 'Mistral' }
-function modelGroupLabel(key) {
-  return key.split(/[-_]/).filter(Boolean)
-    .map(w => GROUP_WORDS[w.toLowerCase()] || (/^v?\d/.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
-    .join(' ')
+  return [...groups.values()].sort((a, b) => FAMILY_ORDER.get(a.id) - FAMILY_ORDER.get(b.id))
 }
 
 // 多 KEY 的角色：备用优先于主号（用户要「先用备用再用主号」）。

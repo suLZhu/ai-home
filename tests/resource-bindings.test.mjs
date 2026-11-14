@@ -227,12 +227,23 @@ test('按 Base URL 推导聊天 / 模型列表地址，自定义 API 路径真�
   assert.equal(modelListUrl(null), '')
 })
 
-test('从网址拉到的模型按系列折叠分组，组内保持上游顺序', () => {
-  const groups = groupModels(['claude-opus-4.6', 'claude-haiku-5.5', 'claude-opus-5', 'Qwen/Qwen3-8B', 'gpt-4o-mini', '', null])
-  assert.deepEqual(groups.map(g => g.id), ['claude-haiku', 'claude-opus', 'gpt-4o', 'Qwen'])
-  assert.deepEqual(groups.find(g => g.id === 'claude-opus').models, ['claude-opus-4.6', 'claude-opus-5'])
-  assert.equal(groups.find(g => g.id === 'claude-haiku').label, 'Claude Haiku')
-  assert.equal(groups.find(g => g.id === 'Qwen').label, 'Qwen')
+test('从网址拉到的模型按大系列折叠（GPT / Claude / DeepSeek…），组内保持上游顺序', () => {
+  const groups = groupModels([
+    'claude-opus-4.6', 'claude-haiku-5.5', 'claude-opus-5', 'Qwen/Qwen3-8B', 'gpt-4o-mini',
+    'deepseek-r1', 'deepseek-v3.2', 'deepseek-v4', 'o3-mini', 'mystery-model-1', '', null,
+    '反重力Claude-3.5', '按次gpt-4o', 'GeminiPro', '深度求索R1',
+  ])
+  // 同一个系列的 sonnet / opus / R1 / V3.2 / V4 全部并进一组，不再一条一个类。
+  assert.deepEqual(groups.map(g => g.id), ['gpt', 'claude', 'deepseek', 'gemini', 'qwen', 'other'])
+  assert.deepEqual(groups.find(g => g.id === 'gpt').models, ['gpt-4o-mini', 'o3-mini', '按次gpt-4o'])
+  assert.deepEqual(groups.find(g => g.id === 'claude').models,
+    ['claude-opus-4.6', 'claude-haiku-5.5', 'claude-opus-5', '反重力Claude-3.5'])
+  assert.deepEqual(groups.find(g => g.id === 'deepseek').models,
+    ['deepseek-r1', 'deepseek-v3.2', 'deepseek-v4', '深度求索R1'])
+  assert.deepEqual(groups.find(g => g.id === 'gemini').models, ['GeminiPro'])
+  assert.deepEqual(groups.find(g => g.id === 'qwen').models, ['Qwen/Qwen3-8B'])
+  assert.equal(groups.find(g => g.id === 'claude').label, 'Claude')
+  assert.equal(groups.find(g => g.id === 'other').label, '其他')
   assert.deepEqual(groupModels(null), [])
 })
 
