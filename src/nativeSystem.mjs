@@ -175,6 +175,12 @@ export function showSystemNotification(payload) {
   try { return b.notify(JSON.stringify(payload)) === true } catch { return false }
 }
 
+export function clearConversationNotifications(person, conversationId = '') {
+  const b = bridge()
+  if (!b || typeof b.clearConversationNotifications !== 'function' || !person) return false
+  try { b.clearConversationNotifications(String(person), String(conversationId || '')); return true } catch { return false }
+}
+
 export function syncSystemChannels(channels) {
   const b = bridge()
   if (!b || typeof b.syncChannels !== 'function') return false
