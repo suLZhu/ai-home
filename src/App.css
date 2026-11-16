@@ -2760,3 +2760,4 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell.has-pack .chat-body{background-image:var(--pack-chat-bg,none);background-size:cover;background-position:center;background-repeat:no-repeat}
 .shell.has-pack .message-row.assistant .bubble{background:var(--bubble-ai-bg,var(--surface))}
 .shell.has-pack .message-row.user .bubble{background:var(--bubble-me-bg,var(--accent-soft))}
+body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",serif)}

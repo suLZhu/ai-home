@@ -56,3 +56,16 @@ test('多包存储可增删、active 记录独立', () => {
   assert.equal(loadThemePacks(storage).length, 1)
   assert.equal(getActivePackId(storage), '')
 })
+
+test('美化包支持字体与图标，未知项被丢弃', () => {
+  const pack = normalizeThemePack({ ...valid, font: { family: 'Georgia', src: 'javascript:alert(1)' }, icons: { chat: '💬', world: '📚', hack: 'X' } })
+  assert.equal(pack.font.family, 'Georgia')
+  assert.equal(pack.font.src, undefined)
+  assert.equal(pack.icons.chat, '💬')
+  assert.equal(pack.icons.hack, undefined)
+})
+
+test('CSS 变量包含字体族', () => {
+  const pack = normalizeThemePack({ ...valid, font: { family: 'Georgia' } })
+  assert.equal(packCssVars(pack)['--pack-font-family'], 'Georgia')
+})

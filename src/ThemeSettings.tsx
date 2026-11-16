@@ -21,6 +21,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
 
   const applyPack = (pack: ThemePack | null) => {
     applyPackVars(pack)
+    window.dispatchEvent(new Event('aihome:theme-pack'))
     setActivePack(pack ? pack.id : '')
     setActiveId(pack ? pack.id : '')
     if (pack?.bubble?.style) update({ bubble: pack.bubble.style as ThemePrefs['bubble'] })
@@ -86,7 +87,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
       </div>
       {error && <p className="theme-pack-error">{error}</p>}
       {notice && <p className="theme-pack-notice">{notice}</p>}
-      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包包含 tokens（accent/surface/field/ink/line）、background、bubble 和可选 icons。</p>
+      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包可含 tokens、background、bubble、font（系统字体或内嵌字体）和 icons（emoji）。</p>
     </div>
 
     <div className="theme-fontctl">

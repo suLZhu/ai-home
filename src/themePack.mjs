@@ -21,6 +21,7 @@ export const PACKS_KEY = 'ai-home.themePacks'
 export const ACTIVE_PACK_KEY = 'ai-home.themePackActive'
 
 export const PACK_TOKEN_KEYS = ['accent', 'accentSoft', 'surface', 'field', 'ink', 'muted', 'line', 'danger', 'ok']
+export const PACK_ICON_KEYS = ['world', 'chat', 'mcp', 'skill', 'memory', 'settings', 'assistant', 'models', 'appearance', 'workspace', 'system']
 export const PACK_BUBBLE_STYLES = ['soft', 'outlined', 'bare', 'letter', 'frame', 'glass', 'comic', 'note']
 
 const isColor = (v) => typeof v === 'string' && /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|var\()/i.test(v.trim())
@@ -49,10 +50,14 @@ export function normalizeThemePack(input) {
     color: isColor(input.background.color) ? String(input.background.color).trim() : undefined,
     opacity: Number.isFinite(Number(input.background.opacity)) ? Math.min(1, Math.max(0.1, Number(input.background.opacity))) : undefined,
   } : undefined
+  const font = input.font && typeof input.font === 'object' ? {
+    family: typeof input.font.family === 'string' ? input.font.family.trim().slice(0, 60) : undefined,
+    src: typeof input.font.src === 'string' && /^data:font\//.test(input.font.src) && input.font.src.length < 2_000_000 ? input.font.src : undefined,
+  } : undefined
   const icons = {}
   if (input.icons && typeof input.icons === 'object') {
     for (const [key, value] of Object.entries(input.icons)) {
-      if (typeof value === 'string' && value.trim()) icons[String(key)] = value.trim().slice(0, 4)
+      if (typeof value === 'string' && value.trim() && PACK_ICON_KEYS.includes(String(key))) icons[String(key)] = value.trim().slice(0, 4)
     }
   }
   return {
@@ -63,6 +68,7 @@ export function normalizeThemePack(input) {
     author: String(input.author || '').slice(0, 40),
     description: String(input.description || '').slice(0, 120),
     tokens, bubble, background,
+    font: font && (font.family || font.src) ? font : undefined,
     icons: Object.keys(icons).length ? icons : undefined,
   }
 }
@@ -122,6 +128,7 @@ export function packCssVars(pack) {
   if (pack.background?.image) vars['--pack-chat-bg'] = `url(${pack.background.image})`
   else if (pack.background?.color) vars['--pack-chat-bg'] = pack.background.color
   if (pack.background?.opacity) vars['--pack-bg-opacity'] = String(pack.background.opacity)
+  if (pack.font?.family || pack.font?.src) vars['--pack-font-family'] = pack.font.src ? 'pack-' + pack.id : pack.font.family
   if (pack.bubble?.me) vars['--bubble-me-bg'] = pack.bubble.me
   if (pack.bubble?.ai) vars['--bubble-ai-bg'] = pack.bubble.ai
   return vars
@@ -132,7 +139,19 @@ export function applyPackVars(pack){
   const root=globalThis.document?.documentElement
   if(!root)return
   for(const n of PACK_VAR_NAMES)root.style.removeProperty(n)
+  applyPackFont(pack)
   const vars=packCssVars(pack)
   for(const [k,v] of Object.entries(vars))root.style.setProperty(k,v)
   globalThis.document.body?.classList.toggle('has-pack',!!pack)
+}
+
+const FONT_STYLE_ID='qijian-pack-font'
+function applyPackFont(pack){
+  const doc=globalThis.document
+  if(!doc)return
+  let el=doc.getElementById(FONT_STYLE_ID)
+  if(pack?.font?.src){
+    if(!el){el=doc.createElement('style');el.id=FONT_STYLE_ID;doc.head.appendChild(el)}
+    el.textContent='@font-face{font-family:pack-'+pack.id+';src:url('+pack.font.src+');font-display:swap}'
+  }else if(el){el.remove()}
 }
