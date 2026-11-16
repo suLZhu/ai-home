@@ -41,6 +41,7 @@ import { COMPOSE_TOOLS } from './composeTools.mjs'
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
+import { messageWithVision } from './visionAttachments.mjs'
 // 会话内消息搜索（微信式）：纯字符串匹配 + 上一条/下一条循环 + messageId 定位。
 import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSearch.mjs'
 // 云端恢复决策（数据安全）：启动动作判定、覆盖前本地备份、快照→视图提取。
@@ -1383,9 +1384,21 @@ export default function App() {
           visibleHistory=priorHistory.slice(-CONTEXT_LIMITS.keepMessages)
         }
       }
-      const previous=visibleHistory.map(m=>({role:m.role,content:m.content+(m.attachments?.length?'\n[此前附件：'+m.attachments.map(a=>a.name).join('、')+']':'')}))
+      // Restore previously uploaded image bytes for the model; a filename is not vision.
+      const fetchVisionImage = (url:string) => url.startsWith('/api/attachments/')
+        ? apiFetch(url,{signal:abortController.signal})
+        : fetch(url,{signal:abortController.signal,credentials:'omit'})
+      const previous=await Promise.all(visibleHistory.map(async m=>{
+        if(m.role!=='user'||!m.attachments?.length)return {role:m.role,content:m.content}
+        return messageWithVision(m.role,m.content,m.attachments,fetchVisionImage)
+      }))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
-      for(const a of attachments.filter(a=>a.dataUrl&&a.type.startsWith('image/'))) content.push({type:'image_url',image_url:{url:a.dataUrl}})
+      for(const a of attachments.filter(a=>a.type.startsWith('image/'))){
+        const resolved=await messageWithVision('user','',[a],fetchVisionImage)
+        if(Array.isArray(resolved.content)){
+          for(const part of resolved.content)if(part.type==='image_url')content.push(part)
+        }else if(resolved.content)content[0].text+='\n'+resolved.content
+      }
       let currentContent:any=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
       const userTop=matched.filter(e=>e.target==='user'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
       const userTail=matched.filter(e=>e.target==='user'&&e.position!=='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
@@ -3249,7 +3262,7 @@ function Chat(p: any) {
     if(stillReferenced.has(String(target.assetId)))return
     apiFetch('/api/attachments/'+encodeURIComponent(String(target.assetId)),{method:'DELETE',credentials:'include'}).catch(()=>{})
   }
-  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,textContent:a.textContent}));if(p.sending){/* 生成态 + 有输入 → 入待发送队列（不立即请求模型）；输入立即清空，显示待发送卡片 */if(!p.enqueuePending(text,payload)){p.setChatError('这条会话已有待发送内容，先发送或撤回它再继续。');return}}else{p.send(text,payload)}setFiles([]);setEmojiOpen(false);setAttachOpen(false);closeSearch();for(const ms of [60,220,520])window.setTimeout(pinToLatest,ms)}
+  async function submit(e:FormEvent){e.preventDefault();scrollPinned.current=true;if(!p.draft.trim()&&!files.length)return;const text=p.draft.trim();const payload=files.map((a:MessageAttachment)=>({name:a.name,type:a.type,size:a.size,dataUrl:a.dataUrl,preview:a.preview,assetId:a.assetId,textContent:a.textContent}));if(p.sending){/* 生成态 + 有输入 → 入待发送队列（不立即请求模型）；输入立即清空，显示待发送卡片 */if(!p.enqueuePending(text,payload)){p.setChatError('这条会话已有待发送内容，先发送或撤回它再继续。');return}}else{p.send(text,payload)}setFiles([]);setEmojiOpen(false);setAttachOpen(false);closeSearch();for(const ms of [60,220,520])window.setTimeout(pinToLatest,ms)}
   function downloadText(a:MessageAttachment){if(!a.textContent)return;const blob=new Blob([a.textContent],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=a.name+'.txt';link.click();URL.revokeObjectURL(url)}
   function pickEmoji(emoji:string){p.setDraft(p.draft+emoji);const next=[emoji,...recentEmojis.filter(x=>x!==emoji)].slice(0,24);setRecentEmojis(next);localStorage.setItem('ai-home.recentEmojis',JSON.stringify(next))}
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
