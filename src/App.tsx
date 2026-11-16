@@ -2379,7 +2379,6 @@ function Room(props: {
       const map:Record<string,Tool>={world:'世界书',mcp:'MCP',skill:'SKILL 技能库',memory:'记忆面板'}
       const tool=map[action]; if(tool) props.setActiveTool(tool)
     }}/>
-    <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">›</span></button>
   </div>
 }
 
@@ -2390,11 +2389,14 @@ function PackIcon({ value }: { value?: string }) {
   return <>{value}</>
 }
 
+// Only hide duplicate built-in navigation in the room scene. Keep custom widgets,
+// decorations and saved layouts intact; settings and chat remain accessible elsewhere.
+const ROOM_DUPLICATE_ACTIONS = new Set(['world','mcp','settings','chat','skill','memory'])
 function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void;icons?:Record<string,string>}) {
   const bg=layout.background as Record<string,string>|undefined
   const bgStyle:React.CSSProperties|undefined=bg?(bg.image?{backgroundImage:`url(${bg.image})`,backgroundSize:'cover',backgroundPosition:'center'}:bg.css?{background:bg.css}:bg.color?{background:bg.color}:undefined):undefined
   return <div className={'room-illustration'+(bgStyle?' free-bg':'')} style={bgStyle}>
-    {layout.items.map((item:RoomItem)=>{
+    {layout.items.filter((item:RoomItem)=>!ROOM_DUPLICATE_ACTIONS.has(String(item.action||''))).map((item:RoomItem)=>{
       const legacy=item.kind==='decor'&&item.type
       if(legacy){
         const cls='ri-'+String(item.type||'')+(item.cls?' '+item.cls:'')
