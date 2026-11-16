@@ -2937,3 +2937,25 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
  .fullscreen-chat .message-row .bubble{max-width:calc(100% - 42px)}
  .fullscreen-chat .chat-header{margin-bottom:0}
 }
+
+/* Kelivo-inspired model management, scoped to Settings > Provider only. */
+.vendor-center .vendor-models-kelivo{display:flex;flex-direction:column;gap:14px;padding-top:18px}
+.vendor-center .vendor-models-heading,.vendor-center .vendor-model-list-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.vendor-center .vendor-models-heading>div{display:flex;flex-direction:column;gap:5px}
+.vendor-center .vendor-models-heading b{font-size:18px}
+.vendor-center .vendor-models-heading small,.vendor-center .vendor-model-list-head small{font-size:12px;color:var(--muted)}
+.vendor-center .vendor-refresh{border-radius:14px;padding:9px 12px;white-space:nowrap;background:var(--field);border:1px solid var(--line);color:var(--ink)}
+.vendor-center .vendor-model-tools-visible{display:flex;gap:8px;align-items:center;margin:0}
+.vendor-center .vendor-model-tools-visible input{flex:1;min-width:0;min-height:42px;border-radius:14px}
+.vendor-center .vendor-model-tools-visible button{height:42px;white-space:nowrap;padding:0 13px;border:1px solid var(--line);border-radius:14px}
+.vendor-center .vendor-selected-models,.vendor-center .vendor-available-models{border:1px solid var(--line);background:var(--field);border-radius:18px;padding:14px}
+.vendor-center .vendor-selected-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.vendor-center .vendor-selected-chip{max-width:100%;min-height:36px;display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:14px;color:var(--ink);background:var(--card);font-size:13px}
+.vendor-center .vendor-selected-chip span:first-child{overflow:hidden;text-overflow:ellipsis}
+.vendor-center .vendor-selected-chip span:last-child{color:var(--muted);font-size:18px}
+.vendor-center .vendor-model-group{margin-top:10px}
+.vendor-center .vendor-model-choice{display:flex;align-items:center;gap:10px;min-height:47px;padding:8px 6px;cursor:pointer}
+.vendor-center .vendor-model-choice input{width:18px;height:18px;accent-color:var(--accent);flex-shrink:0}
+.vendor-center .vendor-model-choice>span{min-width:0;flex:1;overflow-wrap:anywhere}
+.vendor-center .vendor-model-choice small{color:var(--muted);font-size:11px}
+.vendor-center .vendor-model-manual-area{padding:0 2px 8px}
