@@ -68,7 +68,7 @@ import { fileToAvatar, isAvatarDataUrl } from './avatarImage.mjs'
 import { ChatDisplaySettings, useChatDisplay } from './ChatDisplay'
 import { AppLockSettings } from './AppLockSettings'
 import { UsageStats } from './UsageStats'
-import { formatMessageTime } from './chatDisplayPrefs.mjs'
+import { formatMessageTime, loadChatDisplay } from './chatDisplayPrefs.mjs'
 // 统一 API Base URL：Web 同源（空 base）与 Android/生产（构建期 VITE_API_BASE_URL + 开发者设置覆盖）走同一机制。
 import { API_BASE_STORAGE_KEY, resolveApiBase, normalizeApiBase, assetUrl, apiFetch, setApiBase, getApiBase, isLocalMode, setSessionToken, clearSessionToken } from './apiBase.mjs'
 // Android 返回键处理栈：临时层（灯泡图/搜索/多选/表情/设置子页）先关，栈空才退出到根。
@@ -1448,7 +1448,7 @@ export default function App() {
           }
         }
       } catch { /* MCP is optional; continue with normal model chat. */ }
-      for(let round=0;round<5&&!finished;round++){
+      for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
@@ -2744,18 +2744,19 @@ function ModelSettings({value,onChange,apiKey,setApiKey}:{value:ModelConfig,onCh
 // tool name / arguments / latency / raw result 收进二级「详情」。没有调用时整卡不渲染。
 function MessageToolCalls({messageId}:{messageId:string}) {
   const calls=useMessageToolCalls(messageId)
+  const display=useChatDisplay()
   const [open,setOpen]=useState(false)
   const group=groupToolCalls(calls)
-  if(!group.total)return null
+  if(!group.total||!display.showToolCalls)return null
   // 卡片在气泡内部：阻止冒泡，避免点折叠按钮触发气泡长按菜单或多选。
   return <div className="msg-tool-calls" onClick={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()}>
     <button type="button" className="msg-tool-calls-head" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>
       <span className="msg-tool-calls-icon" aria-hidden="true">{group.icon}</span>
-      <b>{group.label}</b>
+      <b>工具调用（{group.total}）</b><small>{group.active?'执行中':group.failed?`${group.failed} 次失败`:'已完成'}</small>
       <span className="msg-tool-calls-chevron">{open?'收起':'›'}</span>
     </button>
     {open&&<ul className="msg-tool-calls-list">{group.items.map(c=><li key={c.key} className={'msg-tool-call status-'+c.status}>
-      <div className="msg-tool-call-top"><b>{c.label}</b><span className={'msg-tool-outcome '+c.status}>{c.outcome}</span>{c.durationMs!=null&&<small>{formatDuration(c.durationMs)}</small>}</div>
+      <div className="msg-tool-call-top"><b>{c.status==='succeeded'?'✓ ':['failed','timed_out','cancelled'].includes(c.status)?'× ':'↻ '}{c.label}</b><span className={'msg-tool-outcome '+c.status}>{c.outcome}</span>{c.durationMs!=null&&<small>{formatDuration(c.durationMs)}</small>}</div>
       <details className="msg-tool-call-detail"><summary>详情</summary><pre>{JSON.stringify({工具:c.detail.toolName,参数:c.detail.arguments,原始结果:c.detail.resultSummary,...(c.detail.errorMessage?{错误:c.detail.errorMessage}:{}),...(c.detail.errorCode?{错误码:c.detail.errorCode}:{}),服务:c.detail.serverName||'—',耗时:c.detail.durationMs!=null?formatDuration(c.detail.durationMs):'—',开始时间:c.detail.startedAt?new Date(c.detail.startedAt).toLocaleString('zh-CN'):'—',...(c.detail.finishedAt?{结束时间:new Date(c.detail.finishedAt).toLocaleString('zh-CN')}:{})},null,2)}</pre></details>
     </li>)}</ul>}
   </div>
@@ -3344,8 +3345,8 @@ function Chat(p: any) {
             <div className={'bubble '+m.role}
               onClick={e=>bubbleClick(e,m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
-          {shownReasoning?<details className="reasoning">
-              <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
+          {chatDisplay.showReasoning&&shownReasoning?<details className="reasoning" onToggle={e=>{if(e.currentTarget.open&&chatDisplay.autoTranslateReasoning&&needsChineseTranslation(shownReasoning)&&m.id&&!translations[m.id]&&!translatingId)void doTranslate(m)}}>
+              <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{chatDisplay.showReasoningDuration&&m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
               <div className="reasoning-body">
                 <div className="reasoning-original">{shownReasoning}</div>
                 {needsChineseTranslation(shownReasoning)&&m.id&&<div className="reasoning-translate">
