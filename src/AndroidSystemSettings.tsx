@@ -5,6 +5,7 @@ import {
   showSystemNotification,
 } from './nativeSystem.mjs'
 import { notificationPayload } from './notificationDispatch.mjs'
+import { readNotificationPrefs, saveNotificationPrefs } from './notificationPreferences.mjs'
 
 /**
  * 「Android 系统能力」设置页：只有标题 + 真实状态 + 一行点击。
@@ -20,6 +21,8 @@ export function AndroidSystemSettings({
 }) {
   const [caps, setCaps] = useState<Capabilities>(() => normalizeCapabilities(readSystemCapabilities()))
   const [note, setNote] = useState('')
+  const [notificationPrefs, setNotificationPrefs] = useState(() => readNotificationPrefs())
+  const updateNotificationPref = (key: string, value: boolean) => setNotificationPrefs(saveNotificationPrefs({ [key]: value }))
 
   const refresh = useCallback(() => setCaps(normalizeCapabilities(readSystemCapabilities())), [])
 
@@ -60,6 +63,19 @@ export function AndroidSystemSettings({
   }
 
   return <div className="syscap-panel" id="android-system-panel">
+    <div className="syscap-head"><b>消息通知偏好</b><span>在本机保存</span></div>
+    <div className="kelivo-list syscap-list">
+      {([
+        ['enabled','新消息提醒','助手回复与主动消息通知'],
+        ['sound','提示声音','新消息提醒音（系统渠道声音由 Android 管理）'],
+        ['vibration','震动提醒','跟随系统通知渠道设置'],
+        ['proactive','主动任务提醒','定时任务与主动消息'],
+        ['autoClear','查看后清除','进入对应会话时移除该会话的通知'],
+      ] as const).map(([key,label,hint]) => <label className="syscap-row" key={key}>
+        <span className="syscap-label">{label}<small style={{display:'block',opacity:.65}}>{hint}</small></span>
+        <input type="checkbox" checked={notificationPrefs[key]} onChange={e=>updateNotificationPref(key,e.target.checked)}/>
+      </label>)}
+    </div>
     <div className="syscap-head">
       <b>Android 系统能力</b>
       <span>{caps.available ? '本机状态' : '仅 Android App 内可用'}</span>
