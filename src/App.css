@@ -2677,3 +2677,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .sidebar-nav-row small{margin-left:auto;font-size:9.5px;color:var(--muted,#8a7d6d)}
 .shell .sidebar-nav-row.active{background:var(--accent,#8a79aa);border-color:transparent;color:#fff}
 .shell .sidebar-nav-row.active small{color:rgba(255,255,255,.75)}
+
+/* 聊天回到底部按钮 */
+.chat-jump-bottom{position:fixed;right:14px;bottom:96px;z-index:20;width:38px;height:38px;border-radius:50%;border:1px solid var(--line,#e6ded2);background:var(--card,#fffdf9);color:var(--ink,#403b35);font-size:16px;box-shadow:0 6px 18px rgba(60,45,30,.18);display:grid;place-items:center}
+.chat-jump-bottom:active{transform:scale(.94)}

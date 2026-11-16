@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -489,6 +489,7 @@ export default function App() {
       if (runBackStack()) return           // 临时层消费了本次返回
       if (activeToolRef.current) { const fromSettings = toolReturnRef.current; setActiveTool(''); if (fromSettings) { setPage('settings'); setToolReturnToSettings(false) } return }
       if (chatOpenRef.current) { setChatOpen(false); return } // 聊天页 → 房间
+      if (pageRef.current !== 'home') { setPage('home'); setActiveTool(''); return } // 任何页 → 主页
       void CapApp.exitApp()                // 根页面 → 退出
     })
     return () => { cancelled = true; void listener.then(h => h.remove()).catch(() => {}) }
@@ -1983,7 +1984,7 @@ export default function App() {
         userSettings={userSettings} setUserSettings={setUserSettings}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>{pageBeforeSettings.current='room';navigate('settings')}} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings onBack={()=>{setPage(pageBeforeSettings.current);setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
+      {page === 'settings' && <Settings onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     <UiDialogHost/>
@@ -2714,6 +2715,7 @@ function Chat(p: any) {
   // 用户向上翻阅时不再打扰；jumpToSource 的定向跳转不受影响（它随后会覆盖位置）。
   const chatBodyRef=useRef<HTMLDivElement>(null)
   const scrollPinned=useRef(true)
+  const [atBottom,setAtBottom]=useState(true)
   const scrollIndicatorRef=useRef<HTMLDivElement|null>(null)
   const indicatorTimerRef=useRef<number|undefined>(undefined)
   useEffect(()=>{
@@ -2721,6 +2723,7 @@ function Chat(p: any) {
     if(!el)return
     const onScroll=()=>{
       scrollPinned.current=el.scrollHeight-el.scrollTop-el.clientHeight<80
+      setAtBottom(scrollPinned.current)
       // 系统滚动条已隐藏：滚动时自绘一条 3px 细指示条，停手 ~0.8s 后淡出；
       // 贴底跟随（新消息自动滚动）时不闪，只有向上翻阅历史才出现。
       const ind=scrollIndicatorRef.current
@@ -2935,12 +2938,14 @@ function Chat(p: any) {
     const pin=()=>{if(scrollPinned.current)el.scrollTop=el.scrollHeight}
     pin()
     // 进入聊天时消息/图片/键盘可能晚一步撑高，补几次并监听 DOM 变化，确保落在最新一条。
-    const timers=[60,220,500,900].map(ms=>window.setTimeout(pin,ms))
+    const timers=[60,220,500,900,1400,2000].map(ms=>window.setTimeout(pin,ms))
     const mo=new MutationObserver(()=>requestAnimationFrame(pin))
-    mo.observe(el,{childList:true,subtree:true,characterData:true})
+    mo.observe(el,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['src']})
+    const onImgLoad=()=>requestAnimationFrame(pin)
+    el.addEventListener('load',onImgLoad,true)
     const ro=new ResizeObserver(()=>requestAnimationFrame(pin))
     ro.observe(el)
-    return ()=>{timers.forEach(t=>window.clearTimeout(t));mo.disconnect();ro.disconnect()}
+    return ()=>{timers.forEach(t=>window.clearTimeout(t));mo.disconnect();ro.disconnect();el.removeEventListener('load',onImgLoad,true)}
   },[chatPerson,activeChatConversationId,p.person])
   // 打字时键盘把可视高度压小，容器 resize 后滚动位置会被浏览器重算；
   // 只要焦点还在输入框，就补滚到最新一条，保证「边打字边看得见聊天记录」。
@@ -2948,6 +2953,7 @@ function Chat(p: any) {
     const el=chatBodyRef.current
     if(!el)return
     scrollPinned.current=true
+    setAtBottom(true)
     el.scrollTop=el.scrollHeight
   },[])
   useEffect(()=>{
@@ -3184,6 +3190,7 @@ function Chat(p: any) {
       {p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}
     </div>
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
+    {!atBottom&&<button type="button" className="chat-jump-bottom" onClick={pinToLatest} aria-label="回到最新消息" title="回到最新">↓</button>}
     {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，可以上传图片，或粘贴图床直链。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{void confirmDialog({ title:'清空图片表情包', message:'清空全部图片表情包？', confirmLabel:'清空', danger:true }).then(ok=>{if(ok){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}})}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><div className="sticker-link-add"><input value={stickerLink} onChange={e=>{setStickerLink(e.target.value);setStickerLinkError('')}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addImageStickerLink()}}} placeholder="粘贴图床直链，如 https://.../cat.png" aria-label="图片表情链接"/><button type="button" disabled={!stickerLink.trim()} onClick={addImageStickerLink}>添加链接</button></div>{stickerLinkError&&<p className="emoji-empty">{stickerLinkError}</p>}<h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
     {pendingForScope&&<div className="pending-card" role="status">
