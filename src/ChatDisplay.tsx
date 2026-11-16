@@ -27,7 +27,7 @@ function Option({ checked, label, onChange }: { checked: boolean; label: string;
 
 export function ChatDisplaySettings() {
   const [prefs, setPrefs] = useState<ChatDisplayPrefs>(() => loadChatDisplay())
-  const patch = (key: keyof ChatDisplayPrefs, value: boolean | string) => {
+  const patch = (key: keyof ChatDisplayPrefs, value: boolean | string | number) => {
     const next = { ...prefs, [key]: value } as ChatDisplayPrefs
     setPrefs(next)
     saveChatDisplay(next)
@@ -45,6 +45,21 @@ export function ChatDisplaySettings() {
       <Option checked={prefs.token} label="Token 用量" onChange={(v) => patch('token', v)}/>
     </div>
 
+    <section className="chat-thinking-settings" aria-label="思考模式与工具调用">
+      <h3>思考模式</h3>
+      <p className="muted">只展示模型接口实际返回的思考内容；默认折叠，不会生成或猜测隐藏推理。</p>
+      <Option checked={prefs.showReasoning} label="显示思考过程（折叠卡片）" onChange={v=>patch('showReasoning',v)}/>
+      <Option checked={prefs.autoTranslateReasoning} label="自动翻译英文思考内容（需额外请求）" onChange={v=>patch('autoTranslateReasoning',v)}/>
+      <Option checked={prefs.showReasoningDuration} label="显示思考耗时" onChange={v=>patch('showReasoningDuration',v)}/>
+      <h3>工具调用</h3>
+      <Option checked={prefs.showToolCalls} label="显示工具调用记录（折叠卡片）" onChange={v=>patch('showToolCalls',v)}/>
+      <label className="chat-tool-limit">连续工具调用最大轮数
+        <select value={prefs.toolRoundLimit} onChange={e=>patch('toolRoundLimit',Number(e.target.value))}>
+          {[5,10,15,20].map(n=><option key={n} value={n}>{n} 轮</option>)}
+        </select>
+      </label>
+      <p className="muted">轮数是连续请求上限；单轮可能调用多个工具。提高上限可能增加用量。</p>
+    </section>
     <div className="chat-display-preview" aria-label="聊天展示实时预览">
       <span className="chat-display-preview-label">实时预览</span>
       <div className="cdp-row assistant">
