@@ -3,7 +3,7 @@ import { pushBackHandler } from './backStack.mjs'
 import type { ModelProfile, PersonBinding } from './resourceBindings.mjs'
 import type { Vendor } from './vendors.mjs'
 import { buildModelCatalog, filterCatalog, profileIdForCatalogEntry } from './unifiedModels.mjs'
-import { routesForModel, type ModelRoute } from './modelRoutes.mjs'
+import { routesForModel } from './modelRoutes.mjs'
 import {
   addRoute, updateRoute, removeRoute, primaryRoute, setFixedRoute,
   selectLogicalModel, fixedRouteId, type RouteState,
@@ -89,15 +89,6 @@ export function ModelPickerSheet({
   const list = useMemo(() => filterCatalog(catalog, { filter, query, favorites }), [catalog, filter, query, favorites])
   const toggleFav = (id: string) => setFavorites(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id])
 
-  const pick = (entryId: string) => {
-    const entry = catalog.find(m => m.id === entryId)
-    if (!entry) return
-    onPatchBinding({ ...binding, modelProfileId: profileIdForCatalogEntry(entry) })
-    onPick(profileIdForCatalogEntry(entry))
-    setRouteState(s => selectLogicalModel(s, person, entry.id))
-    setRoutesOpen('')
-  }
-
   const currentKey = vendorKeys.find(k => k.id === (binding.keyId || ''))
   const keyLabel = currentKey ? `${currentKey.vendorName || ''} · ${currentKey.label || ''}` : '自动 · 先备用再主号'
   const fixed = fixedRouteId(routeState, person)
@@ -158,7 +149,7 @@ export function ModelPickerSheet({
                 const profile = profiles.find(p=>p.id===profileId)
                 if (!profile) continue
                 const vendorId = profile.vendorId || 'profile:' + profile.id
-                const vendorName = vendorMap.get(profile.vendorId) || profile.vendor || '未命名来源'
+                const vendorName = vendorMap.get(profile.vendorId || '') || profile.vendor || '未命名来源'
                 const id = 'profile:' + profile.id
                 if (seen.has(id)) continue
                 seen.add(id)
