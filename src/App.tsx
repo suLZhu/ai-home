@@ -124,6 +124,7 @@ const MODEL_PROFILES_KEY = 'ai-home.modelProfiles'
 const BINDINGS_KEY = 'ai-home.bindings'
 // 供应商（含 API Key）只存本机，不进云端快照；勾选池不含凭证，随快照同步。
 const VENDORS_KEY = 'ai-home.vendors'
+const DEFAULT_MODEL_KEY = 'ai-home.defaultModel'
 const CHAT_POOL_KEY = 'ai-home.chatPool'
 type ProjectTask={id:string;text:string;done:boolean}
 type ProjectRecord={id:string;title:string;description:string;status:'进行中'|'已归档';category:string;updatedAt:string;nextStep?:string;tasks?:ProjectTask[]}
@@ -336,6 +337,8 @@ export default function App() {
   const [bindings, setBindings] = useState<Record<Person,PersonBinding>>(() => normalizeBindings(read<unknown>(BINDINGS_KEY, null), ASSISTANT_PEOPLE))
   // 供应商与 Key 只落本机；聊天窗口「设置页勾选池」决定哪些世界书 / MCP 会出现在图标面板。
   const [vendors, setVendors] = useState<Vendor[]>(() => normalizeVendors(read<unknown>(VENDORS_KEY, null)))
+  // 默认模型：助手没单独选模型时用它兜底，只存本机。
+  const [defaultModelId, setDefaultModelId] = useState<string>(() => String(read<unknown>(DEFAULT_MODEL_KEY, '') || ''))
   // 订阅账号含 API Key，只存本机；云端快照里永远不含这一项。
   const [subscriptions, setSubscriptions] = useState<SubscriptionAccount[]>(() => normalizeSubscriptions(read<unknown>(SUBSCRIPTION_STORAGE_KEY, [])))
   const [chatPool, setChatPool] = useState<ChatPool>(() => normalizePool(read<unknown>(CHAT_POOL_KEY, null)))
@@ -1072,6 +1075,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem(ROUTE_STATE_KEY, JSON.stringify(routeState)) } catch { /* 私密模式忽略 */ } }, [routeState])
   useEffect(() => localStorage.setItem(BINDINGS_KEY, JSON.stringify(bindings)), [bindings])
   useEffect(() => { try { localStorage.setItem(VENDORS_KEY, JSON.stringify(vendors)) } catch { /* 私密模式忽略 */ } }, [vendors])
+  useEffect(() => { try { localStorage.setItem(DEFAULT_MODEL_KEY, JSON.stringify(defaultModelId)) } catch { /* 私密模式忽略 */ } }, [defaultModelId])
   useEffect(() => { try { localStorage.setItem(SUBSCRIPTION_STORAGE_KEY, JSON.stringify(subscriptions)) } catch { /* 私密模式忽略 */ } }, [subscriptions])
   useEffect(() => localStorage.setItem(CHAT_POOL_KEY, JSON.stringify(chatPool)), [chatPool])
   useEffect(() => localStorage.setItem('ai-home.worldEntries', JSON.stringify(worldEntries)), [worldEntries])
@@ -1193,7 +1197,7 @@ export default function App() {
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
     // 聊天窗口选的模型预设优先；未绑定时回退旧的「每助手一份」配置（老数据零影响）。
-    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
+    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || defaultModelId || '', modelProfiles, modelConfig[target])
     // 多 KEY：默认「备用优先、主号兜底」，服务端按顺序自动换下一把；
     // 聊天窗口显式选了某把 Key 就把它提到队首。旧的「每助手一份」Key 永远排在最后。
     const activeVendor = activeModel.vendorId ? vendors.find(v=>v.id===activeModel.vendorId) : undefined
@@ -1877,7 +1881,7 @@ export default function App() {
   // 复用同一 /api/chat 代理与当前模型配置，但用 stream:false 取一次完整回复。
   async function translateReasoningText(text: string): Promise<string> {
     const target = person
-    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || '', modelProfiles, modelConfig[target])
+    const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || defaultModelId || '', modelProfiles, modelConfig[target])
     const activeVendor = activeModel.vendorId ? vendors.find(v=>v.id===activeModel.vendorId) : undefined
     const activeChatUrl = activeVendor ? chatRequestUrl(activeVendor) : ''
     const apiKeyCandidates = resolveKeyCandidates(vendors, bindings[target]?.keyId || '', apiKey[target] || '', activeModel.vendorId || '')
@@ -2126,7 +2130,7 @@ export default function App() {
         userSettings={userSettings} setUserSettings={setUserSettings}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>{pageBeforeSettings.current='room';navigate('settings')}} packIcons={activePack?.icons} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
+      {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     <UiDialogHost/>
@@ -3542,7 +3546,7 @@ function Fun({shortcut,onShortcutUsed,displayName}:{shortcut:string;onShortcutUs
   const selected=rooms.find(x=>x.key===active)
   return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary personLabel={displayName}/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
 }
-function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void}) {
+function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved,defaultModelId,setDefaultModelId}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void;defaultModelId:string;setDefaultModelId:(v:string)=>void}) {
   void workspaceConfigs
   const [section,setSection]=useState('')
   const sectionScrollRef=useRef<Record<string,number>>({})
@@ -3598,7 +3602,7 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
     {id:'system',icon:'◉',title:'系统与权限',desc:'权限管理 / 账号与安全 / 数据',section:'system'},
     {id:'about',icon:'ⓘ',title:'关于栖间',desc:'版本信息 / 关于与说明 / 更新日志',section:'about'},
   ]
-  return <div className="settings-screen">{!section&&<header className="settings-heading"><button type="button" className="settings-back settings-back-room" onClick={onBack}>← 主页</button><h2>栖间 · 设置</h2></header>}{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon"><PackIcon value={packIcons?.[card.id]||card.icon}/></span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true">›</span></button>)}</div></div>:<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>openSection('')}>← 全部设置</button>}{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
+  return <div className="settings-screen">{!section&&<header className="settings-heading"><button type="button" className="settings-back settings-back-room" onClick={onBack}>← 主页</button><h2>栖间 · 设置</h2></header>}{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon"><PackIcon value={packIcons?.[card.id]||card.icon}/></span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true">›</span></button>)}</div></div>:<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>openSection('')}>← 全部设置</button>}{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:default'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} modelProfiles={modelProfiles} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
 <div className="setting-card settings-inner-card"><b>备份与恢复</b><BackupCenter people={systemPeople||[]} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/></div>
 <div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div>
 <div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>
@@ -3701,7 +3705,7 @@ function SettingsSubNav({section,onSelect}:{section:string;onSelect:(s:string)=>
   const isTheme=section==='theme'||section.startsWith('theme:')
   const rows=isTheme
     ? [{id:'theme:global',label:'全局主题'},{id:'theme:person',label:'助手主题'}]
-    : [{id:'vendor',label:'供应商列表'},{id:'vendor:account',label:'订阅账号'}]
+    : [{id:'vendor',label:'供应商列表'},{id:'vendor:default',label:'默认模型'},{id:'vendor:account',label:'订阅账号'}]
   const active=(section.startsWith('theme:')||section.startsWith('vendor:'))?section:rows[0].id
   return <div className="settings-subnav settings-tabs" role="tablist" aria-label={isTheme?'主题美化分组':'供应商分组'}>
     {rows.map(r=><button type="button" role="tab" aria-selected={active===r.id} className={'subnav-row'+(active===r.id?' active':'')} key={r.id} onClick={()=>onSelect(r.id)}><b>{r.label}</b></button>)}
@@ -3751,14 +3755,66 @@ const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '
 // ── 供应商中心：一排两个小图标，点一家进入它自己的页面（配置 / 模型两个 tab） ─────────
 // 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
 // 搜索 + 折叠分组 + 逐条 ＋ 点选；Key 只留本机，不进云端快照。
-function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
+// 默认模型：助手没单独选模型时的兜底。只列已经勾进池子的模型，按供应商分组。
+function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onBack}:{
+  profiles:ModelProfile[]; vendors:Vendor[]; defaultModelId:string; setDefaultModelId:(v:string)=>void; onBack:()=>void
+}) {
+  const [query,setQuery]=useState('')
+  const vendorName=new Map(vendors.map(v=>[v.id,v.name]))
+  const rows=profiles.filter(p=>{
+    const q=query.trim().toLowerCase()
+    if(!q)return true
+    return [p.name,p.model,vendorName.get(p.vendorId||'')||p.vendor||''].some(x=>String(x||'').toLowerCase().includes(q))
+  })
+  const groups=new Map<string,{name:string;items:ModelProfile[]}>()
+  for(const p of rows){
+    const id=p.vendorId||'manual'
+    const g=groups.get(id)||{name:vendorName.get(id)||p.vendor||'手动添加',items:[]}
+    g.items.push(p);groups.set(id,g)
+  }
+  const current=profiles.find(p=>p.id===defaultModelId)
+  return <section className="vendor-page default-model-page">
+    <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
+    <div className="vendor-card open">
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true">★</span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
+      <div className="vendor-card-body vendor-kelivo-model-page">
+        <p className="resource-hint">助手没有单独选模型时，聊天用这个兜底；助手自己选过的，仍以助手的为准。</p>
+        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索默认模型" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}</div>
+        <div className="vendor-kelivo-added">
+          {rows.length===0&&<div className="vendor-kelivo-empty"><b>还没有可用模型</b><small>到「供应商 → 模型」里勾选模型后再回来</small></div>}
+          {[...groups.entries()].map(([vendorId,group])=><div className="vendor-kelivo-added-group" key={vendorId}>
+            <div className="vendor-kelivo-added-group-head static"><b>{group.name}</b><small>{group.items.length}</small></div>
+            {group.items.map(p=>{
+              const on=p.id===defaultModelId
+              const vendor=vendors.find(v=>v.id===p.vendorId)
+              const spec=vendor?specForModel(vendor,p.model):null
+              const badges=spec?specBadges(spec):[]
+              return <div className={'vendor-kelivo-added-row'+(on?' selected':'')} key={p.id}>
+                <span className="vendor-kelivo-model-mark" aria-hidden="true">{p.name.slice(0,1).toUpperCase()}</span>
+                <button type="button" className="vendor-kelivo-model-label" aria-pressed={on} onClick={()=>setDefaultModelId(on?'':p.id)}>
+                  <b>{p.name||p.model}</b>
+                  <span className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>{p.model}</small>}</span>
+                </button>
+                <button type="button" className={'default-model-pick'+(on?' on':'')} aria-label={on?'取消默认':'设为默认'} onClick={()=>setDefaultModelId(on?'':p.id)}>{on?'✓':'○'}</button>
+              </div>})}
+          </div>)}
+        </div>
+        <div className="vendor-kelivo-floating-actions"><button type="button" disabled={!defaultModelId} onClick={()=>setDefaultModelId('')}>清除默认</button></div>
+      </div>
+    </div>
+  </section>
+}
+
+function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,modelProfiles,defaultModelId,setDefaultModelId}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
   section:string; onSection:(s:string)=>void
+  modelProfiles:ModelProfile[]; defaultModelId:string; setDefaultModelId:(v:string)=>void
 }) {
   // 列表 / 新增 / 某家详情各自是一个独立页面（section 驱动），不再在列表下面展开面板。
   const showNew=section==='vendor:add'
-  const activeId=section.startsWith('vendor:')&&!showNew?section.slice('vendor:'.length):''
+  const showDefault=section==='vendor:default'
+  const activeId=section.startsWith('vendor:')&&!showNew&&!showDefault?section.slice('vendor:'.length):''
   const [tab,setTab]=useState<'config'|'model'>('config')
   const [,setPickerOpen]=useState(false)
   const [modelQuery,setModelQuery]=useState('')
@@ -3771,6 +3827,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const [specTarget,setSpecTarget]=useState('')
   const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
   const [vendorQuery,setVendorQuery]=useState('')
+  const [providerGroupOpen,setProviderGroupOpen]=useState<Record<string,boolean>>({})
   const [testState,setTestState]=useState<{busy:boolean;ok?:boolean;text:string}>({busy:false,text:''})
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
@@ -3866,27 +3923,47 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const iconForModel=(id:string)=>/gemini/i.test(id)?'✦':/claude/i.test(id)?'✳':/deepseek/i.test(id)?'◈':/gpt|o[1-9]/i.test(id)?'❋':/glm/i.test(id)?'⬡':'◇'
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
-  const isList=!showNew&&!active
+  const isList=!showNew&&!showDefault&&!active
   return <div className="vendor-center">
     {isList&&<>
       <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
       <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
-        {vendors.filter(v=>!vendorQuery.trim()||v.name.toLowerCase().includes(vendorQuery.trim().toLowerCase())).map(v=>{
-          const picked=v.models.filter(m=>m.selected).length
-          const keys=v.keys.filter(k=>!!k.value).length
-          const off=v.enabled===false
-          const status=off?['已停用','off']:keys?['已启用','on']:['未配置 Key','warn']
-          return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
-            <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
-            <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{picked} 个模型 · {keys} 把 Key</small></span>
-            <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
-            <span className="vendor-kelivo-provider-caret">›</span>
-          </button>})}
-        <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b><small>OpenAI 兼容接口 / 自定义中转站</small></span><span className="vendor-kelivo-provider-caret">›</span></button>
+        {(()=>{
+          const q=vendorQuery.trim().toLowerCase()
+          const match=(v:Vendor)=>!q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)
+          const map=new Map<string,Vendor[]>()
+          for(const v of vendors.filter(match)){const key=v.group||'';if(!map.has(key))map.set(key,[]);map.get(key)!.push(v)}
+          const entries=[...map.entries()].sort((a,b)=>!a[0]?1:!b[0]?-1:0)
+          const row=(v:Vendor)=>{
+            const picked=v.models.filter(m=>m.selected).length
+            const keys=v.keys.filter(k=>!!k.value).length
+            const off=v.enabled===false
+            const status=off?['已停用','off']:keys?['已启用','on']:['未配置 Key','warn']
+            return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
+              <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
+              <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{picked} 个模型 · {keys} 把 Key</small></span>
+              <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
+              <span className="vendor-kelivo-provider-caret">›</span>
+            </button>
+          }
+          return <>
+            {entries.map(([group,list])=>{
+              const key=group||'_ungrouped'
+              const collapsed=providerGroupOpen[key]===true
+              return <div className="vendor-kelivo-provider-group" key={key}>
+                {!!group&&<button type="button" className="vendor-kelivo-provider-group-head" aria-expanded={!collapsed} onClick={()=>setProviderGroupOpen(v=>({...v,[key]:!collapsed}))}><span>{collapsed?'›':'⌄'}</span><b>{group}</b><small>{list.length}</small></button>}
+                {!collapsed&&list.map(row)}
+              </div>
+            })}
+            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b><small>OpenAI 兼容接口 / 自定义中转站</small></span><span className="vendor-kelivo-provider-caret">›</span></button>
+          </>
+        })()}
       </div>
-      {!vendors.some(v=>!vendorQuery.trim()||v.name.toLowerCase().includes(vendorQuery.trim().toLowerCase()))&&<p className="muted vendor-kelivo-empty-hint">没有匹配的供应商</p>}
+      {!vendors.some(v=>{const q=vendorQuery.trim().toLowerCase();return !q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)})&&<p className="muted vendor-kelivo-empty-hint">没有匹配的供应商</p>}
     </>}
+
+    {showDefault&&<DefaultModelPage profiles={modelProfiles} vendors={vendors} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId} onBack={backToList}/>}
 
     {showNew&&<section className="vendor-page">
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
@@ -3922,6 +3999,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <div className="vendor-config-section-title">连接设置</div>
         <div className="vendor-config-fields">
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
+          <label className="vendor-field">分组 <small>可选，列表中按分组折叠；留空为未分组</small><input aria-label="供应商分组" list="vendor-group-options" value={active.group||''} onChange={e=>patch(active.id,x=>({...x,group:e.target.value}))} placeholder="例如：中转站"/><datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist></label>
           <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="粘贴 API Key"/><PasteButton onPaste={setPrimary}/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>

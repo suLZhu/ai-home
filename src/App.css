@@ -3161,3 +3161,16 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .m-spec-badge{display:inline-flex;align-items:center;font-style:normal;font-size:10px;line-height:1.5;padding:1px 7px;border-radius:999px;border:1px solid transparent;background:var(--field,#f4f1f4);color:var(--muted)}
 .model-vendor-heading.static{cursor:default}
 .model-sheet-favgroup .model-vendor-heading span{margin-left:auto;color:#b8567a}
+
+/* 默认模型页 */
+.vendor-center .vendor-kelivo-added-group-head.static{cursor:default}
+.vendor-center .vendor-kelivo-added-row.selected{background:color-mix(in srgb,var(--accent,#8b593b) 7%,transparent);border-radius:12px}
+.default-model-pick{flex:0 0 40px;width:40px;height:40px;border:1px solid var(--line,#e2dcea);border-radius:50%;background:var(--field,#f7f4fa);color:var(--muted);font-size:16px}
+.default-model-pick.on{border-color:var(--accent,#8b593b);background:var(--accent,#8b593b);color:#fff}
+
+/* 供应商分组 */
+.vendor-center .vendor-kelivo-provider-group{display:flex;flex-direction:column;min-width:0}
+.vendor-center .vendor-kelivo-provider-group-head{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:12px 10px 4px;border:0!important;background:transparent!important;box-shadow:none!important;color:var(--muted);text-align:left}
+.vendor-center .vendor-kelivo-provider-group-head span{width:14px;font-size:14px}
+.vendor-center .vendor-kelivo-provider-group-head b{font-size:11.5px;letter-spacing:.1em;font-weight:600}
+.vendor-center .vendor-kelivo-provider-group-head small{margin-left:auto;font-size:11px;opacity:.75}

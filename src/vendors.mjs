@@ -200,6 +200,7 @@ export function normalizeVendors(raw) {
       modelsPath: s ? str(s.modelsPath) : '',
       builtin: true,
       enabled: s ? s.enabled !== false : true,
+      group: s ? str(s.group) : '',
       subscription: s ? !!s.subscription : false,
       keys: s ? normalizeKeys(s.keys) : [],
       models: s ? normalizeModels(s.models, v.models) : [],
@@ -216,6 +217,7 @@ export function normalizeVendors(raw) {
       modelsPath: str(v.modelsPath),
       builtin: false,
       enabled: v.enabled !== false,
+      group: str(v.group),
       subscription: !!v.subscription,
       keys: normalizeKeys(v.keys),
       models: normalizeModels(v.models, []),
@@ -310,5 +312,5 @@ export function readKeyCandidates(body) {
 
 // 自定义供应商 / 自定义模型的空白模板。
 export function blankVendor(name = '', endpoint = '') {
-  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, enabled: true, keys: [], models: [], modelOverrides: {} }
+  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, enabled: true, group: '', keys: [], models: [], modelOverrides: {} }
 }

@@ -10,6 +10,7 @@ export type Vendor = {
   modelsPath?: string
   builtin: boolean
   enabled?: boolean
+  group?: string
   subscription?: boolean
   subscriptionChannel?: string
   subscriptionAccountId?: string

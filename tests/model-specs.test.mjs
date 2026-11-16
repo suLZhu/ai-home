@@ -100,3 +100,9 @@ test('停用的供应商不进入模型池', () => {
   assert.equal(syncVendorProfiles(vendors, []).length, 1)
   assert.equal(allVendorKeys(vendors).length, 1)
 })
+
+test('供应商分组：自定义分组保留，内置默认未分组', () => {
+  const vendors = normalizeVendors([{ id: 'x', name: 'X', endpoint: 'https://x.example/v1', group: '中转站', keys: [], models: [] }])
+  assert.equal(vendors.find(v => v.id === 'x').group, '中转站')
+  assert.equal(vendors.find(v => v.id === 'openai').group, '')
+})
