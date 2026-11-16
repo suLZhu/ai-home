@@ -47,6 +47,8 @@ jobs:
         run: node --test tests/vision-attachments.test.mjs
       - name: Sync Capacitor
         run: npx cap sync android
+      - name: Use runner native AAPT2
+        run: sed -i '/^android.aapt2FromMavenOverride=/d' android/gradle.properties
       - name: Assemble debug APK
         run: |
           chmod +x android/gradlew
