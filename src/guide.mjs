@@ -50,33 +50,49 @@ AiHomeRoom.template   // 只读模板
 - 带 action 的物件可点：chat / world / mcp / skill / memory / settings；
 - 不带 action 就是纯装饰。
 
-## 四、世界书 / MCP / 技能
+### 助手改房间的工具
+
+- 「room_get_layout」：读取当前房间布局（JSON）；
+- 「room_set_layout」：把设计好的 layout 保存并立即生效；
+- 先读再改，在原 items 上增删；没有 action 的物件就是装饰，不会被误当成入口。
+
+## 四、内置浏览器
+
+- 助手调用 「open_web_page」 会在 App 内打开网页，用户可随时关闭；
+- 顶部有地址栏（输入网址或搜索，自动补 https）、后退 / 前进 / 刷新 / 回首页；
+- 页面标题显示在导航行，加载时有进度条；
+- 下载交给系统下载器，完成会出通知；
+- 非 http(s) 链接（tel / mailto / 自定义 scheme）会交给对应 App；
+- 部分站点禁止被 iframe 嵌入，此时点右上角「↗」用系统浏览器打开。
+
+## 五、世界书 / MCP / 技能
 
 - **世界书**：条目可设置关键词、注入位置（system 顶部/尾部）、绑定助手；命中后进入提示词。
 - **MCP**：按助手绑定服务，可测试连通。
 - **技能**：导入 SKILL.md（带 YAML frontmatter 的 name/description），启用后自动进入系统提示；技能太多时会自动截断。
 
-## 五、记忆
+## 六、记忆
 
 - 每个助手独立记忆库；记忆面板可搜索、置顶、删除；
 - 聊天时自动召回相关记忆，写入长期记忆库。
 
-## 六、应用锁（Android）
+## 七、应用锁（Android）
 
 - 需要无障碍权限；只监听前台应用切换，不读屏、不模拟点击；
 - 勾选要锁的应用，打开时显示 PIN 解锁页，支持 5 分钟临时解锁。
 
-## 七、提醒与定时
+## 八、提醒与定时
 
 - 直接对助手说「几点提醒我…」，会创建定时任务；
 - 提醒会发进聊天；本地模式也支持，不依赖云端；
 - 也可在 菜单 → 助手工具 → 主动任务 里手动管理。
 
-## 八、给 AI 的提示
+## 九、给 AI 的提示
 
 - 需要完整说明时读取 window.AiHomeGuide（本页 markdown）；
-- 修改房间前先 AiHomeRoom.get()，在原有 items 上增删，别整份覆盖；
-- 房间布局按助手隔离，存储键 ai-home.roomLayout.<person>。
+- 修改房间前先调用 「room_get_layout」（或 AiHomeRoom.get()），在原有 items 上增删，别整份覆盖；
+- 房间布局按助手隔离，存储键 ai-home.roomLayout.<person>；
+- 可用工具：「room_get_layout」 / 「room_set_layout」（房间）、「web_search」 / 「open_web_page」（联网与内置浏览器）、「scheduled_task_list/create/manage」（提醒）、「widget_*」（房间小组件）、「memory_search/add」、「worldbook_*」、「ledger_*」、「conversation_search」。
 `
 
-export const GUIDE_BRIEF = `【栖间速查】应用有 主页/房间/聊天 三块；菜单在左上角，含历史聊天、助手工具和设置。设置分 助手设定（世界书/MCP/技能/记忆）、模型与费用、外观与聊天、工作区、系统与权限。房间是开放场景：window.AiHomeRoom.get()/set(layout)/reset()，layout 用 background + items（x/y/w/h 百分比、style、emoji/text、action∈chat/world/mcp/skill/memory/settings）。完整说明见 设置→系统与权限→说明，或 window.AiHomeGuide。`
+export const GUIDE_BRIEF = `【栖间速查】应用有 主页/房间/聊天 三块；菜单在左上角，含历史聊天、助手工具和设置。设置分 助手设定（世界书/MCP/技能/记忆）、模型与费用、外观与聊天、工作区、系统与权限。房间是开放场景，可用工具 room_get_layout / room_set_layout 读取和设计（background + items，x/y/w/h 百分比、style、emoji/text、action∈chat/world/mcp/skill/memory/settings）。内置浏览器：web_search 搜索、open_web_page 打开（有地址栏、前进后退、刷新、下载）。完整说明见 设置→系统与权限→说明，或 window.AiHomeGuide。`
