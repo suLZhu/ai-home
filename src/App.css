@@ -2922,3 +2922,18 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .msg-tool-call.status-succeeded{border-left-color:#719b8d}
 .msg-tool-call.status-failed,.msg-tool-call.status-timed_out{border-left-color:#c97070}
 .msg-tool-call-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
+
+/* Roomier chat transcript: preserve the existing composer and + tool drawer. */
+.fullscreen-chat .chat-header{min-height:42px;padding:4px 8px 6px;gap:8px}
+.fullscreen-chat .chat-header-compact{min-height:36px;padding:2px 8px 4px;border-bottom-color:transparent}
+.fullscreen-chat .chat-header-collapse{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border:1px solid var(--line,#ded7e8);border-radius:50%;background:var(--card,#fff);color:var(--ink);font-size:22px;cursor:pointer}
+.fullscreen-chat .chat-header-actions[hidden]{display:none!important}
+.fullscreen-chat .chat-header-compact .chat-avatar{width:27px;height:27px}
+.fullscreen-chat .chat-header-compact .chat-header-title{gap:6px;font-size:14px}
+.fullscreen-chat .message-row{gap:6px}
+.fullscreen-chat .message-row .bubble{max-width:min(90%,720px)}
+.fullscreen-chat .message-row .message-avatar{flex-shrink:0}
+@media(max-width:600px){
+ .fullscreen-chat .message-row .bubble{max-width:calc(100% - 42px)}
+ .fullscreen-chat .chat-header{margin-bottom:0}
+}
