@@ -3767,6 +3767,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const [modelDraft,setModelDraft]=useState('')
   const [keyDraft,setKeyDraft]=useState({label:'',value:''})
   const [showKey,setShowKey]=useState(false)
+  const [showBackupKeys,setShowBackupKeys]=useState(false)
   const [newName,setNewName]=useState('')
   const [newKey,setNewKey]=useState('')
   const [newMultiKey,setNewMultiKey]=useState(false)
@@ -3801,7 +3802,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
     setKeyDraft({label:'',value:''})
   }
-  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setKeyDraft({label:'',value:''})}
+  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const openVendorPage=(id:string)=>{setTab('model');resetEditUI();onSection('vendor:'+id)}
@@ -3859,7 +3860,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
       <form className="vendor-new" onSubmit={addVendor}>
       <b>添加自定义供应商</b>
       <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/></label>
-      <label className="vendor-field">API Key<div className="key-input-row"><input aria-label="API Key" type="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="text" value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/><PasteButton onPaste={setNewKey}/></div></label>
+      <label className="vendor-field">API Key<div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/><PasteButton onPaste={setNewKey}/></div></label>
       <label className="vendor-multi-toggle"><input type="checkbox" checked={newMultiKey} onChange={e=>{setNewMultiKey(e.target.checked);if(e.target.checked&&newExtraKeys.length===0)setNewExtraKeys([{id:crypto.randomUUID(),label:'',value:'',visible:false}])}}/> 启用多 Key 模式</label>
       {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type="text" style={{WebkitTextSecurity:k.visible?'none':'disc'} as any} autoComplete="off" value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))}>{k.visible?'🙈':'👁'}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}>×</button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}>＋</button></div>}
       <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
@@ -3879,20 +3880,30 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
       </div>
 
-      {tab==='config'&&<div className="vendor-card-body">
-        <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))}/></label>
-        <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://…/v1"/></label>
-        <label className="vendor-field">API 路径<input aria-label="API 路径" value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
-        <p className="vendor-url-hint">请求地址 <b>{chatUrl||'填写 Base URL 后显示'}</b></p>
-        <label className="vendor-field vendor-primary-key">API Key<div className="vendor-key-input"><input aria-label="API Key" type="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="text" value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="sk-…"/><PasteButton onPaste={setPrimary}/><button type="button" onClick={()=>setShowKey(s=>!s)}>{showKey?'隐藏':'显示'}</button></div></label>
-        <label className="vendor-field">模型列表路径 <small>可选，留空自动推导</small><input aria-label="模型列表路径" value={active.modelsPath||''} onChange={e=>patch(active.id,x=>({...x,modelsPath:e.target.value}))} placeholder="相对路径，如 /models"/></label>
-        <p className="vendor-url-hint">当前列表地址 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
-        <div className="vendor-section"><b>多 KEY 模式 <small>备用优先 · 主号兜底 · 失败自动换</small></b>
-          {backupKeys.length===0&&<p className="muted">目前只有一把主 Key；可再添加备用 Key，前一把额度或鉴权失败会自动换下一把。</p>}
-          {backupKeys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><SoftSelect className="vendor-key-role" ariaLabel="Key 角色" value={k.role||'backup'} onChange={v=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:v as 'primary'|'backup'}:(v==='primary'&&y.role==='primary'?{...y,role:'backup' as const}:y))}))} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="API Key" type="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="text" value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="sk-…"/><button type="button" aria-label="删除这把 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
-          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(d=>({...d,label:e.target.value}))} placeholder="备用 Key 备注名"/><input aria-label="新 Key 值" type="text" style={{WebkitTextSecurity:"disc"} as any} autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="text" value={keyDraft.value} onChange={e=>setKeyDraft(d=>({...d,value:e.target.value}))} placeholder="API Key"/><button type="button" onClick={addBackupKey}>添加备用 Key</button></div>
-          <div className="vendor-key-actions"><button type="button" onClick={()=>setShowKey(s=>!s)}>{showKey?'隐藏 Key':'显示 Key'}</button><small>Key 只存本机，不进云端快照。</small></div>
+      {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
+        <div className="vendor-config-section-title">管理</div>
+        <div className="vendor-config-menu">
+          <div className="vendor-config-info"><span>供应商类型</span><span>OpenAI 兼容接口</span></div>
+          <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
+          <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>多把密钥自动轮换，主号兜底</small></span><input type="checkbox" checked={showBackupKeys||backupKeys.length>0} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
+          <div className="vendor-config-info"><span>获取模型</span><button type="button" onClick={()=>{setTab('model');void fetchRemote(active)}}>从当前供应商刷新　›</button></div>
         </div>
+        <div className="vendor-config-section-title">连接设置</div>
+        <div className="vendor-config-fields">
+          <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
+          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="粘贴 API Key"/><PasteButton onPaste={setPrimary}/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
+          <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
+          <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
+          <p className="vendor-url-hint">实际聊天请求地址 <b>{chatUrl||'填写 Base URL 后显示'}</b></p>
+          <label className="vendor-field">模型列表路径 <small>可选；留空自动推导</small><input aria-label="模型列表路径" type="text" autoCapitalize="off" spellCheck={false} value={active.modelsPath||''} onChange={e=>patch(active.id,x=>({...x,modelsPath:e.target.value}))} placeholder="/models"/></label>
+          <p className="vendor-url-hint">模型列表地址 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
+        </div>
+        {(showBackupKeys||backupKeys.length>0)&&<div className="vendor-config-keys">
+          <div className="vendor-config-section-title">多 Key 管理 <small>备用优先 · 主号兜底</small></div>
+          {backupKeys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><SoftSelect className="vendor-key-role" ariaLabel="Key 角色" value={k.role||'backup'} onChange={v=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:v as 'primary'|'backup'}:(v==='primary'&&y.role==='primary'?{...y,role:'backup' as const}:y))}))} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="备用 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="API Key"/><button type="button" aria-label="删除备用 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
+          <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(d=>({...d,label:e.target.value}))} placeholder="备注名"/><input aria-label="新 Key 值" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(d=>({...d,value:e.target.value}))} placeholder="添加备用 Key"/><button type="button" onClick={addBackupKey}>添加</button></div>
+          <p className="muted">关闭展示不会删除现有 Key。密钥仍只存本机，不进入云端快照。</p>
+        </div>}
         {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{void confirmDialog({ title:'删除供应商', message:'删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？', confirmLabel:'删除', danger:true }).then(ok=>{if(!ok)return;commit(vendors.filter(x=>x.id!==active.id));backToList()})}}>删除这家供应商</button>}
       </div>}
 
