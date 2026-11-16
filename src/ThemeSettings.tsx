@@ -36,7 +36,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
     try {
       const pack = /\.zip$/i.test(file.name) ? await packFromZip(await file.arrayBuffer()) : parseThemePack(await file.text())
       const next = upsertThemePack(pack)
-      setPacks(next)
+      setPacks([...BUILTIN_THEME_PACKS, ...next.filter(p => !BUILTIN_THEME_PACKS.some(b => b.id === p.id))])
       applyPack(pack)
       setNotice(`已导入并应用「${pack.name}」`)
     } catch (e: any) {
@@ -49,7 +49,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
   const removePack = (id: string) => {
     if (BUILTIN_THEME_PACKS.some(p => p.id === id)) return
     const next = removeThemePack(id)
-    setPacks(next)
+    setPacks([...BUILTIN_THEME_PACKS, ...next.filter(p => !BUILTIN_THEME_PACKS.some(b => b.id === p.id))])
     if (activeId === id) applyPack(null)
   }
 
