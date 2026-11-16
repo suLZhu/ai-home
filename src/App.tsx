@@ -290,10 +290,20 @@ export default function App() {
   const displayName = (id: Person) => assistants.find(a => a.id === id)?.name || DEFAULT_DISPLAY_NAMES[id] || id
   const [person, setPerson] = useState<Person>(YWX)
   const [chatOpen, setChatOpen] = useState(false)
-  const [draft, setDraft] = useState('')
+  const [drafts, setDrafts] = useState<Record<string,string>>(() => read<Record<string,string>>('ai-home.chatDrafts', {}))
   const [messages, setMessages] = useState<Record<Person, ChatMessage[]>>(readMessages)
   const [conversations,setConversations] = useState<Record<Person,Conversation[]>>(initialConversations)
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<string,string>>('ai-home.activeConversationIds',{});const all=initialConversations();return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,all[id].some(c=>c.id===saved[id])?saved[id]:all[id][0]?.id||''])) as Record<Person,string>})
+  // Drafts are isolated by assistant AND conversation, including during background generation.
+  const draftKey = pendingScopeKey(person, activeConversationIds[person] || '')
+  const draft = drafts[draftKey] || ''
+  const setDraft = (value: string | ((previous: string) => string)) => {
+    setDrafts(previous => {
+      const nextValue = typeof value === 'function' ? value(previous[draftKey] || '') : value
+      return { ...previous, [draftKey]: nextValue }
+    })
+  }
+  useEffect(() => { try { localStorage.setItem('ai-home.chatDrafts', JSON.stringify(drafts)) } catch {} }, [drafts])
   // 流式生成是异步长任务：send() 闭包里的 activeConversationIds 会随用户切换会话而过期。
   // 用 ref 持有最新值，让流式回写能判断「视图是否还停在原会话」，避免把内容写进错误的会话。
   const activeConversationIdsRef = useRef(activeConversationIds)
@@ -1258,7 +1268,7 @@ export default function App() {
       : options.insertUser===false
         ? [...prev,{role:'assistant',at:new Date().toISOString(),content:'',id:assistantMessageId}]
         : [...prev,userMessage,{role:'assistant',at:new Date().toISOString(),content:'',id:assistantMessageId}],sendConversationId)
-    if(options.insertUser!==false)setDraft('')
+    if(options.insertUser!==false)setDrafts(previous=>({...previous,[pendingScopeKey(target,sendConversationId)]:''}))
     // 用户气泡一入列就算「发出去了」：待发送卡片立刻消失，不必等助手回复生成完。
     options.onUserInserted?.()
     setChatError('');setSending(true)
@@ -1735,7 +1745,7 @@ export default function App() {
     if (!target || !convId) return false
     const item = makePending(text, attachments, { assistantId: target, conversationId: convId })
     commitPending(setPending(pendingSendsRef.current, item))
-    setDraft('')
+    setDrafts(previous=>({...previous,[pendingScopeKey(target,convId)]:''}))
     markConversationDirty()
     return true
   }
