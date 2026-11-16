@@ -6,6 +6,11 @@ export type ChatDisplayPrefs = {
   time: boolean
   timePos: 'above' | 'below'
   token: boolean
+  showReasoning: boolean
+  autoTranslateReasoning: boolean
+  showReasoningDuration: boolean
+  showToolCalls: boolean
+  toolRoundLimit: 5 | 10 | 15 | 20
 }
 
 export const CHAT_DISPLAY_KEY: string
