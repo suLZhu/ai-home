@@ -159,9 +159,10 @@ export function BackupCenter({ people, vendors, setVendors, setModelProfiles }: 
           })
         }
       }
-      // 让下次启动用恢复后的本地内容覆盖云端，而不是被旧快照盖回去。
-      localStorage.setItem('ai-home.restorePending', '1')
     }
+    // A local-only worldbook/MCP restore also needs cloud-write priority.
+    // Otherwise startup may immediately replace it with an older snapshot.
+    if (!isLocalMode() && Object.keys(local).length) localStorage.setItem('ai-home.restorePending', '1')
     setMessage('已恢复' + kind.label + '，正在刷新…')
     window.setTimeout(() => location.reload(), 800)
   }
@@ -266,6 +267,6 @@ export function BackupCenter({ people, vendors, setVendors, setModelProfiles }: 
     {!native && <p className="backup-hint">当前环境没有本机存储桥：备份会走浏览器下载；恢复请用各分类右侧的「恢复」选文件。</p>}
     {error && <p className="mcp-error" role="alert">{error}</p>}
     {message && <p className="mcp-notice" role="status">{message}</p>}
-    <p className="backup-warning">模型 / 整体备份会包含 API Key，请只留在自己的设备上，不要把文件发给别人。</p>
+    <p className="backup-warning">模型 / MCP / 整体备份可能包含 API Key、MCP 令牌等敏感配置，请只留在自己的设备上，不要把文件发给别人。</p>
   </section>
 }
