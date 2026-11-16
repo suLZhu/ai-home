@@ -3764,12 +3764,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const [modelSheetQuery,setModelSheetQuery]=useState('')
   const [sheetGroupOpen,setSheetGroupOpen]=useState<Record<string,boolean>>({})
 
-  const [selectedOnly,setSelectedOnly]=useState(false)
   const [batchMode,setBatchMode]=useState(false)
   const [batchIds,setBatchIds]=useState<string[]>([])
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
-  const [collapsed,setCollapsed]=useState<Record<string,boolean>>({})
   const [customModelOpen,setCustomModelOpen]=useState(false)
   const [modelDraft,setModelDraft]=useState('')
   const [keyDraft,setKeyDraft]=useState({label:'',value:''})
@@ -3809,7 +3807,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
     setKeyDraft({label:'',value:''})
   }
-  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setSelectedOnly(false);setBatchMode(false);setBatchIds([]);setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
+  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchMode(false);setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const openVendorPage=(id:string)=>{setTab('config');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
@@ -3843,13 +3841,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const remoteIds=active?(remoteModels[active.id]||[]):[]
   const pickedModels=active?active.models.filter(m=>m.selected):[]
   const query=modelQuery.trim().toLowerCase()
-  const allModelIds=[...new Set([...remoteIds,...(active?.models||[]).map(m=>m.id)])]
-  const visibleGroups=groupModels(allModelIds)
-    .map(g=>({...g,models:g.models.filter(id=>(!query||id.toLowerCase().includes(query))&&(!selectedOnly||pickedModels.some(m=>m.id===id)))}))
-    .filter(g=>g.models.length)
-  const visibleIds=visibleGroups.flatMap(g=>g.models)
-  const bulkToggle=()=>{if(!active||!batchIds.length)return;const allPicked=batchIds.every(id=>pickedModels.some(m=>m.id===id));if(allPicked)patch(active.id,v=>({...v,models:v.models.filter(m=>!batchIds.includes(m.id))}));else pickModels(active.id,batchIds);setBatchIds([]);setBatchMode(false)}
-  const setGroupPicked=(ids:string[])=>{if(!active)return;const allPicked=ids.every(id=>pickedModels.some(m=>m.id===id));if(allPicked)patch(active.id,v=>({...v,models:v.models.filter(m=>!ids.includes(m.id))}));else pickModels(active.id,ids)}
   const iconForModel=(id:string)=>/gemini/i.test(id)?'✦':/claude/i.test(id)?'✳':/deepseek/i.test(id)?'◈':/gpt|o[1-9]/i.test(id)?'❋':/glm/i.test(id)?'⬡':'◇'
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
