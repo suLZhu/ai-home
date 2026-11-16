@@ -25,6 +25,7 @@ import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
 import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
+import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
 import { reportToolCallStart, reportToolCallEnd, classifyToolError, useToolCalls, useMessageToolCalls, TOOL_STATUS_LABEL, type ToolCallSource } from './toolCalls'
 import { decideTaskConsumption, parseTaskEnvelope } from './taskResult.mjs'
@@ -564,9 +565,9 @@ export default function App() {
     })() },5000)
     return ()=>window.clearTimeout(timer)
   },[])
-  const [activePack,setActivePack]=useState<ThemePack|null>(()=>{const id=getActivePackId();return loadThemePacks().find(p=>p.id===id)||null})
+  const [activePack,setActivePack]=useState<ThemePack|null>(()=>{const id=getActivePackId();return [...BUILTIN_THEME_PACKS,...loadThemePacks()].find(p=>p.id===id)||null})
   useEffect(()=>{ applyPackVars(activePack) },[activePack])
-  useEffect(()=>{ const on=()=>{const id=getActivePackId();setActivePack(loadThemePacks().find(p=>p.id===id)||null)}; window.addEventListener('aihome:theme-pack',on); return ()=>window.removeEventListener('aihome:theme-pack',on) },[])
+  useEffect(()=>{ const on=()=>{const id=getActivePackId();setActivePack([...BUILTIN_THEME_PACKS,...loadThemePacks()].find(p=>p.id===id)||null)}; window.addEventListener('aihome:theme-pack',on); return ()=>window.removeEventListener('aihome:theme-pack',on) },[])
   useEffect(()=>{
     if(!sidebarOpen)return
     const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.sidebar-edge-handle')
@@ -1546,10 +1547,10 @@ export default function App() {
             }else if(themeTool){
               const name=call.function.name
               if(name==='theme_pack_list'){
-                const packs=loadThemePacks().map(pk=>({id:pk.id,name:pk.name,author:pk.author,accent:pk.tokens.accent,active:pk.id===getActivePackId()}))
+                const packs=[...BUILTIN_THEME_PACKS,...loadThemePacks()].map(pk=>({id:pk.id,name:pk.name,author:pk.author,accent:pk.tokens.accent,active:pk.id===getActivePackId()}))
                 resultContent=JSON.stringify({packs,message:packs.length?'':'还没有美化包，可以用 theme_pack_save 创建一个。'})
               }else if(name==='theme_pack_apply'){
-                const packs=loadThemePacks()
+                const packs=[...BUILTIN_THEME_PACKS,...loadThemePacks()]
                 const target=packs.find(pk=>pk.id===String(args.id||''))||packs.find(pk=>pk.name===String(args.name||''))
                 if(!target)throw new Error('找不到这个美化包，先用 theme_pack_list 查看名字。')
                 setStoredActivePack(target.id)
