@@ -2908,6 +2908,8 @@ function Chat(p: any) {
     const el=chatBodyRef.current
     if(!el)return
     const onScroll=()=>{
+      // Background WebView resize can reset scrollTop to zero; do not treat it as intentional history browsing.
+      if (document.hidden) return
       scrollPinned.current=el.scrollHeight-el.scrollTop-el.clientHeight<80
       setAtBottom(scrollPinned.current)
       // 系统滚动条已隐藏：滚动时自绘一条 3px 细指示条，停手 ~0.8s 后淡出；
@@ -3152,6 +3154,24 @@ function Chat(p: any) {
     vv.addEventListener('resize',onResize)
     return ()=>vv.removeEventListener('resize',onResize)
   },[pinToLatest])
+  // Android resumes WebView with a stale scrollTop after background/keyboard layout changes.
+  // Resume at newest message, then re-pin while the viewport settles; do not run while hidden.
+  useEffect(()=>{
+    let timers: number[]=[]
+    const resume=()=>{
+      if(document.hidden)return
+      scrollPinned.current=true
+      setAtBottom(true)
+      const pin=()=>{const el=chatBodyRef.current;if(el&&scrollPinned.current)el.scrollTop=el.scrollHeight}
+      pin()
+      timers.forEach(window.clearTimeout)
+      timers=[80,240,550,1000].map(ms=>window.setTimeout(pin,ms))
+    }
+    document.addEventListener('visibilitychange',resume)
+    window.addEventListener('pageshow',resume)
+    window.addEventListener('focus',resume)
+    return ()=>{document.removeEventListener('visibilitychange',resume);window.removeEventListener('pageshow',resume);window.removeEventListener('focus',resume);timers.forEach(window.clearTimeout)}
+  },[chatPerson,activeChatConversationId])
   // 图片上传换稳定引用：字节存后端（见 server/attachments.mjs），preview 持久化为
   // /api/attachments/<id>，聊天记录只带 assetId+URL，Base64 永不进 localStorage/云端快照。
   // 时机选在「选择图片」而非「发送」：loadFiles 本就是 async，
