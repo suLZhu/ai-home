@@ -64,6 +64,7 @@ import { ModelPickerSheet } from './ModelPickerSheet'
 import { ModelSpecPage } from './ModelSpecPage'
 import { ModelChips } from './ModelChips'
 import { specForModel, withModelSpec, clearModelSpec, specBadges, inferModelSpec } from './modelSpecs.mjs'
+import { parseKelivoModelConfigs, kelivoConfigsToVendors, kelivoImportSummary } from './kelivoImport.mjs'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
@@ -3770,6 +3771,58 @@ const VENDOR_AVATARS=['🤖','🧠','⚡','🌙','☁️','🔮','🐳','🌊','
 // ── 供应商中心：一排两个小图标，点一家进入它自己的页面（配置 / 模型两个 tab） ─────────
 // 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
 // 搜索 + 折叠分组 + 逐条 ＋ 点选；Key 只留本机，不进云端快照。
+// 模型目录：跨供应商看所有已添加模型，按大类折叠；点一行回到那家供应商的模型页。
+function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
+  vendors:Vendor[]; onBack:()=>void; onOpenVendor:(vendorId:string)=>void
+}) {
+  const [query,setQuery]=useState('')
+  const [closed,setClosed]=useState<Record<string,boolean>>({})
+  type Entry={vendorId:string;vendorName:string;modelId:string;name:string;spec:ReturnType<typeof specForModel>}
+  const entries:Entry[]=vendors.filter(v=>v.enabled!==false).flatMap(v=>v.models.filter(m=>m.selected).map(m=>({
+    vendorId:v.id,vendorName:v.name,modelId:m.id,name:m.name||m.id,spec:specForModel(v,m.id),
+  })))
+  const q=query.trim().toLowerCase()
+  const filtered=entries.filter(e=>!q||[e.name,e.modelId,e.vendorName].some(x=>String(x||'').toLowerCase().includes(q)))
+  const groups=new Map<string,{label:string;items:Entry[]}>()
+  for(const e of filtered){
+    const fam=groupModels([e.modelId])[0]
+    const key=fam?fam.id:'other'
+    const g=groups.get(key)||{label:fam?fam.label:'其他',items:[]}
+    g.items.push(e);groups.set(key,g)
+  }
+  return <section className="vendor-page">
+    <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
+    <div className="vendor-card open">
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true">📖</span><b>模型目录</b><span className="vendor-kelivo-provider-meta">{entries.length} 个模型</span></div>
+      <div className="vendor-card-body vendor-kelivo-model-page">
+        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索模型目录" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}</div>
+        <div className="vendor-kelivo-added">
+          {filtered.length===0&&<div className="vendor-kelivo-empty"><b>{entries.length?'没有匹配的模型':'还没有模型'}</b><small>{entries.length?'换个关键词试试':'到某家供应商的「模型」里添加'}</small></div>}
+          {[...groups.entries()].map(([key,g])=>{
+            const collapsed=closed[key]===true
+            return <div className="vendor-kelivo-added-group" key={key}>
+              <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={!collapsed} onClick={()=>setClosed(v=>({...v,[key]:!collapsed}))}><span>{collapsed?'›':'⌄'}</span><b>{g.label}</b><small>{g.items.length}</small></button>
+              {!collapsed&&g.items.map(e=>{
+                const brand=brandOf(e.modelId)
+                return <div className="catalog-row" role="button" tabIndex={0} key={e.vendorId+':'+e.modelId}
+                  onClick={()=>onOpenVendor(e.vendorId)}
+                  onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();onOpenVendor(e.vendorId)}}}>
+                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                  <span className="catalog-main">
+                    <b>{e.spec.displayName||e.name}</b>
+                    <ModelChips spec={e.spec}/>
+                    <em className="catalog-vendor">{e.vendorName}</em>
+                  </span>
+                  <span className="vendor-kelivo-provider-caret" aria-hidden="true">›</span>
+                </div>})}
+            </div>
+          })}
+        </div>
+      </div>
+    </div>
+  </section>
+}
+
 // 默认模型：助手没单独选模型时的兜底。只列已经勾进池子的模型，按供应商分组。
 function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onBack}:{
   profiles:ModelProfile[]; vendors:Vendor[]; defaultModelId:string; setDefaultModelId:(v:string)=>void; onBack:()=>void
@@ -3829,7 +3882,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   // 列表 / 新增 / 某家详情各自是一个独立页面（section 驱动），不再在列表下面展开面板。
   const showNew=section==='vendor:add'
   const showDefault=section==='vendor:default'
-  const activeId=section.startsWith('vendor:')&&!showNew&&!showDefault?section.slice('vendor:'.length):''
+  const showCatalog=section==='vendor:catalog'
+  const activeId=section.startsWith('vendor:')&&!showNew&&!showDefault&&!showCatalog?section.slice('vendor:'.length):''
   const [tab,setTab]=useState<'config'|'model'>('config')
   const [,setPickerOpen]=useState(false)
   const [modelQuery,setModelQuery]=useState('')
@@ -3841,6 +3895,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [specTarget,setSpecTarget]=useState('')
   const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
   const [probe,setProbe]=useState<Record<string,boolean>>({})
+  const [importOpen,setImportOpen]=useState(false)
+  const [importText,setImportText]=useState('')
+  const [importMsg,setImportMsg]=useState('')
   const [probeNote,setProbeNote]=useState('')
   const [vendorQuery,setVendorQuery]=useState('')
   const [providerGroupOpen,setProviderGroupOpen]=useState<Record<string,boolean>>({})
@@ -3974,15 +4031,14 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const query=modelQuery.trim().toLowerCase()
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
-  const isList=!showNew&&!showDefault&&!active
+  const isList=!showNew&&!showDefault&&!showCatalog&&!active
   return <div className="vendor-center">
     {isList&&<>
       <div className="vendor-kelivo-list-head">
         <b>供应商</b>
         <div className="vendor-kelivo-head-actions">
-          <button type="button" aria-label="默认模型" title="默认模型" onClick={()=>onSection('vendor:default')}>★</button>
-          <button type="button" aria-label="订阅账号" title="订阅账号" onClick={()=>onSection('vendor:account')}>☁</button>
-          <button type="button" aria-label="排序" title={'排序'+(sortMode?'（进行中）':'')} className={sortMode?'on':''} onClick={()=>setSortMode(v=>!v)}>⇅</button>
+          <button type="button" aria-label="模型目录" title="模型目录" onClick={()=>onSection('vendor:catalog')}>📖</button>
+          <button type="button" aria-label="导入供应商" title="从 Kelivo 配置导入" onClick={()=>{setImportOpen(true);setImportText('');setImportMsg('')}}>☁</button>
           <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();onSection('vendor:add')}}>＋</button>
         </div>
       </div>
@@ -3996,7 +4052,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           const entries=[...map.entries()].sort((a,b)=>!a[0]?1:!b[0]?-1:0)
           const row=(v:Vendor)=>{
             const off=v.enabled===false
-            const status=off?['禁用','off']:['启用','on']
+            const hasKey=v.keys.some(k=>!!k.value)
+            const status=off?['禁用','off']:hasKey?['启用','on']:['未配置','warn']
             if(sortMode) return <div className={'vendor-kelivo-provider-row sortrow'+(off?' off':'')} key={v.id}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
               <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
@@ -4023,9 +4080,38 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         })()}
       </div>
       {!vendors.some(v=>{const q=vendorQuery.trim().toLowerCase();return !q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)})&&<p className="muted vendor-kelivo-empty-hint">没有匹配的供应商</p>}
+      <div className="vendor-kelivo-extra">
+        <button type="button" onClick={()=>onSection('vendor:default')}><span aria-hidden="true">★</span><b>默认模型</b><em>{(()=>{const p=modelProfiles.find(x=>x.id===defaultModelId);return p?(p.name||p.model):'未设置'})()}</em><i aria-hidden="true">›</i></button>
+        <button type="button" onClick={()=>onSection('vendor:account')}><span aria-hidden="true">☁</span><b>订阅账号</b><i aria-hidden="true">›</i></button>
+        <button type="button" onClick={()=>setSortMode(v=>!v)}><span aria-hidden="true">⇅</span><b>排序</b><em>{sortMode?'进行中':'调整分组内顺序'}</em><i aria-hidden="true">›</i></button>
+      </div>
     </>}
 
+    {showCatalog&&<ModelCatalogPage vendors={vendors} onBack={backToList} onOpenVendor={id=>{setTab('model');openVendorPage(id)}}/>}
+
     {showDefault&&<DefaultModelPage profiles={modelProfiles} vendors={vendors} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId} onBack={backToList}/>}
+
+    {importOpen&&<div className="vendor-kelivo-sheet-overlay" role="presentation" onClick={()=>setImportOpen(false)}>
+      <section className="vendor-kelivo-sheet vendor-import-sheet" role="dialog" aria-modal="true" aria-label="导入供应商" onClick={e=>e.stopPropagation()}>
+        <div className="vendor-kelivo-sheet-grip"/>
+        <header className="vendor-import-head"><b>导入供应商</b><button type="button" aria-label="关闭导入" onClick={()=>setImportOpen(false)}>×</button></header>
+        <p className="vendor-import-hint">粘贴 Kelivo 导出的模型配置 JSON：数组，每项含 name / apiEndpoint / apiKey / modelName。只迁移地址、Key 与模型名。</p>
+        <textarea className="vendor-import-text" aria-label="Kelivo 配置 JSON" placeholder='[{"name":"Aeon AI","apiEndpoint":"https://…/v1","apiKey":"sk-…","modelName":"gpt-5.6,glm-5.2"}]' value={importText} onChange={e=>setImportText(e.target.value)}/>
+        {!!importMsg&&<p className="vendor-import-msg" role="status">{importMsg}</p>}
+        <div className="vendor-import-actions">
+          <button type="button" onClick={()=>setImportOpen(false)}>取消</button>
+          <button type="button" className="primary" onClick={()=>{
+            const configs=parseKelivoModelConfigs(importText)
+            if(!configs){setImportMsg('没有解析到可导入的配置，请贴完整的 JSON 数组');return}
+            const converted=kelivoConfigsToVendors(configs,vendors)
+            const summary=kelivoImportSummary(converted)
+            commit([...vendors,...converted])
+            setImportMsg(`已导入 ${summary.vendors} 家供应商 / ${summary.models} 个模型 / ${summary.keys} 把 Key`)
+            setImportText('')
+          }}>导入</button>
+        </div>
+      </section>
+    </div>}
 
     {showNew&&<section className="vendor-page">
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>

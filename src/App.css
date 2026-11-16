@@ -3260,3 +3260,32 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 /* 胶囊单行，放不下就裁掉，避免把上下文挤到分隔线下 */
 .vendor-center .model-chips,.model-edit-page .model-chips{flex-wrap:nowrap;overflow:hidden;gap:4px}
 .vendor-center .model-chip,.model-edit-page .model-chip{padding:0 7px;font-size:10px;line-height:1.6}
+
+/* 供应商页底部入口 / 导入面板 / 模型目录行 */
+.vendor-kelivo-extra{margin-top:12px;border-top:1px solid var(--line,#ece7f0);display:flex;flex-direction:column}
+.vendor-kelivo-extra button{display:flex;align-items:center;gap:12px;min-height:54px;padding:8px 6px;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left}
+.vendor-kelivo-extra button+button{border-top:1px solid var(--line,#f0ebf4)!important}
+.vendor-kelivo-extra span{width:24px;font-size:17px;color:var(--muted)}
+.vendor-kelivo-extra b{flex:1;font-weight:450;font-size:14.5px;color:var(--ink)}
+.vendor-kelivo-extra em{font-style:normal;font-size:11.5px;color:var(--muted)}
+.vendor-kelivo-extra i{font-style:normal;font-size:19px;color:var(--muted)}
+.vendor-import-sheet{max-height:82dvh}
+.vendor-import-head{display:flex;align-items:center;gap:8px;padding:6px 4px 10px}
+.vendor-import-head b{flex:1;text-align:center;font-size:15.5px}
+.vendor-import-head button{border:0;background:transparent;font-size:22px;color:var(--muted);min-width:36px}
+.vendor-import-hint{margin:0 4px 8px;font-size:11.5px;line-height:1.6;color:var(--muted)}
+.vendor-import-text{width:100%;min-height:170px;margin:0 4px;padding:10px 12px;border:1px solid var(--line,#e6dfeb);border-radius:12px;background:var(--field,#f7f4fa);font-family:ui-monospace,monospace;font-size:11.5px;line-height:1.6;color:var(--ink);resize:vertical}
+.vendor-import-msg{margin:8px 4px 0;font-size:12px;color:var(--accent,#8a5a3b)}
+.vendor-import-actions{display:flex;gap:10px;padding:12px 4px 6px}
+.vendor-import-actions button{flex:1;min-height:46px;border-radius:13px;border:1px solid var(--line,#e6dfeb);background:var(--field,#f7f4fa);color:var(--ink);font-size:14px}
+.vendor-import-actions .primary{flex:2;border-color:transparent;background:var(--accent,#8a5a3b);color:#fff;font-weight:600}
+.vendor-center .catalog-row{display:flex;align-items:center;gap:10px;width:100%;border:0!important;background:transparent!important;box-shadow:none!important;text-align:left;padding:12px 4px}
+.catalog-vendor{display:block;font-style:normal;font-size:11px;color:var(--muted);margin-top:2px}
+
+.vendor-center .catalog-row{display:flex;align-items:flex-start;gap:12px;width:100%;padding:12px 4px;border-bottom:1px solid var(--line,#f0ebf4);background:transparent;text-align:left;cursor:pointer}
+.vendor-center .catalog-row:last-child{border-bottom:0}
+.catalog-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.catalog-main b{font-size:15px;font-weight:450;line-height:1.35;overflow-wrap:anywhere}
+.catalog-vendor{font-style:normal;font-size:11.5px;color:var(--muted)}
+.vendor-center .vendor-kelivo-added-group-head{margin-top:6px}
+.vendor-kelivo-provider-status.warn{background:var(--field,#f2eef5);color:var(--muted,#8a7d99)}
