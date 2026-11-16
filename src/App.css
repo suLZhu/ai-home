@@ -2628,3 +2628,42 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-lock-pin button{height:30px!important;font-size:11px!important}
 .shell .app-lock-state{padding:7px 9px!important;margin:4px 0 8px!important;font-size:11px!important}
 .shell .app-lock .memory-search{height:30px!important;margin:2px 0 6px!important}
+
+/* 世界书工具行收成图标 */
+.shell .settings-detail .worldbook-toolbar{gap:4px!important;flex-wrap:nowrap!important}
+.shell .settings-detail .worldbook-toolbar button{width:30px!important;min-width:30px!important;height:30px!important;padding:0!important;font-size:13px!important;border-radius:9px!important}
+
+/* 供应商：卡片头与表单更紧，按钮统一 28 */
+.shell .settings-detail .vendor-card-head{padding:8px 10px!important}
+.shell .settings-detail .vendor-card-body{padding:6px 10px 10px!important}
+.shell .settings-detail .vendor-card{gap:0!important}
+.shell .settings-detail .vendor-card-body input,.shell .settings-detail .vendor-card-body select{height:30px!important;font-size:11.5px!important;border-radius:8px!important}
+.shell .settings-detail .vendor-card-body button{height:28px!important;min-height:28px!important;font-size:11px!important;padding:0 10px!important;border-radius:8px!important}
+.shell .settings-detail .vendor-endpoint{margin:6px 0!important}
+.shell .settings-detail .vendor-add-row{margin:6px 0!important}
+
+/* 用量：卡片与行更紧 */
+.shell .settings-detail .usage-panel{padding:10px!important;margin:0 0 8px!important;border-radius:14px!important}
+.shell .settings-detail .usage-summary>div{padding:6px!important}
+.shell .settings-detail .usage-model{padding:6px 8px!important;font-size:11px!important}
+.shell .settings-detail .usage-person{height:28px!important;font-size:11px!important}
+
+/* 工作区：统一表单与按钮 */
+.shell .settings-detail .workspace-settings{padding:10px!important}
+.shell .settings-detail .workspace-settings input,.shell .settings-detail .workspace-settings select,.shell .settings-detail .workspace-settings textarea{height:30px!important;font-size:11.5px!important;border-radius:8px!important}
+.shell .settings-detail .workspace-settings button{height:28px!important;min-height:28px!important;font-size:11px!important;padding:0 10px!important;border-radius:8px!important}
+.shell .settings-detail .workspace-settings label{margin:5px 0!important}
+
+/* 应用锁：页面不滚，应用列表自己在卡片内滚 */
+.shell .app-lock-list{max-height:44vh!important;overflow-y:auto!important;overscroll-behavior:contain}
+.shell .app-lock-row{min-height:40px!important}
+
+/* 应用锁：隐藏重复说明，列表限高内滚，页面尽量一屏 */
+.shell .app-lock>p.muted:first-of-type{display:none!important}
+.shell .app-lock-list{max-height:150px!important;overflow-y:auto!important;margin-top:2px}
+.shell .app-lock-state{padding:6px 8px!important;margin:0 0 6px!important;font-size:10.5px!important;min-height:0!important}
+.shell .app-lock-pin{margin:0 0 4px!important}
+.shell .app-lock-pin label,.shell .app-lock-pin b{font-size:10.5px!important}
+.shell .app-lock-msg{font-size:10px!important;margin:2px 0 0!important}
+
+.shell .app-lock-list{max-height:132px!important}
