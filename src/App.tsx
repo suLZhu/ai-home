@@ -37,7 +37,6 @@ import { pendingScopeKey, makePending, setPending, clearPending, patchPendingTex
 import { cleanupMessageText, createStreamCleanup } from './messageCleanup.mjs'
 // 消息呈现层纯函数：Token 汇总 / 工具卡分组 / reasoning 翻译判定与请求构造。
 import { formatDuration, summarizeTokenUsage, groupToolCalls, needsChineseTranslation, buildTranslationMessages } from './messagePresentation.mjs'
-import { COMPOSE_TOOLS } from './composeTools.mjs'
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
@@ -297,6 +296,7 @@ export default function App() {
   const [conversations,setConversations] = useState<Record<Person,Conversation[]>>(initialConversations)
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<string,string>>('ai-home.activeConversationIds',{});const all=initialConversations();return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,all[id].some(c=>c.id===saved[id])?saved[id]:all[id][0]?.id||''])) as Record<Person,string>})
   // Drafts are isolated by assistant AND conversation, including during background generation.
+  const [sendingScopes, setSendingScopes] = useState<Record<string,boolean>>({})
   const draftKey = pendingScopeKey(person, activeConversationIds[person] || '')
   const sending = !!sendingScopes[draftKey]
   const draft = drafts[draftKey] || ''
@@ -319,7 +319,6 @@ export default function App() {
   // 本机工作区配置（按助手）：只在服务器模式下有；聊天工具据此决定是否向模型开放文件/Git/命令。
   const [workspaceConfigs, setWorkspaceConfigs] = useState<Record<string, WorkspaceConfig>>({})
   const [webPage, setWebPage] = useState<WebPage | null>(null)
-  const [sendingScopes, setSendingScopes] = useState<Record<string,boolean>>({})
   const [chatError, setChatError] = useState('')
   const [memory, setMemory] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.memory',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => { const saved=read<Record<string,MemoryEntry[]>>('ai-home.memoryEntries',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MemoryEntry[]> })
@@ -2396,7 +2395,6 @@ function Room(props: {
   const person=props.person
   const convs=props.conversations[person]||[]
   const activeId=props.activeConversationIds[person]||''
-  const lastText=(()=>{const list=props.messages[person]||[];for(let i=list.length-1;i>=0;i--){const c=list[i]?.content?.trim?.();if(c)return c.slice(0,36)}return '还没有消息，说点什么吧'})()
   const worldCount=(props.worldEntries||[]).length
   const mcpCount=Object.values(props.mcpConnections||{}).reduce((n,list)=>n+(list||[]).length,0)
   const skillCount=loadSkills(person).length
@@ -3491,7 +3489,7 @@ function Chat(p: any) {
         <button type="button" className="compose-expand" aria-label="展开输入框" title="展开或收起大输入框" onClick={e=>e.currentTarget.closest('.compose-box')?.classList.toggle('composer-expanded')}>⛶</button>
       </div>
       <div className="cw-row">
-        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型">✧ {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:ModelRoute)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span>⌄</span></button>
+        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型">✧ {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span>⌄</span></button>
         <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}>☺</button>
         <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}>＋</button>
         <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
@@ -3543,6 +3541,7 @@ function Fun({shortcut,onShortcutUsed,displayName}:{shortcut:string;onShortcutUs
   return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary personLabel={displayName}/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
 }
 function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void}) {
+  void workspaceConfigs
   const [section,setSection]=useState('')
   const sectionScrollRef=useRef<Record<string,number>>({})
   // 进入二级页前先记下当前滚动位置：等 React 换掉内容后页面高度变短，
@@ -3759,7 +3758,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const showNew=section==='vendor:add'
   const activeId=section.startsWith('vendor:')&&!showNew?section.slice('vendor:'.length):''
   const [tab,setTab]=useState<'config'|'model'>('config')
-  const [pickerOpen,setPickerOpen]=useState(false)
+  const [,setPickerOpen]=useState(false)
   const [modelQuery,setModelQuery]=useState('')
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
