@@ -10,7 +10,7 @@ import { CharacterSettings, blankCard, type CharacterCard } from './CharacterSet
 import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 import { ToolDashboard } from './ToolDashboard'
 import { MemoryPanel } from './MemoryPanel'
-import { RichText } from './RichText'
+import { RichText } from './RichText.tsx'
 import { UiDialogHost } from './UiDialogHost'
 import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
