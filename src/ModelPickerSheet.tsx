@@ -63,6 +63,7 @@ export function ModelPickerSheet({
   const [filter, setFilter] = useState('all')
   const [keyOpen, setKeyOpen] = useState(false)
   const [routesOpen, setRoutesOpen] = useState('')
+  const [collapsedVendors, setCollapsedVendors] = useState<string[]>([])
   const [favorites, setFavorites] = useState<string[]>(readFavorites)
   const keyRef = useRef<HTMLDivElement>(null)
 
@@ -134,43 +135,69 @@ export function ModelPickerSheet({
         </div>
       </div>}
       <div className="model-sheet-list">
-        {list.length === 0 && <p className="model-sheet-empty">{catalog.length ? '没有匹配的模型，换个关键词或换个筛选。' : '还没有可用模型。到「设置 → 供应商」填 Key 或登录订阅账号，再回来这里选。'}</p>}
-        <section className="model-sheet-group">
-          <h4>可用模型 · {list.length}</h4>
-          {list.map(m => {
-            const selected = m.profileIds.includes(activeId) || (!m.profileIds.length && activeId === '' && routesForModel(routeState.routes, m.id).length > 0)
-            const expanded = routesOpen === m.id
-            const boundRoutes: ModelRoute[] = routesForModel(routeState.routes, m.id)
-            return <div className={'model-sheet-row' + (selected ? ' selected' : '')} key={m.id} data-logical-id={m.id}>
-              <button type="button" className="model-sheet-pick" aria-pressed={selected} onClick={() => pick(m.id)}>
-                <span className={'model-sheet-avatar' + (m.isSubscription ? ' from-sub' : '')}>{vendorInitial(m.model || m.name)}</span>
-                <span className="model-sheet-main"><b>{m.name}</b>{m.name !== m.model && <small>{m.model}</small>}</span>
-                {m.isSubscription && <span className="model-sheet-badge">订阅</span>}
-                {m.routeCount > 1 && <span className="model-sheet-badge routes">{m.routeCount} 条线路</span>}
-                {selected && <span className="model-sheet-check" aria-hidden="true">✓</span>}
-              </button>
-              <button type="button" className={'model-sheet-route-toggle' + (expanded ? ' active' : '')}
-                aria-label={'查看线路 · ' + m.name} title="查看 / 编辑线路" aria-expanded={expanded}
-                onClick={() => setRoutesOpen(expanded ? '' : m.id)}>{expanded ? '⌃' : '⌄'}</button>
-              <button type="button" className={'model-sheet-fav' + (favorites.includes(m.id) ? ' on' : '')}
-                aria-label={favorites.includes(m.id) ? '取消收藏' : '收藏这个模型'} title="收藏后置顶" onClick={() => toggleFav(m.id)}>
-                {favorites.includes(m.id) ? '♥' : '♡'}
-              </button>
-              {expanded && <ModelRoutesPanel
-                logicalId={m.id}
-                defaultModel={m.model}
-                routes={boundRoutes}
-                vendors={vendors}
-                fixedRouteId={fixed}
-                onAdd={(patch) => update(s => addRoute(s, m.id, patch, crypto.randomUUID()))}
-                onUpdate={(id, patch) => update(s => updateRoute(s, id, patch))}
-                onRemove={(id) => update(s => removeRoute(s, id))}
-                onPrimary={(id) => update(s => primaryRoute(s, m.id, id))}
-                onFixed={(id) => update(s => setFixedRoute(s, person, id))}
-              />}
-            </div>
-          })}
-        </section>
+        {list.length === 0 && <p className="model-sheet-empty">{catalog.length ? '没有匹配的模型，换个关键词或换个筛选。' : '还没有可用模型。到「设置 → 供应商」添加模型后再回来选择。'}</p>}
+        {(() => {
+          const vendorMap = new Map(vendors.map(v => [v.id, v.name || v.id]))
+          type Choice = { id: string; logicalId: string; name: string; model: string; vendorId: string; vendorName: string; profileId: string; routeId: string; subscription: boolean }
+          const choices: Choice[] = []
+          const seen = new Set<string>()
+          for (const m of list) {
+            const explicit = routesForModel(routeState.routes, m.id)
+            if (explicit.length) {
+              for (const route of explicit) {
+                if (!route.enabled) continue
+                const vendorId = route.vendorId || 'route:' + route.id
+                const vendorName = vendorMap.get(route.vendorId) || route.label || '独立线路'
+                const id = 'route:' + route.id
+                if (seen.has(id)) continue
+                seen.add(id)
+                choices.push({id,logicalId:m.id,name:route.model || m.name,model:route.model || m.model,vendorId,vendorName,profileId:m.profileIds.find((id:string)=>profiles.some(p=>p.id===id&&p.vendorId===route.vendorId)) || profileIdForCatalogEntry(m),routeId:route.id,subscription:route.source==='subscription'})
+              }
+            } else {
+              for (const profileId of m.profileIds) {
+                const profile = profiles.find(p=>p.id===profileId)
+                if (!profile) continue
+                const vendorId = profile.vendorId || 'profile:' + profile.id
+                const vendorName = vendorMap.get(profile.vendorId) || profile.vendor || '未命名来源'
+                const id = 'profile:' + profile.id
+                if (seen.has(id)) continue
+                seen.add(id)
+                choices.push({id,logicalId:m.id,name:profile.name || profile.model,model:profile.model,vendorId,vendorName,profileId:profile.id,routeId:'',subscription:(subscriptionVendorIds||[]).includes(profile.vendorId || '')})
+              }
+            }
+          }
+          const groups = new Map<string,{name:string;items:Choice[]}>()
+          for(const choice of choices){
+            const group = groups.get(choice.vendorId) || {name:choice.vendorName,items:[]}
+            group.items.push(choice);groups.set(choice.vendorId,group)
+          }
+          return [...groups.entries()].map(([vendorId,group])=><section className="model-sheet-group" key={vendorId}>
+            <button type="button" className="model-vendor-heading" aria-expanded={!collapsedVendors.includes(vendorId)} onClick={()=>setCollapsedVendors(old=>old.includes(vendorId)?old.filter(id=>id!==vendorId):[...old,vendorId])}>
+              <b>{group.name}</b><small>{group.items.length} 个模型</small><span>{collapsedVendors.includes(vendorId)?'⌄':'⌃'}</span>
+            </button>
+            {!collapsedVendors.includes(vendorId)&&group.items.map(choice=>{
+              const selected=choice.routeId?fixed===choice.routeId:activeId===choice.profileId&&!fixed
+              return <div className={'model-sheet-row'+(selected?' selected':'')} key={choice.id}>
+                <button type="button" className="model-sheet-pick" aria-pressed={selected} onClick={()=>{
+                  onPatchBinding({...binding,modelProfileId:choice.profileId})
+                  onPick(choice.profileId)
+                  setRouteState(s=>{
+                    const next=selectLogicalModel(s,person,choice.logicalId)
+                    return setFixedRoute(next,person,choice.routeId)
+                  })
+                }}>
+                  <span className="model-sheet-avatar">{vendorInitial(choice.name)}</span>
+                  <span className="model-sheet-main"><b>{choice.name}</b><small>{choice.model}</small></span>
+                  {choice.subscription&&<span className="model-sheet-badge">订阅</span>}
+                  {selected&&<span className="model-sheet-check">✓</span>}
+                </button>
+                {choice.routeId&&<button type="button" className="model-sheet-route-toggle" aria-label={'编辑线路 · '+choice.vendorName} onClick={()=>setRoutesOpen(routesOpen===choice.routeId?'':choice.routeId)}>⚙</button>}
+                <button type="button" className={'model-sheet-fav'+(favorites.includes(choice.logicalId)?' on':'')} onClick={()=>toggleFav(choice.logicalId)} aria-label="收藏模型">{favorites.includes(choice.logicalId)?'♥':'♡'}</button>
+                {choice.routeId&&routesOpen===choice.routeId&&<ModelRoutesPanel logicalId={choice.logicalId} defaultModel={choice.model} routes={routesForModel(routeState.routes,choice.logicalId)} vendors={vendors} fixedRouteId={fixed} onAdd={patch=>update(s=>addRoute(s,choice.logicalId,patch,crypto.randomUUID()))} onUpdate={(id,patch)=>update(s=>updateRoute(s,id,patch))} onRemove={id=>update(s=>removeRoute(s,id))} onPrimary={id=>update(s=>primaryRoute(s,choice.logicalId,id))} onFixed={id=>update(s=>setFixedRoute(s,person,id))}/>}
+              </div>
+            })}
+          </section>)
+        })()}
       </div>
       <div className="model-sheet-filter" aria-label="按来源筛选">
         {FILTERS.map(f => <button type="button" key={f.id} className={filter === f.id ? 'active' : ''} onClick={() => setFilter(f.id)}>{f.label}</button>)}
