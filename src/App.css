@@ -2833,3 +2833,17 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
   padding:11px 16px!important;
 }
 
+
+/* 像素气泡：透明底 + 像素缺口线框 */
+.shell.bubble-pixel .chat-body .message-row .bubble.assistant,
+.shell.bubble-pixel .chat-body .message-row .bubble{
+  background-color:transparent!important;
+  background-image:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMTIwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj48cG9seWxpbmUgcG9pbnRzPSIxMCAwIDMxMCAwIDMxMCAxMCAzMjAgMTAgMzIwIDExMCAzMTAgMTEwIDMxMCAxMjAgMTAgMTIwIDEwIDExMCAwIDExMCAwIDEwIDEwIDEwIDEwIDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRkZTFmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIi8+PC9zdmc+")!important;
+  background-size:100% 100%!important;background-repeat:no-repeat!important;
+  border:0!important;border-radius:0!important;box-shadow:none!important;
+  padding:13px 16px!important;
+}
+.shell.bubble-pixel .chat-body .message-row .bubble.user{
+  background-image:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMTIwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj48cG9seWxpbmUgcG9pbnRzPSIxMCAwIDMxMCAwIDMxMCAxMCAzMjAgMTAgMzIwIDExMCAzMTAgMTEwIDMxMCAxMjAgMTAgMTIwIDEwIDExMCAwIDExMCAwIDEwIDEwIDEwIDEwIDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmYjAwMCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIi8+PC9zdmc+")!important;
+}
+
