@@ -3878,10 +3878,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
       <div className="vendor-card open" key={active.id}>
       <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon">{active.name.slice(0,1)}</span><b>{active.name}</b><span className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</span></div>
-      <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
-        <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
-        <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
-      </div>
 
       {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
         <div className="vendor-config-section-title">管理</div>
@@ -3915,7 +3911,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <div className="vendor-kelivo-added">
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:pickedModels.filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=><div className="vendor-kelivo-added-row" key={m.id}>
             {batchMode&&<input aria-label={'选中 '+m.id} type="checkbox" checked={batchIds.includes(m.id)} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,m.id]:ids.filter(id=>id!==m.id))}/>}
-            <span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(m.id)}</span><div className="vendor-kelivo-model-label"><b>{m.name||m.id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>文字 → 文字</small></div></div>
+            <span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(m.id)}</span><div className="vendor-kelivo-model-label"><b>{m.name||m.id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>模型 ID</small></div></div>
             {!batchMode&&<button type="button" className="vendor-kelivo-remove-one" title={'移除 '+m.id} aria-label={'移除 '+m.id} onClick={()=>unpickModel(active.id,m.id)}>−</button>}
           </div>)}
           {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
@@ -3941,7 +3937,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
             <div className="vendor-kelivo-sheet-items">
               {groupModels([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
                 <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span>{sheetGroupOpen[g.id]?'›':'⌄'}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}>＋</span></button>
-                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);return <div className="vendor-kelivo-sheet-model" key={id}><span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span><div className="vendor-kelivo-model-label"><b>{id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>文字 → 文字</small></div></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
+                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);return <div className="vendor-kelivo-sheet-model" key={id}><span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span><div className="vendor-kelivo-model-label"><b>{id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>模型 ID</small></div></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
               </div>)}
               {!listState.loading&&!remoteIds.length&&<div className="vendor-kelivo-empty"><b>尚未获取模型</b><small>点击右上角刷新，或关闭弹层后手动添加模型</small></div>}
             </div>
@@ -3949,6 +3945,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
           </section>
         </div>}
       </div>}
+      <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
+        <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
+        <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
+      </div>
       </div>
     </section>}
   </div>
