@@ -2667,3 +2667,5 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-lock-msg{font-size:10px!important;margin:2px 0 0!important}
 
 .shell .app-lock-list{max-height:132px!important}
+
+.shell .settings-heading .settings-back-room{margin:0 0 8px!important;height:28px!important;min-height:28px!important;padding:0 10px!important;font-size:11px!important;border-radius:8px!important}
