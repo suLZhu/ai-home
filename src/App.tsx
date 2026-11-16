@@ -1351,7 +1351,10 @@ export default function App() {
       // 联网搜索 + 内置浏览器：搜索结果由 web_search 返回，open_web_page 打开页面。
       openAITools.push({type:'function',function:{name:'web_search',description:'联网搜索网页，返回标题、真实链接和摘要。用户要求查最新信息、新闻、资料，或你不确定时使用。搜到后可以调用 open_web_page 打开具体网页。',parameters:{type:'object',properties:{query:{type:'string',description:'搜索词'}},required:['query'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'open_web_page',description:'在 App 内置浏览器里打开一个网页，用户随时可以关掉。只接受 http/https 链接。',parameters:{type:'object',properties:{url:{type:'string'},title:{type:'string',description:'可选标题'}},required:['url'],additionalProperties:false}}})
-      // 本机工作区：只有开启后才把工具给模型；写/删/提交/命令还会在客户端逐次确认。
+
+      // 房间场景：读取/改写开放式布局，客户端即时生效。
+      openAITools.push({type:'function',function:{name:'room_get_layout',description:'读取当前助手房间的场景布局（JSON）。想改房间前先调用它，在原有 items 上增删，不要凭空整份覆盖。',parameters:{type:'object',properties:{},additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'room_set_layout',description:'把你设计的房间场景保存并立即生效。layout.background 支持任意 CSS 渐变/颜色/图片；layout.items 每项可用 x/y/w/h（百分比）、style（任意 CSS）、emoji/text、action（chat/world/mcp/skill/memory/settings，没有 action 就是纯装饰）。',parameters:{type:'object',properties:{layout:{type:'object',description:'完整房间布局',properties:{name:{type:'string'},background:{type:'object',properties:{css:{type:'string'},color:{type:'string'},image:{type:'string'}}},items:{type:'array',items:{type:'object'}}},required:['items']}},required:['layout'],additionalProperties:false}}})      // 本机工作区：只有开启后才把工具给模型；写/删/提交/命令还会在客户端逐次确认。
       const workspace=workspaceConfigs[target]
       if(workspace?.enabled&&!isLocalMode()){
         const rootNote='根目录：'+workspace.root
@@ -1444,6 +1447,7 @@ export default function App() {
             const conversationTool=call.function.name==='conversation_search'
             const workspaceTool=call.function.name.startsWith('workspace_')
             const widgetTool=call.function.name.startsWith('widget_')
+            const roomTool=call.function.name==='room_get_layout'||call.function.name==='room_set_layout'
             const webTool=call.function.name==='web_search'||call.function.name==='open_web_page'
             const logSource:ToolCallSource=webTool?'web':widgetTool?'widget':workspaceTool?'workspace':conversationTool?'memory':call.function.name==='ledger_add_entry'?'ledger':localWorldbookTool?'worldbook':scheduledTaskTool?'workflow':'mcp'
             // 真实调用点：模型发起的每一次工具调用都先登记（含随后被拒绝的），供聊天卡片与看板共用。
@@ -1456,7 +1460,7 @@ export default function App() {
               serverName:route?route.connectionName:'',
               arguments:argsParsed?args:call.function.arguments||'{}',eventId:toolRunId+':'+call.id,
             })
-            if(!webTool&&!widgetTool&&!workspaceTool&&!conversationTool&&call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&!scheduledTaskTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
+            if(!webTool&&!widgetTool&&!roomTool&&!workspaceTool&&!conversationTool&&call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&!scheduledTaskTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             if(!argsParsed)throw new Error('模型生成的工具参数不是合法 JSON。')
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
             const toolLabel=route?route.name:(webTool?'联网 / 内置浏览器':widgetTool?'房间小组件':workspaceTool?'本机工作区':conversationTool?'回顾更早的对话':call.function.name==='ledger_add_entry'?'共享记账单':scheduledTaskTool?'定时任务':'本地工具')
@@ -1521,6 +1525,17 @@ export default function App() {
                 if(!updateResponse.ok)throw new Error(updateData.error||'更新小组件失败')
                 try{window.dispatchEvent(new Event('aihome:widgets-changed'))}catch{}
                 resultContent=JSON.stringify({ok:true,widget:updateData.widget})
+              }
+            }else if(roomTool){
+              const name=call.function.name
+              if(name==='room_get_layout'){
+                resultContent=JSON.stringify({ok:true,layout:loadRoomLayout(target),actions:['chat','world','mcp','skill','memory','settings'],note:'位置都是百分比；修改后在原布局上增删，再用 room_set_layout 保存。'})
+              }else{
+                const layout=args.layout
+                if(!layout||typeof layout!=='object')throw new Error('layout 必须是对象。')
+                const saved=saveRoomLayout(target,layout)
+                try{window.dispatchEvent(new Event('aihome:room-layout'))}catch{}
+                resultContent=JSON.stringify({ok:true,layout:saved,message:'房间已更新，界面立即生效。'})
               }
             }else if(workspaceTool){
               const name=call.function.name

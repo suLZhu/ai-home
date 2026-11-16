@@ -67,6 +67,8 @@ const LOCAL_TOOL_NAMES: Record<string, string> = {
   widget_list: '房间 · 小组件列表',
   widget_create: '房间 · 创建小组件',
   widget_append: '房间 · 更新小组件',
+  room_get_layout: '房间 · 读取布局',
+  room_set_layout: '房间 · 设计场景',
   web_search: '联网 · 搜索',
   open_web_page: '联网 · 打开网页',
 }
