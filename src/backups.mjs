@@ -40,7 +40,13 @@ export function localKeysForRestore(payload, kindId) {
   const kind = backupKind(kindId)
   if (!kind) throw new Error('未知的恢复类型')
   if (!payload || payload.app !== BACKUP_APP || !payload.data || typeof payload.data !== 'object') throw new Error('不是栖间的备份文件')
-  if (payload.kind === kindId) return payload.data.local && typeof payload.data.local === 'object' ? payload.data.local : {}
+  if (payload.kind === kindId) {
+    const source = payload.data.local && typeof payload.data.local === 'object' ? payload.data.local : {}
+    // A category restore must never overwrite unrelated settings, even with a malformed file.
+    if (kind.all) return Object.fromEntries(Object.entries(source).filter(([key,value]) =>
+      key.startsWith('ai-home.') && !EXCLUDED_LOCAL_KEYS.has(key) && typeof value === 'string'))
+    return Object.fromEntries((kind.keys || []).filter(key => typeof source[key] === 'string').map(key => [key,source[key]]))
+  }
   if (payload.kind === 'full' && kindId !== 'full') {
     const out = {}
     const local = payload.data.local && typeof payload.data.local === 'object' ? payload.data.local : {}
