@@ -2767,6 +2767,42 @@ const CHAT_QUICK_TOOLS: ChatQuickTool[] = [
   { id:'task', label:'主动任务', desc:'定时任务与工作流', icon:'◷' },
 ]
 
+function RequestStats({ messages }: { messages: ChatMessage[] }) {
+  const rows = messages.filter((m) => m.role === 'assistant' && m.usage).slice(-30).reverse()
+  const totals = rows.reduce((acc, m) => {
+    const u = m.usage || {}
+    acc.prompt += Number(u.promptTokens) || 0
+    acc.completion += Number(u.completionTokens) || 0
+    acc.cached += Number(u.cachedTokens || u.cacheReadTokens) || 0
+    return acc
+  }, { prompt: 0, completion: 0, cached: 0 })
+  if (!rows.length) return <p className="muted">还没有请求记录。发一条消息后这里会显示每次请求的 token。</p>
+  return <div className="request-stats">
+    <div className="request-stats-summary">
+      <div><small>请求</small><b>{rows.length}</b></div>
+      <div><small>输入</small><b>{totals.prompt.toLocaleString()}</b></div>
+      <div><small>输出</small><b>{totals.completion.toLocaleString()}</b></div>
+      <div><small>缓存命中</small><b>{totals.cached.toLocaleString()}</b></div>
+    </div>
+    <div className="request-stats-list">{rows.map((m) => {
+      const u = m.usage || {}
+      const time = u.at ? new Date(u.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
+      const total = (Number(u.promptTokens) || 0) + (Number(u.completionTokens) || 0)
+      return <div className="request-stats-row" key={m.id || Math.random()}>
+        <div className="request-stats-line1"><b>{u.model || '未知模型'}</b><span>{time}</span></div>
+        <div className="request-stats-line2">
+          <span>输入 {Number(u.promptTokens || 0).toLocaleString()}</span>
+          <span>输出 {Number(u.completionTokens || 0).toLocaleString()}</span>
+          <span>合计 {total.toLocaleString()}</span>
+          {u.cachedTokens || u.cacheReadTokens ? <span>缓存 {Number(u.cachedTokens || u.cacheReadTokens || 0).toLocaleString()}</span> : null}
+          {u.tokensPerSecond ? <span>{Math.round(Number(u.tokensPerSecond))} tok/s</span> : null}
+          {u.elapsedMs ? <span>{(Number(u.elapsedMs) / 1000).toFixed(1)}s</span> : null}
+        </div>
+      </div>
+    })}</div>
+  </div>
+}
+
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
  const chatDisplay = useChatDisplay()
@@ -2848,6 +2884,7 @@ function Chat(p: any) {
   const scrollPinned=useRef(true)
   const [atBottom,setAtBottom]=useState(true)
   const [summaryOpen,setSummaryOpen]=useState(false)
+  const [statsOpen,setStatsOpen]=useState(false)
   const scrollIndicatorRef=useRef<HTMLDivElement|null>(null)
   const indicatorTimerRef=useRef<number|undefined>(undefined)
   useEffect(()=>{
@@ -3391,6 +3428,9 @@ function Chat(p: any) {
       {toolHint&&<div className="compose-tool-hint" role="status">{toolHint}</div>}
       {plusOpen&&<div className="compose-plus-panel" role="dialog" aria-label="更多功能">
         <div className="cp-grid">
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setStatsOpen(true)}}>
+            <span className="cp-ico" aria-hidden="true">▤</span><small>最近的请求</small>
+          </button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);cameraInput.current?.click()}}>
             <span className="cp-ico cp-camera" aria-hidden="true">◎</span><small>拍摄</small>
           </button>
@@ -3409,6 +3449,12 @@ function Chat(p: any) {
           ))}
         </div>
         <div className="cp-dots"><i className="on"/><i/></div>
+      </div>}
+      {statsOpen&&<div className="request-stats-modal" role="presentation" onClick={()=>setStatsOpen(false)}>
+        <div className="request-stats-card" role="dialog" aria-modal="true" aria-label="最近的请求" onClick={e=>e.stopPropagation()}>
+          <header><b>最近的请求</b><button type="button" onClick={()=>setStatsOpen(false)} aria-label="关闭">×</button></header>
+          <RequestStats messages={currentMessages}/>
+        </div>
       </div>}
       <input ref={cameraInput} className="hidden-file-input" type="file" accept="image/*" capture="environment" onChange={e=>loadFiles(e.target.files,true)}/>
       {attachOpen&&<div className="compose-attach-menu" role="menu" aria-label="附件类型">

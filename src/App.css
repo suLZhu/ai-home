@@ -2858,3 +2858,19 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .chat-summary-text{font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--ink,#403b35)}
 .chat-summary-card small{display:block;margin-top:8px;font-size:10px;color:var(--muted,#8a7d6d)}
 .update-auto{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted,#8a7d6d);margin:4px 0}
+
+/* 最近的请求 */
+.request-stats-modal{position:fixed;inset:0;z-index:85;background:rgba(30,22,16,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.request-stats-card{width:100%;max-width:560px;max-height:76vh;overflow:auto;background:var(--surface,#fffdf9);border-radius:16px;padding:12px 14px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.request-stats-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.request-stats-card header b{font-size:13px}
+.request-stats-card header button{border:0;background:transparent;font-size:18px;color:var(--muted,#8a7d6d)}
+.request-stats-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.request-stats-summary>div{display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:9px;background:var(--field,#f7f3ec)}
+.request-stats-summary small{font-size:9px;color:var(--muted,#8a7d6d)}
+.request-stats-summary b{font-size:12px}
+.request-stats-list{display:flex;flex-direction:column;gap:5px}
+.request-stats-row{padding:6px 8px;border:1px solid var(--line,#e6ded2);border-radius:9px}
+.request-stats-line1{display:flex;justify-content:space-between;gap:8px;font-size:11px}
+.request-stats-line1 span{color:var(--muted,#8a7d6d)}
+.request-stats-line2{display:flex;flex-wrap:wrap;gap:8px;margin-top:3px;font-size:10px;color:var(--muted,#8a7d6d)}
