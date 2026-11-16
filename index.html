@@ -8,6 +8,71 @@
     <meta name="apple-mobile-web-app-title" content="栖间" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>栖间</title>
+    <script>
+      // Boot failure diagnostics must run before any module import or React.
+      // Never erase data automatically; a blank WebView is otherwise impossible to diagnose.
+      (function () {
+        var problems = [];
+        var shown = false;
+        function record(value) {
+          if (!value) return;
+          problems.push(String(value).slice(0, 800));
+          if (problems.length > 5) problems.shift();
+        }
+        function isAppRendered() {
+          var root = document.getElementById('root');
+          return !!root && root.children.length > 0;
+        }
+        function showFailure() {
+          if (shown || isAppRendered()) return;
+          shown = true;
+          var node = document.createElement('section');
+          node.id = 'qijian-boot-recovery';
+          node.setAttribute('role', 'alert');
+          node.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#f8f4f9;color:#393345;overflow:auto;padding:80px 22px 30px;box-sizing:border-box;font:16px/1.6 system-ui,sans-serif';
+          var h = document.createElement('h2');
+          h.textContent = '栖间未能启动 · 诊断页';
+          h.style.margin = '0 0 18px';
+          var p = document.createElement('p');
+          p.textContent = '网页启动超时或脚本加载失败。不会删除聊天记录和配置。请截图下面的错误信息给哥。';
+          var pre = document.createElement('pre');
+          pre.textContent = problems.length ? problems.join('\n---\n') : '启动后 6 秒仍无界面：未捕获到 JS 错误。可能是模块未加载、WebView 资源或原生层问题。';
+          pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;background:#ebe4f1;padding:14px;border-radius:12px;font:12px/1.6 monospace';
+          var retry = document.createElement('button');
+          retry.textContent = '重新加载';
+          retry.style.cssText = 'padding:12px 18px;border:1px solid #9a85b0;border-radius:12px;background:#fff;margin-right:12px';
+          retry.onclick = function () { location.reload(); };
+          var exit = document.createElement('button');
+          exit.textContent = '退出应用';
+          exit.style.cssText = retry.style.cssText;
+          exit.onclick = function () {
+            try {
+              var app = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+              if (app && app.exitApp) { app.exitApp(); return; }
+            } catch (_) {}
+            history.back();
+          };
+          node.appendChild(h);node.appendChild(p);node.appendChild(pre);node.appendChild(retry);node.appendChild(exit);
+          document.body.appendChild(node);
+        }
+        window.addEventListener('error', function (e) {
+          var target = e.target;
+          var resource = target && target !== window && (target.src || target.href);
+          record(resource ? '资源加载失败: ' + resource : (e.message || (e.error && e.error.stack) || '脚本错误'));
+          if (document.readyState !== 'loading') setTimeout(showFailure, 250);
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          record('Promise 异常: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason));
+          if (document.readyState !== 'loading') setTimeout(showFailure, 250);
+        });
+        window.__qijianBootDiagnostic = {
+          record: record,
+          fail: function (e) { record(e); showFailure(); }
+        };
+        setTimeout(showFailure, 6000);
+      })();
+    </script>
+
   </head>
   <body>
     <div id="root"></div>
