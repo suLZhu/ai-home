@@ -129,6 +129,20 @@ final class SystemNotifier {
         }
     }
 
+    /** Only remove message notifications for the conversation being viewed; never cancel the generation FGS. */
+    static void clearConversation(Context c, String assistantId, String conversationId) {
+        if (assistantId == null || assistantId.isEmpty()) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        try {
+            NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            String group = "aihome.chat." + assistantId + "." + (conversationId == null ? "" : conversationId);
+            for (android.service.notification.StatusBarNotification item : nm.getActiveNotifications()) {
+                if (item.getNotification() != null && group.equals(item.getNotification().getGroup())) nm.cancel(item.getId());
+            }
+        } catch (Exception ignored) { }
+    }
+
     static int notificationId(String key) {
         int id = key.hashCode() & 0x7fffffff;
         return id == 0 ? 1 : id;
@@ -200,6 +214,8 @@ final class SystemNotifier {
         // 助手消息通知带「浮窗回复」：点通知按钮直接弹一个小浮动输入窗。
         String assistantId = payload.optString("assistantId", "");
         String conversationId = payload.optString("conversationId", "");
+        if (!assistantId.isEmpty()) b.setGroup("aihome.chat." + assistantId + "." + conversationId);
+        if (payload.optBoolean("silent", false)) b.setSilent(true);
         if (!assistantId.isEmpty() && channelId.startsWith("aihome.msg.")) {
             Intent reply = new Intent(c, QuickReplyActivity.class);
             reply.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
