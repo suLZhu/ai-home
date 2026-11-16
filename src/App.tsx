@@ -3858,12 +3858,12 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     {isList&&<>
       <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
       <p className="resource-hint">点一家供应商进入它自己的配置页：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
-      <div className="vendor-icon-grid">
-        {vendors.map(v=><button type="button" className="vendor-icon-tile" key={v.id} onClick={()=>openVendorPage(v.id)}>
-          <span className="vit-icon" aria-hidden="true">{v.name.slice(0,2)}</span>
-          <span className="vit-text"><b>{v.name}</b><small>{v.keys.length} Key</small></span>
+      <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
+        {vendors.map(v=><button type="button" className="vendor-kelivo-provider-row" key={v.id} onClick={()=>openVendorPage(v.id)}>
+          <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
+          <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.models.filter(m=>m.selected).length} 个模型 · {v.keys.filter(k=>!!k.value).length} 把 Key</small></span><span className="vendor-kelivo-provider-caret">›</span>
         </button>)}
-        <button type="button" className="vendor-icon-tile add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vit-icon" aria-hidden="true">＋</span><span className="vit-text"><b>自定义</b><small>添加供应商</small></span></button>
+        <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b><small>OpenAI 兼容接口 / 自定义中转站</small></span><span className="vendor-kelivo-provider-caret">›</span></button>
       </div>
     </>}
 
@@ -3886,7 +3886,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     {active&&<section className="vendor-page">
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
       <div className="vendor-card open" key={active.id}>
-      <div className="vendor-detail-head"><span className="vendor-no">{poolLabel(vendors.indexOf(active))}</span><b>{active.name}</b></div>
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon">{active.name.slice(0,1)}</span><b>{active.name}</b><span className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</span></div>
       <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
         <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>
         <button type="button" role="tab" aria-selected={tab==='model'} className={tab==='model'?'active':''} onClick={()=>setTab('model')}>模型</button>
@@ -3897,7 +3897,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <div className="vendor-config-menu">
           <div className="vendor-config-info"><span>供应商类型</span><span>OpenAI 兼容接口</span></div>
           <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
-          <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>多把密钥自动轮换，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>多 Key 管理 <small>展开或收起备用密钥，不修改轮换配置</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           <div className="vendor-config-info"><span>获取模型</span><button type="button" onClick={()=>{setTab('model');void fetchRemote(active)}}>从当前供应商刷新　›</button></div>
         </div>
         <div className="vendor-config-section-title">连接设置</div>
