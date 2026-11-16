@@ -2456,3 +2456,9 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .usage-model-block{min-width:0;max-width:100%;box-sizing:border-box}
 .usage-model-head{min-width:0}
 .usage-model-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* SKILL 导入 */
+.skill-import{display:flex;align-items:center;gap:8px;margin:6px 0 10px;flex-wrap:wrap}
+.skill-import button{height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--line,#e2d9cc);background:var(--card,#fffdf9);font-size:11.5px}
+.skill-import input{display:none}
+.skill-import small{font-size:10.5px;color:var(--muted,#8a7d6d)}
