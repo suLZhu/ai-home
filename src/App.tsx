@@ -3450,40 +3450,27 @@ function Chat(p: any) {
           <button type="button" className={'ms-delete'+(armedSelKey===selectKey&&selectedIds.length?' armed':'')} disabled={!selectedIds.length} title={armedSelKey===selectKey&&selectedIds.length?'再点一次确认删除':'删除选中的消息'} onClick={batchDelete}>{armedSelKey===selectKey&&selectedIds.length?`确认删除 ${selectedIds.length} 条`:'删除'}</button>
         </div>
       : <form className="compose compose-box compose-wechat" ref={formRef} onSubmit={submit}>
+      <div className="compose-editor">
+        <textarea ref={composeTextRef} className="cw-input" rows={5} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="请输入您的问题…" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
+        <button type="button" className="compose-expand" aria-label="展开输入框" title="展开或收起大输入框" onClick={e=>e.currentTarget.closest('.compose-box')?.classList.toggle('composer-expanded')}>⛶</button>
+      </div>
       <div className="cw-row">
-        <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-        <textarea ref={composeTextRef} className="cw-input" rows={1} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="写点什么……" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
-        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><span aria-hidden="true">☺</span></button>
-        {p.sending
-          ? (p.draft.trim()||files.length
-              ? <button type="submit" className="cw-circle send" aria-label="发送"><span aria-hidden="true" className="cw-send-icon"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M4.2 11.4 19.6 4.6a.6.6 0 0 1 .8.8l-6.8 15.4a.6.6 0 0 1-1.1-.1l-2.2-5.6-5.6-2.2a.6.6 0 0 1-.1-1.1Z" fill="currentColor"/></svg></span></button>
-              : <button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}><span aria-hidden="true">■</span></button>)
-          : (p.draft.trim()||files.length
-              ? <button type="submit" className="cw-circle send" aria-label="发送"><span aria-hidden="true" className="cw-send-icon"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M4.2 11.4 19.6 4.6a.6.6 0 0 1 .8.8l-6.8 15.4a.6.6 0 0 1-1.1-.1l-2.2-5.6-5.6-2.2a.6.6 0 0 1-.1-1.1Z" fill="currentColor"/></svg></span></button>
-              : <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><span aria-hidden="true">＋</span></button>)}
+        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型">✧ {p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)?.name||'选择模型'} <span>⌄</span></button>
+        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}>☺</button>
+        <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}>＋</button>
+        <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
+        {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
       </div>
       {toolHint&&<div className="compose-tool-hint" role="status">{toolHint}</div>}
       {plusOpen&&<div className="compose-plus-panel" role="dialog" aria-label="更多功能">
         <div className="cp-grid">
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setStatsOpen(true)}}>
-            <span className="cp-ico" aria-hidden="true">▤</span><small>最近的请求</small>
-          </button>
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);cameraInput.current?.click()}}>
-            <span className="cp-ico cp-camera" aria-hidden="true">◎</span><small>拍摄</small>
-          </button>
-          {COMPOSE_TOOLS.filter(t=>t.id!=='emoji').map(t=>(
-            <button key={t.id} type="button" className="cp-item" onClick={()=>{
-              setPlusOpen(false)
-              showToolHint(t.label)
-              if(t.id==='emoji'){setTray('');setAttachOpen(false);setEmojiTab('emoji');setEmojiOpen(true);return}
-              if(t.id==='search'){setTray('');setEmojiOpen(false);setAttachOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true);return}
-              if(t.id==='attach'){setEmojiOpen(false);setTray('');setAttachOpen(true);return}
-              setEmojiOpen(false);setAttachOpen(false);openTray(t.id as 'model'|'bind'|'tools')
-            }}>
-              <span className="cp-ico"><img src={'/msg-icons/'+t.icon+'.png'} alt="" aria-hidden="true"/></span>
-              <small>{t.label}</small>
-            </button>
-          ))}
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);cameraInput.current?.click()}}><span className="cp-ico">◎</span><small>拍照</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">▣</span><small>世界书</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">⌘</span><small>MCP</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setAttachOpen(true)}}><span className="cp-ico">▤</span><small>文件</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('tools')}}><span className="cp-ico">⚙</span><small>工具</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true)}}><span className="cp-ico">⌕</span><small>查找聊天记录</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setStatsOpen(true)}}><span className="cp-ico">◷</span><small>最近的请求</small></button>
         </div>
         <div className="cp-dots"><i className="on"/><i/></div>
       </div>}
