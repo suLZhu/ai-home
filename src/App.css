@@ -2726,3 +2726,11 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 /* 自由背景时隐藏模板地板线；自由热点文字跟随自身颜色 */
 .room-illustration.free-bg:before{display:none}
 .free-hotspot .ri-tag{color:inherit!important;text-shadow:none!important;font-size:inherit!important}
+
+/* 使用说明页 */
+.guide-page{max-height:none}
+.guide-page .guide-h{font-size:13px;margin:10px 0 4px;color:var(--ink,#403b35)}
+.guide-page .guide-h4{font-size:12px;margin:8px 0 3px;color:var(--ink,#403b35)}
+.guide-page .guide-p{font-size:11px;line-height:1.65;margin:2px 0;color:var(--muted,#6f6357)}
+.guide-page .guide-code{font-size:10.5px;line-height:1.55;background:rgba(120,100,80,.06);border:1px solid var(--line,#e6ded2);border-radius:8px;padding:6px 8px;overflow:auto;margin:4px 0;white-space:pre-wrap;word-break:break-word}
+.guide-page .guide-li{padding-left:2px}
