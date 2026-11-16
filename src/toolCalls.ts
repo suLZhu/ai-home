@@ -69,6 +69,9 @@ const LOCAL_TOOL_NAMES: Record<string, string> = {
   widget_append: '房间 · 更新小组件',
   room_get_layout: '房间 · 读取布局',
   room_set_layout: '房间 · 设计场景',
+  theme_pack_list: '美化包 · 列表',
+  theme_pack_apply: '美化包 · 应用',
+  theme_pack_save: '美化包 · 保存并应用',
   web_search: '联网 · 搜索',
   open_web_page: '联网 · 打开网页',
 }

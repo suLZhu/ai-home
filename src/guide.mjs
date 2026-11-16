@@ -92,12 +92,13 @@ AiHomeRoom.template   // 只读模板
 - 需要完整说明时读取 window.AiHomeGuide（本页 markdown）；
 - 修改房间前先调用 「room_get_layout」（或 AiHomeRoom.get()），在原有 items 上增删，别整份覆盖；
 - 房间布局按助手隔离，存储键 ai-home.roomLayout.<person>；
-- 可用工具：「room_get_layout」 / 「room_set_layout」（房间）、「web_search」 / 「open_web_page」（联网与内置浏览器）、「scheduled_task_list/create/manage」（提醒）、「widget_*」（房间小组件）、「memory_search/add」、「worldbook_*」、「ledger_*」、「conversation_search」。
+- 可用工具：「room_get_layout」 / 「room_set_layout」（房间）、「theme_pack_list」 / 「theme_pack_apply」 / 「theme_pack_save」（美化包）、「web_search」 / 「open_web_page」（联网与内置浏览器）、「scheduled_task_list/create/manage」（提醒）、「widget_*」（房间小组件）、「memory_search/add」、「worldbook_*」、「ledger_*」、「conversation_search」。
 
 ## 十、美化包（Theme Pack）
 
 - 位置：设置 → 外观与聊天 → 主题 → 美化包；
 - 一个包可以是单个 .json，也可以是 .zip（根目录 pack.json + bg.png / font.ttf 等资源，自动转 data URL）；导入后出现在列表里，点一下应用、点 × 删除；
+- 助手可以直接改：用「theme_pack_list」查看已安装的包、「theme_pack_apply」按名字切换、「theme_pack_save」提交一份新包并立即生效；
 - 包里可以一次换掉：色调 tokens、聊天背景、气泡颜色、可选图标。
 
 \`\`\`json

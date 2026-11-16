@@ -17,7 +17,7 @@ import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
 import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
-import { applyPackVars, getActivePackId, loadThemePacks, type ThemePack } from './themePack.mjs'
+import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
@@ -1359,6 +1359,11 @@ export default function App() {
       // 房间场景：读取/改写开放式布局，客户端即时生效。
       openAITools.push({type:'function',function:{name:'room_get_layout',description:'读取当前助手房间的场景布局（JSON）。想改房间前先调用它，在原有 items 上增删，不要凭空整份覆盖。',parameters:{type:'object',properties:{},additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'room_set_layout',description:'把你设计的房间场景保存并立即生效。layout.background 支持任意 CSS 渐变/颜色/图片；layout.items 每项可用 x/y/w/h（百分比）、style（任意 CSS）、emoji/text、action（chat/world/mcp/skill/memory/settings，没有 action 就是纯装饰）。',parameters:{type:'object',properties:{layout:{type:'object',description:'完整房间布局',properties:{name:{type:'string'},background:{type:'object',properties:{css:{type:'string'},color:{type:'string'},image:{type:'string'}}},items:{type:'array',items:{type:'object'}}},required:['items']}},required:['layout'],additionalProperties:false}}})      // 本机工作区：只有开启后才把工具给模型；写/删/提交/命令还会在客户端逐次确认。
+
+      // 美化包：让助手自己设计配色并应用。
+      openAITools.push({type:'function',function:{name:'theme_pack_list',description:'列出用户已安装的美化包（名字、作者、主色）。想改主题前先看看已有的包。',parameters:{type:'object',properties:{},additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'theme_pack_apply',description:'按名字或 id 应用一个已安装的美化包。',parameters:{type:'object',properties:{name:{type:'string',description:'包名'},id:{type:'string',description:'包 id（可选）'}},additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'theme_pack_save',description:'创建或更新一个美化包并立即应用。pack 含 name、tokens（accent/accentSoft/surface/field/ink/muted/line）、background（color 或 image）、bubble（style/me/ai）、icons（emoji）、font（family）。颜色用 #hex 或 rgb()。',parameters:{type:'object',properties:{pack:{type:'object',description:'美化包定义',properties:{name:{type:'string'},author:{type:'string'},description:{type:'string'},tokens:{type:'object'},background:{type:'object'},bubble:{type:'object'},icons:{type:'object'},font:{type:'object'}},required:['name','tokens']}},required:['pack'],additionalProperties:false}}})
       const workspace=workspaceConfigs[target]
       if(workspace?.enabled&&!isLocalMode()){
         const rootNote='根目录：'+workspace.root
@@ -1452,6 +1457,7 @@ export default function App() {
             const workspaceTool=call.function.name.startsWith('workspace_')
             const widgetTool=call.function.name.startsWith('widget_')
             const roomTool=call.function.name==='room_get_layout'||call.function.name==='room_set_layout'
+            const themeTool=call.function.name==='theme_pack_list'||call.function.name==='theme_pack_apply'||call.function.name==='theme_pack_save'
             const webTool=call.function.name==='web_search'||call.function.name==='open_web_page'
             const logSource:ToolCallSource=webTool?'web':widgetTool?'widget':workspaceTool?'workspace':conversationTool?'memory':call.function.name==='ledger_add_entry'?'ledger':localWorldbookTool?'worldbook':scheduledTaskTool?'workflow':'mcp'
             // 真实调用点：模型发起的每一次工具调用都先登记（含随后被拒绝的），供聊天卡片与看板共用。
@@ -1464,7 +1470,7 @@ export default function App() {
               serverName:route?route.connectionName:'',
               arguments:argsParsed?args:call.function.arguments||'{}',eventId:toolRunId+':'+call.id,
             })
-            if(!webTool&&!widgetTool&&!roomTool&&!workspaceTool&&!conversationTool&&call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&!scheduledTaskTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
+            if(!webTool&&!widgetTool&&!roomTool&&!themeTool&&!workspaceTool&&!conversationTool&&call.function.name!=='ledger_add_entry'&&!localWorldbookTool&&!scheduledTaskTool&&(!route||route.person!==target)) throw new Error('工具没有绑定到当前人物，已拒绝调用。')
             if(!argsParsed)throw new Error('模型生成的工具参数不是合法 JSON。')
             if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须是 JSON 对象。')
             const toolLabel=route?route.name:(webTool?'联网 / 内置浏览器':widgetTool?'房间小组件':workspaceTool?'本机工作区':conversationTool?'回顾更早的对话':call.function.name==='ledger_add_entry'?'共享记账单':scheduledTaskTool?'定时任务':'本地工具')
@@ -1540,6 +1546,26 @@ export default function App() {
                 const saved=saveRoomLayout(target,layout)
                 try{window.dispatchEvent(new Event('aihome:room-layout'))}catch{}
                 resultContent=JSON.stringify({ok:true,layout:saved,message:'房间已更新，界面立即生效。'})
+              }
+            }else if(themeTool){
+              const name=call.function.name
+              if(name==='theme_pack_list'){
+                const packs=loadThemePacks().map(pk=>({id:pk.id,name:pk.name,author:pk.author,accent:pk.tokens.accent,active:pk.id===getActivePackId()}))
+                resultContent=JSON.stringify({packs,message:packs.length?'':'还没有美化包，可以用 theme_pack_save 创建一个。'})
+              }else if(name==='theme_pack_apply'){
+                const packs=loadThemePacks()
+                const target=packs.find(pk=>pk.id===String(args.id||''))||packs.find(pk=>pk.name===String(args.name||''))
+                if(!target)throw new Error('找不到这个美化包，先用 theme_pack_list 查看名字。')
+                setStoredActivePack(target.id)
+                window.dispatchEvent(new Event('aihome:theme-pack'))
+                resultContent=JSON.stringify({ok:true,applied:target.name,message:'已切换到「'+target.name+'」，界面立即生效。'})
+              }else{
+                if(!args.pack||typeof args.pack!=='object')throw new Error('缺少 pack 对象。')
+                const pack=normalizeThemePack(args.pack)
+                upsertThemePack(pack)
+                setStoredActivePack(pack.id)
+                window.dispatchEvent(new Event('aihome:theme-pack'))
+                resultContent=JSON.stringify({ok:true,pack:{id:pack.id,name:pack.name},message:'美化包「'+pack.name+'」已保存并应用。'})
               }
             }else if(workspaceTool){
               const name=call.function.name
