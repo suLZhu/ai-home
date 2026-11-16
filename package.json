@@ -1,7 +1,7 @@
 {
   "name": "ai-home",
   "private": true,
-  "version": "0.0.0",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -23,7 +23,8 @@
     "dompurify": "^3.4.18",
     "marked": "^18.2.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "@capgo/capacitor-updater": "^8.54.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

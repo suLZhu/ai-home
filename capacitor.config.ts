@@ -4,6 +4,14 @@ const config: CapacitorConfig = {
   appId: 'com.sulzhu.aihome',
   appName: '栖间',
   webDir: 'dist',
+  plugins: {
+    CapacitorUpdater: {
+      appId: 'com.sulzhu.aihome',
+      autoUpdate: false,
+      httpsOnly: false,
+      statsUrl: ''
+    }
+  },
   android: {
     // WebView 页面源是 https://localhost，局域网后端是纯 http://192.168.x.x:4180；
     // 不放开混合内容，页面里的 fetch 与 <img> 会被内核按 mixed content 拦下。

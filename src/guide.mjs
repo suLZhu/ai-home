@@ -127,6 +127,15 @@ AiHomeRoom.template   // 只读模板
 - 填后端清单地址并保存；清单 JSON：versionCode / versionName / apkUrl / notes；
 - 点「检查更新」：发现 versionCode 更大时弹窗，确认后下载并拉起系统安装器；
 - 这一步仍需要系统安装确认；完全免安装的热更新要后续接入 Live Update。
+
+### Live Update（4.0 起）
+
+- 清单可同时带 webVersion / webUrl / webChecksum：只替换网页资源，不用装 APK；
+- dist.zip 里 index.html 必须在最外层；压缩包内路径必须是 /（Windows 右键压缩会产生反斜杠，插件会报 Unzip failed: Windows path not supported）；
+- 服务器需允许跨域（Access-Control-Allow-Origin: *），尽量用 HTTPS；http 仅用于本地调试；
+- 下载完成后自动重载；出问题可在「应用更新」里点「恢复内置界面」；
+- 版本约定：4.0 为当前原生壳，以后页面/逻辑改动发 4.1、4.2…（只发 dist.zip + 清单），原生部分变了才发新 APK。
+
 `
 
 export const GUIDE_BRIEF = `【栖间速查】应用有 主页/房间/聊天 三块；菜单在左上角，含历史聊天、助手工具和设置。设置分 助手设定（世界书/MCP/技能/记忆）、模型与费用、外观与聊天、工作区、系统与权限。房间是开放场景，可用工具 room_get_layout / room_set_layout 读取和设计（background + items，x/y/w/h 百分比、style、emoji/text、action∈chat/world/mcp/skill/memory/settings）。内置浏览器：web_search 搜索、open_web_page 打开（有地址栏、前进后退、刷新、下载）。完整说明见 设置→系统与权限→说明，或 window.AiHomeGuide。`
