@@ -45,6 +45,10 @@ jobs:
         run: npm run build
       - name: Run vision, backup and time regression tests
         run: node --test tests/vision-attachments.test.mjs tests/backups.test.mjs tests/time-context.test.mjs
+      - name: Chromium startup smoke test
+        run: |
+          npm install --no-save --no-audit --no-fund puppeteer-core
+          CHROME_BIN="$(command -v google-chrome || command -v chromium)" node tests/smoke-startup.mjs
       - name: Sync Capacitor
         run: npx cap sync android
       - name: Use runner native AAPT2
