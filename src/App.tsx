@@ -16,6 +16,7 @@ import { UiDialogHost } from './UiDialogHost'
 import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
 import { WebBrowser, type WebPage } from './WebBrowser'
+import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
@@ -2248,33 +2249,47 @@ function Room(props: {
   const mcpCount=Object.values(props.mcpConnections||{}).reduce((n,list)=>n+(list||[]).length,0)
   const skillCount=loadSkills(person).length
   const memoryCount=(props.memoryEntries?.[person]||[]).length
+  const [roomLayout,setRoomLayout]=useState<RoomLayout>(()=>loadRoomLayout(person))
+  useEffect(()=>{ setRoomLayout(loadRoomLayout(person)) },[person])
+  useEffect(()=>{ const onLayout=()=>setRoomLayout(loadRoomLayout(person)); window.addEventListener('aihome:room-layout',onLayout); return ()=>window.removeEventListener('aihome:room-layout',onLayout) },[person])
+  useEffect(()=>{
+    (window as any).AiHomeRoom={
+      get:()=>loadRoomLayout(person),
+      set:(layout:RoomLayout)=>{saveRoomLayout(person,layout);window.dispatchEvent(new Event('aihome:room-layout'))},
+      reset:()=>{resetRoomLayout(person);window.dispatchEvent(new Event('aihome:room-layout'))},
+      template:DEFAULT_ROOM_LAYOUT,
+      buildItem:(input:any)=>({id:`item-${Date.now()}`,kind:'hotspot',label:'新入口',action:'chat',...input}),
+    }
+    return ()=>{ delete (window as any).AiHomeRoom }
+  },[person])
   function saveActiveMessages(){props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c)}))}
   function openConversation(id:string){if(id!==activeId){saveActiveMessages();const target=convs.find(c=>c.id===id);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}));props.setChatError('')}props.setChatOpen(true)}
   return <div className="room-screen">
     {roomHeader}
-    <div className="room-illustration">
-      <div className="ri-sun" aria-hidden="true"/>
-      <div className="ri-window" aria-hidden="true"><i/><i/><i/></div>
-      <div className="ri-curtain l" aria-hidden="true"/><div className="ri-curtain r" aria-hidden="true"/>
-      <div className="ri-shelf" aria-hidden="true"><i/><i/><i/><i/></div>
-      <div className="ri-frame" aria-hidden="true"/>
-      <div className="ri-desk" aria-hidden="true"><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></div>
-      <div className="ri-router" aria-hidden="true"/>
-      <div className="ri-rug" aria-hidden="true"/>
-      <div className="ri-plant" aria-hidden="true">🪴</div>
-      <div className="ri-lamp" aria-hidden="true">💡</div>
-      <div className="ri-cat" aria-hidden="true">🐈</div>
-      <button type="button" className="ri-hit shelf" aria-label="打开世界书" onClick={()=>props.setActiveTool('世界书')}><span className="ri-tag">世界书 <small>{worldCount}</small></span></button>
-      <button type="button" className="ri-hit chat" aria-label="继续聊天" onClick={()=>openConversation(activeId)}><span className="ri-tag">聊天</span></button>
-      <button type="button" className="ri-hit mcp" aria-label="打开 MCP" onClick={()=>props.setActiveTool('MCP')}><span className="ri-tag">MCP <small>{mcpCount}</small></span></button>
-      <button type="button" className="ri-hit skill" aria-label="打开技能库" onClick={()=>props.setActiveTool('SKILL 技能库')}><span className="ri-tag">技能 <small>{skillCount}</small></span></button>
-      <button type="button" className="ri-hit memory" aria-label="打开记忆面板" onClick={()=>props.setActiveTool('记忆面板')}><span className="ri-tag">记忆 <small>{memoryCount}</small></span></button>
-      <button type="button" className="ri-hit settings" aria-label="打开设置" onClick={()=>props.onOpenSettings?.()}><span className="ri-tag">设置</span></button>
-    </div>
+    <RoomScene layout={roomLayout} counts={{world:worldCount,mcp:mcpCount,skill:skillCount,memory:memoryCount}} onAction={(action:string)=>{
+      if(action==='chat'){openConversation(activeId);return}
+      if(action==='settings'){props.onOpenSettings?.();return}
+      const map:Record<string,Tool>={world:'世界书',mcp:'MCP',skill:'SKILL 技能库',memory:'记忆面板'}
+      const tool=map[action]; if(tool) props.setActiveTool(tool)
+    }}/>
     <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">›</span></button>
   </div>
 }
 
+
+function RoomScene({layout,counts,onAction}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void}) {
+  return <div className="room-illustration">
+    {layout.items.map((item:RoomItem)=>{
+      const style=item.style as React.CSSProperties|undefined
+      if(item.kind==='decor'){
+        const cls='ri-'+String(item.type||'')+(item.cls?' '+item.cls:'')
+        const kids=item.type==='window'?<><i/><i/><i/></>:item.type==='shelf'?<><i/><i/><i/><i/></>:item.type==='desk'?<><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></>:item.text?item.text:null
+        return <div key={item.id} className={cls} style={style} aria-hidden="true">{kids}</div>
+      }
+      return <button key={item.id} type="button" className={'ri-hit '+(item.hit||'')} style={style} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
+    })}
+  </div>
+}
 
 // 助手档案：房间里 / 聊天里点助手头像后共用的设置面板。名称直接在这里改，
 // 人物设定、用户设定两段；长期/短期记忆已并入独立的记忆面板，不再在这里重复。
