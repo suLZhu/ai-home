@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 栖间 adaptive icon 背景：与 Logo 母版四角实测色一致的米白纯色，不叠加网格与渐变。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/ic_launcher_background" />
+</shape>

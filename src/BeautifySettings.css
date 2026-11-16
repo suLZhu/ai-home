@@ -1,0 +1,81 @@
+/* 美化设置：一行一个包，右侧一个开关 */
+.beautify-settings h3 { margin: 0 0 12px; font-size: 19px; font-weight: 500; }
+
+.beautify-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.beautify-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--line, #cbc0d3);
+  border-radius: var(--radius, 16px);
+  background: var(--surface, #f5f1f7);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .15s ease;
+}
+.beautify-row.active { border-color: var(--accent, #8871a5); }
+
+.beautify-row-name { font-size: 15px; font-weight: 600; color: var(--ink, #41384b); }
+
+/* 普通开关 */
+.beautify-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--line, #cbc0d3);
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.beautify-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(40, 30, 50, .3);
+  transition: transform .15s ease;
+}
+.beautify-switch:checked { background: var(--accent, #8871a5); }
+.beautify-switch:checked::after { transform: translateX(20px); }
+.beautify-switch:focus-visible { outline: 2px solid var(--accent, #8871a5); outline-offset: 2px; }
+
+/* 像素风下的开关：直角轨道 + 方块滑块 + 硬投影 */
+.beautify-pixel .beautify-switch {
+  border: 2px solid var(--pixel-ink, #2f2c33);
+  border-radius: 0;
+  background: var(--pixel-paper, #f7f5f2);
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22));
+}
+.beautify-pixel .beautify-switch::after {
+  border-radius: 0;
+  width: 14px;
+  height: 14px;
+  background: var(--pixel-ink, #2f2c33);
+  box-shadow: none;
+  transition: transform .12s steps(3, end);
+}
+.beautify-pixel .beautify-switch:checked {
+  background: var(--pixel-ink, #2f2c33);
+}
+.beautify-pixel .beautify-switch:checked::after {
+  background: var(--pixel-paper, #f7f5f2);
+  transform: translateX(20px);
+}
+.beautify-pixel .beautify-switch:focus-visible {
+  outline: 2px dashed var(--pixel-ink, #2f2c33);
+}

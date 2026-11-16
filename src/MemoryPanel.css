@@ -1,0 +1,112 @@
+/* 记忆面板：自动整理卡片 + 治理列表。列表样式沿用 ToolDashboard.css 的
+   .tool-dash-memory*，这里只补自动整理与面板外壳。 */
+.memory-panel { display: flex; flex-direction: column; gap: 14px; }
+.memory-panel-head h3 { margin: 0 0 4px; }
+.memory-panel-head p {
+  margin: 0;
+  color: var(--muted, #7b7183);
+  font-size: 0.86em;
+  line-height: 1.6;
+}
+
+.memory-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid var(--line, #cbc0d3);
+  border-radius: 14px;
+  background: var(--surface, #f5f1f7);
+}
+.memory-auto-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.memory-auto-head b { font-size: 0.95em; }
+.memory-auto-head small { display: block; margin-top: 3px; color: var(--muted, #7b7183); font-size: 0.76em; line-height: 1.5; }
+
+/* 开关：原生 checkbox 透明盖在轨道上，保留键盘可达性 */
+.memory-auto-switch { position: relative; flex: 0 0 auto; width: 46px; height: 26px; margin-top: 2px; }
+.memory-auto-switch input {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.memory-auto-switch span {
+  position: absolute; inset: 0;
+  border-radius: 999px;
+  background: var(--line, #cbc0d3);
+  transition: background .16s ease;
+}
+.memory-auto-switch span::after {
+  content: '';
+  position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fbf9fd;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+  transition: transform .16s ease;
+}
+.memory-auto-switch input:checked + span { background: var(--ok, #4f7d62); }
+.memory-auto-switch input:checked + span::after { transform: translateX(20px); }
+.memory-auto-switch input:focus-visible + span { outline: 2px solid var(--accent, #8871a5); outline-offset: 2px; }
+.memory-auto-switch input:disabled { cursor: not-allowed; }
+
+.memory-auto-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.memory-auto-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--ink, #41384b);
+}
+.memory-auto-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--line, #cbc0d3);
+  background: var(--field, #fcf9fd);
+  color: var(--ink, #41384b);
+  font-size: 0.95em;
+  font-family: inherit;
+}
+.memory-auto-field input:focus { outline: 2px solid var(--accent, #8871a5); outline-offset: 1px; }
+.memory-auto-field span { color: var(--muted, #7b7183); font-size: 0.82em; font-weight: 400; line-height: 1.3; }
+
+.memory-auto-status {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--card, #e9e1f0);
+  font-size: 0.8em;
+  line-height: 1.5;
+}
+.memory-auto-status b { font-size: 1.02em; }
+.memory-auto-status small { color: var(--muted, #7b7183); }
+
+.memory-auto-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.memory-auto-actions button {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line, #cbc0d3);
+  background: var(--field, #fcf9fd);
+  color: var(--ink, #41384b);
+  font-size: 0.8em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.memory-auto-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.memory-auto-actions button:active:not(:disabled) { transform: scale(0.98); }
+.memory-auto-actions .memory-auto-run { background: var(--ok, #4f7d62); border-color: transparent; color: #fbf9fd; }
+
+/* 自动生效开关 + 整理规则 */
+.memory-auto-option{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;border:1px solid var(--line,#cbc0d3);border-radius:10px;background:var(--card,#e9e1f0)}
+.memory-auto-option-text b{display:block;font-size:12.5px;color:var(--ink,#41384b)}
+.memory-auto-option-text small{display:block;margin-top:2px;font-size:10.5px;line-height:1.5;color:var(--muted,#7b7183)}
+.memory-auto-option .memory-auto-switch{display:inline-block;flex:0 0 auto;margin-top:0}
+.memory-auto-rules{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted,#7b7183)}
+.memory-auto-rules textarea{width:100%;box-sizing:border-box;min-height:54px;padding:8px 10px;border:1px solid var(--line,#cbc0d3);border-radius:9px;background:var(--field,#fcf9fd);color:var(--ink,#41384b);font:inherit;font-size:12px;line-height:1.5;resize:vertical}
+.memory-auto-rules textarea:focus{outline:2px solid var(--accent,#8871a5);outline-offset:1px}
+.memory-auto-rules>span{align-self:flex-end;font-size:10px;color:var(--muted,#7b7183)}
+.memory-auto-state{font-size:9.5px;color:var(--muted,#81786d);white-space:nowrap;margin-right:2px}

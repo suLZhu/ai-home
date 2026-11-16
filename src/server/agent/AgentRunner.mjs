@@ -1,0 +1,222 @@
+// The unified agent runner: one user prompt -> a bounded tool loop -> a
+// persisted answer. Everything that makes an agent "visible" happens here —
+// rounds are counted, every tool call goes through ToolExecutor (which logs
+// it), and events stream to subscribers while the row in agent_runs is the
+// durable truth.
+//
+// Hard rules:
+//  - at most MAX_ROUNDS model round-trips, no exceptions;
+//  - identity comes from the run row (server-assigned); the model can never
+//    choose which assistant it is acting as;
+//  - a tool failure is fed back as role=tool so the model can recover —
+//    it never aborts the whole run;
+//  - cancellation is cooperative via AbortController.
+import { chat } from './OpenAICompatibleProvider.mjs'
+import { createToolRegistry } from './ToolRegistry.mjs'
+import { executeToolCall } from './ToolExecutor.mjs'
+import { getAgentRun, finishAgentRun } from './AgentRunStore.mjs'
+import { buildTimeContext, timeContextText, normalizeTimeZone, DEFAULT_TIME_ZONE } from '../../timeContext.mjs'
+
+export const MAX_ROUNDS = 5
+
+function buildSystemPrompt(run, displayName) {
+  return [
+    `【当前扮演角色】你是 ${displayName}（服务端身份 ID：${run.assistantId}）。你正在通过工具助手执行用户交给你的任务，而不是普通闲聊。`,
+    '【工具使用规则】',
+    '1. 只在确实需要时调用工具；每次工具调用会真实执行并被记录，不要编造工具结果。',
+    '2. 工具返回 [错误] 时可以换一种方式重试一次，仍失败就如实告诉用户。',
+    '3. 返回 [待审批] 表示需要用户确认，先解释你要做什么，等待用户批准，不要重复调用。',
+    '4. 记账工具只在用户明确要求记账时使用；成功返回前不要声称已记账。',
+    '5. 完成任务后用简洁的中文总结你做了什么、结果如何。',
+  ].join('\n')
+}
+
+// 用户配置的 IANA 时区存在 app_state 快照的 timeZone 字段；
+// 读取失败或非法时回退到默认 Asia/Shanghai。
+function readTimeZone(db) {
+  try {
+    const row = db.prepare('SELECT payload FROM app_state WHERE id=1').get()
+    const state = JSON.parse(row?.payload || '{}')
+    const tz = typeof state?.timeZone === 'string' ? state.timeZone : ''
+    return tz ? normalizeTimeZone(tz) : DEFAULT_TIME_ZONE
+  } catch {
+    return DEFAULT_TIME_ZONE
+  }
+}
+
+function usageTotal(target, src) {
+  if (!src) return
+  target.promptTokens = (target.promptTokens || 0) + (src.promptTokens || 0)
+  target.completionTokens = (target.completionTokens || 0) + (src.completionTokens || 0)
+  target.cachedTokens = (target.cachedTokens || 0) + (src.cachedTokens || 0)
+  target.calls = (target.calls || 0) + 1
+}
+
+// ctx: { db, bus, providerFor(assistantId) -> {endpoint, apiKey, model},
+//        displayNameFor(assistantId), mcpList(row), mcpCall(row, name, args) }
+// opts: { signal, timedOut?() -> bool } — timedOut distinguishes a deadline
+// abort (status timed_out) from a user cancel (status cancelled).
+// Returns the finished run row (status always terminal when this resolves).
+export async function runAgent(ctx, run, { signal, timedOut } = {}) {
+  const { db, bus } = ctx
+  // Identity and credentials are resolved server-side from the run row; the
+  // request payload cannot influence either.
+  const provider = ctx.providerFor(run.assistantId)
+  const displayName = ctx.displayNameFor(run.assistantId)
+  if (!provider.endpoint || !provider.apiKey || !provider.model) {
+    const finished = finishAgentRun(db, run.id, {
+      status: 'failed', errorCode: 'PROVIDER_MISSING',
+      errorMessage: '该助手尚未配置 API 地址、模型或 API Key（工作区 → 模型设置）',
+    })
+    bus.publish({ type: 'run_finished', runId: run.id, status: finished.status })
+    return finished
+  }
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
+
+  const usage = {}
+  let rounds = 0
+  let toolCalls = 0
+  let answer = ''
+  let status = 'succeeded'
+  let errorCode = null
+  let errorMessage = null
+  // Abort can mean two very different things: a user cancel or a run deadline.
+  // Record the honest status so a timeout is never displayed as a success.
+  const settleAbort = () => {
+    if (typeof timedOut === 'function' && timedOut()) {
+      status = 'timed_out'; errorCode = 'RUN_TIMEOUT'; errorMessage = '运行超时，已被系统中止'
+    } else {
+      status = 'cancelled'; errorCode = 'ABORTED'; errorMessage = '运行已被取消'
+    }
+  }
+
+  try {
+    const registry = await createToolRegistry({
+      db,
+      person: run.assistantId,
+      mcpList: row => ctx.mcpList(row),
+      mcpCall: (row, name, args) => ctx.mcpCall(row, name, args),
+    })
+    const messages = [
+      { role: 'system', content: buildSystemPrompt(run, displayName) },
+      { role: 'user', content: run.prompt },
+    ]
+    const timeZone = readTimeZone(db)
+    // 时间上下文是独立的 system 消息，不覆盖角色/工具规则；
+    // 每一轮模型请求前用当前时间重新生成，长时间运行的任务不会拿着旧时间。
+    const timeMessage = { role: 'system', content: timeContextText(buildTimeContext(new Date(), timeZone)) }
+
+    for (rounds = 1; rounds <= MAX_ROUNDS; rounds++) {
+      if (controller.signal.aborted) { settleAbort(); break }
+      timeMessage.content = timeContextText(buildTimeContext(new Date(), timeZone))
+      messages.splice(1, 0, timeMessage)
+      bus.publish({ type: 'round_started', runId: run.id, round: rounds })
+
+      const reply = await chat({
+        endpoint: provider.endpoint,
+        apiKey: provider.apiKey,
+        model: provider.model,
+        messages,
+        tools: registry.definitions,
+        signal: controller.signal,
+      })
+      usageTotal(usage, reply.usage)
+      // 离开本轮请求体：下一轮按新时间重新插入，历史里不累积多份时间消息。
+      messages.splice(1, 1)
+
+      if (!reply.toolCalls.length) {
+        answer = reply.content || ''
+        break
+      }
+
+      messages.push({
+        role: 'assistant',
+        content: reply.content || null,
+        tool_calls: reply.toolCalls.map(c => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments } })),
+      })
+
+      for (const call of reply.toolCalls) {
+        if (controller.signal.aborted) break
+        toolCalls++
+        const outcome = await executeToolCall({
+          db, bus, registry, run,
+          round: rounds, callId: call.id, name: call.name, rawArgs: call.arguments,
+          signal: controller.signal,
+        })
+        messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
+      }
+
+      if (controller.signal.aborted) { settleAbort(); break }
+      // Last round already spent: stop rather than exceed the hard cap.
+      if (rounds === MAX_ROUNDS) {
+        status = 'succeeded'
+        answer = '(已达最大执行轮数上限，任务在工具调用后停止，请根据以上工具结果回答用户)'
+      }
+    }
+
+    if (rounds > MAX_ROUNDS) rounds = MAX_ROUNDS // for-increment overshoot when no break happened
+
+    if (status === 'succeeded' && !answer && !controller.signal.aborted) {
+      answer = '(模型没有返回内容)'
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError' || controller.signal.aborted) {
+      settleAbort()
+    } else {
+      status = 'failed'
+      errorCode = String(error?.code || (error?.status === 502 ? 'UPSTREAM_ERROR' : 'RUN_ERROR')).slice(0, 64)
+      errorMessage = String(error?.message || '运行失败').slice(0, 800)
+    }
+  } finally {
+    if (signal) signal.removeEventListener('abort', onAbort)
+  }
+
+  const finished = finishAgentRun(db, run.id, { answer, rounds, toolCalls, status, errorCode, errorMessage, usage, model: provider.model })
+  bus.publish({ type: 'run_finished', runId: run.id, status: finished.status, rounds: finished.rounds, toolCalls: finished.toolCalls })
+  return finished
+}
+
+// Launch a run without blocking the HTTP response. The returned handle allows
+// cancel(runId); finished promises are kept so tests can await them.
+// opts.timeoutMs arms a run deadline: expiry aborts the loop and the run ends
+// as timed_out (never as a silent success). ctx.runTimeoutMs is the default.
+export class AgentRunner {
+  constructor(ctx) {
+    this.ctx = ctx
+    this.active = new Map() // runId -> {controller, promise}
+  }
+
+  start(run, options = {}) {
+    const controller = new AbortController()
+    let timedOut = false
+    const timeoutMs = Number(options.timeoutMs ?? this.ctx.runTimeoutMs) || 0
+    const timer = timeoutMs > 0
+      ? setTimeout(() => { timedOut = true; controller.abort() }, timeoutMs)
+      : null
+    if (timer && typeof timer.unref === 'function') timer.unref()
+    const promise = runAgent(this.ctx, run, { signal: controller.signal, timedOut: () => timedOut })
+      .catch(error => {
+        // runAgent already finishes the row; this is a last-resort guard so a
+        // crashed loop never leaves a dangling promise.
+        try { finishAgentRun(this.ctx.db, run.id, { status: 'failed', errorCode: 'RUNNER_CRASH', errorMessage: String(error?.message || error).slice(0, 800) }) } catch { /* row already terminal */ }
+        return getAgentRun(this.ctx.db, run.id)
+      })
+      .finally(() => { if (timer) clearTimeout(timer); this.active.delete(run.id) })
+    this.active.set(run.id, { controller, promise })
+    return { runId: run.id, promise }
+  }
+
+  cancel(runId) {
+    const entry = this.active.get(String(runId || ''))
+    if (!entry) return false
+    entry.controller.abort()
+    return true
+  }
+
+  isActive(runId) { return this.active.has(String(runId || '')) }
+}

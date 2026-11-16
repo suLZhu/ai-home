@@ -1,0 +1,12 @@
+.ui-dialog-scrim{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:rgba(32,24,38,.42);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);animation:ui-dialog-fade .12s ease-out}
+@keyframes ui-dialog-fade{from{opacity:0}to{opacity:1}}
+.ui-dialog{width:min(330px,88vw);padding:18px 18px 14px;border-radius:20px;background:var(--surface-elevated,var(--surface,#fffdf9));border:1px solid var(--line,#ddd5c7);box-shadow:0 22px 60px rgba(30,24,38,.28);animation:ui-dialog-rise .16s ease-out}
+@keyframes ui-dialog-rise{from{transform:translateY(8px) scale(.98);opacity:.7}to{transform:none;opacity:1}}
+.ui-dialog-title{display:block;font-size:15px;font-weight:700;color:var(--ink,#403b35);margin-bottom:8px}
+.ui-dialog-message{margin:0;font-size:13px;line-height:1.7;color:var(--muted,#81786d);white-space:pre-wrap;overflow-wrap:anywhere}
+.ui-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.ui-dialog-actions button{min-height:38px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer}
+.ui-dialog-cancel{border:1px solid var(--line,#ddd5c7);background:var(--field,#faf6ef);color:var(--ink,#403b35)}
+.ui-dialog-ok{border:1px solid transparent;background:var(--accent,#8871a5);color:#fbf9fd}
+.ui-dialog-ok.danger{background:var(--danger,#ac5f68)}
+.ui-dialog-actions button:active{transform:scale(.98)}

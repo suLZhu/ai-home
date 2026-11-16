@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 栖间启动页：米白纯底 + 完整主 Logo 居中，无 spinner / 文案 / 版本号 / 渐变。
+     用 260dp 固定尺寸而非拉伸整张 PNG，保证原图比例与构图不被屏幕比例改变。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/qijian_brand_background" />
+    <item android:gravity="center" android:width="260dp" android:height="260dp">
+        <bitmap android:src="@drawable/qijian_logo_primary" android:gravity="fill" />
+    </item>
+</layer-list>

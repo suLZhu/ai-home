@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ 系统 SplashScreen：不显示被圆形遮罩裁切的 App icon，
+         只留米白底；完整「栖间」Logo 由 @drawable/splash_brand 居中展示。
+         不加载 spinner / 文案 / 版本号 / 渐变，也没有启动动画。 -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash_brand</item>
+        <item name="android:windowBackground">@drawable/splash_brand</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
+    </style>
+</resources>

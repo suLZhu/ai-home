@@ -1,0 +1,56 @@
+/* 主题与外观：扁平分段布局——不用大卡片，段落之间用细标题分隔。
+   所有功能与文案都保留，只收紧层级、留白和主题瓦片尺寸。 */
+.theme-page{display:flex;flex-direction:column;gap:2px;margin-top:2px}
+.theme-page .beautify-settings,
+.theme-page .theme-settings{margin:0}
+
+/* 小标题：从 18–19px 的大标题降为 13px 的分段标签 */
+.theme-page h3,
+.theme-page .beautify-settings>h3,
+.theme-page .theme-settings>h3{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--muted,#8b858b);margin:16px 2px 8px}
+.theme-page h3:first-child,
+.theme-page .beautify-settings>h3:first-child{margin-top:6px}
+.theme-page p.muted{font-size:11px;line-height:1.6;margin:0 2px 8px}
+
+/* 全局主题：两行开关并进一个细边框列表，不再是一条一条的独立卡片 */
+.theme-page .beautify-list{gap:0;border:1px solid var(--line,#e6ded2);border-radius:12px;overflow:hidden;background:var(--card,#fffdf9)}
+.theme-page .beautify-row{padding:11px 13px;border:0;border-bottom:1px solid var(--line,#e6ded2);border-radius:0;background:transparent}
+.theme-page .beautify-row:last-child{border-bottom:0}
+.theme-page .beautify-row.active{background:color-mix(in srgb,var(--accent,#8871a5) 9%,transparent)}
+.theme-page .beautify-row-name{font-size:13px;font-weight:500}
+
+/* 分类切换：更矮的分段控件 */
+.theme-page .theme-setting-tabs{margin:8px 0 10px;padding:3px;border-radius:10px}
+.theme-page .theme-setting-tabs button{padding:7px 4px;font-size:11.5px}
+.theme-page .theme-tab-intro{margin:8px 2px;font-size:11px}
+
+/* 主题选择：从两列大瓦片改成紧凑列表（三色块缩到右侧，名称/说明在左） */
+.theme-page .theme-gallery{grid-template-columns:1fr;gap:0;border:1px solid var(--line,#e6ded2);border-radius:12px;overflow:hidden;background:var(--card,#fffdf9)}
+.theme-page .theme-tile{display:grid;grid-template-columns:1fr auto;grid-template-areas:"name swatches" "desc swatches";column-gap:12px;align-items:center;padding:10px 12px;border:0;border-bottom:1px solid var(--line,#e6ded2);border-radius:0;background:transparent}
+.theme-page .theme-tile:last-child{border-bottom:0}
+.theme-page .theme-tile.selected{background:color-mix(in srgb,var(--accent,#8871a5) 10%,transparent)}
+.theme-page .theme-swatches{grid-area:swatches;width:62px;height:26px;gap:2px}
+.theme-page .theme-swatches span{border-radius:5px}
+.theme-page .theme-tile b{grid-area:name;font-size:12.5px;font-weight:600;margin:0}
+.theme-page .theme-tile small{grid-area:desc;font-size:10.5px;line-height:1.4;margin:1px 0 0}
+
+/* 字体 / 界面面板：去掉外框，直接作为分段行 */
+.theme-page .theme-tab-panel{padding:0;border:0;border-radius:0;background:transparent}
+.theme-page .theme-tab-panel>label{margin:10px 0;font-size:12.5px}
+.theme-page .theme-tab-panel select{padding:8px;border-radius:9px;font-size:12.5px}
+.theme-page .theme-upload-row{margin-top:8px}
+.theme-page .theme-upload{padding:7px 12px;font-size:12px;border-radius:9px}
+.theme-page .theme-upload-note{font-size:10.5px}
+
+/* 字体大小：不再是一个卡片，只用一条分隔线 */
+.theme-page .theme-fontctl{margin-top:14px;padding:14px 2px 0;border:0;border-top:1px solid var(--line,#e6ded2);border-radius:0;background:transparent;gap:6px}
+.theme-page .theme-fontctl-head b{font-size:12.5px}
+.theme-page .theme-fontctl-hint{font-size:10.5px}
+.theme-page .theme-reset{margin-top:14px;padding:8px 13px;border-radius:999px;font-size:12px}
+
+/* 助手主题：接到同一套扁平结构里 */
+.theme-page.assistant-theme>b{display:block;font-size:13px;font-weight:600;color:var(--muted,#8b858b);margin:6px 2px 4px}
+.theme-page.assistant-theme>.muted{font-size:11px;line-height:1.6;margin:0 2px 10px}
+.theme-page .person-appearance h3{font-size:13px;font-weight:600;color:var(--muted,#8b858b);margin:14px 2px 6px}
+.theme-page .person-appearance>.muted{font-size:10.5px;line-height:1.6}
+.theme-page .person-appearance label{margin-top:10px;font-size:12.5px}

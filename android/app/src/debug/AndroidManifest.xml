@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仅 Debug 构建生效的 manifest 覆盖层。
+     生产（release）manifest 保持 HTTPS 优先、默认禁明文（Android 9+ 行为）；
+     这里只在 debug 构建里放开明文 HTTP，方便开发期直连本机/局域网后端联调。
+     正式发布请始终使用 https:// 地址，切勿把后端配成 http://。 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

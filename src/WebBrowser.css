@@ -1,0 +1,11 @@
+.web-browser-scrim{position:fixed;inset:0;z-index:970;display:flex;align-items:stretch;justify-content:center;padding:10px 8px calc(10px + var(--app-safe-bottom,0px));background:rgba(24,20,30,.52);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.web-browser{display:flex;flex-direction:column;width:min(430px,100%);height:100%;overflow:hidden;border-radius:18px;background:#fffdf9;border:1px solid var(--line,#ddd5c7);box-shadow:0 22px 60px rgba(20,16,28,.3)}
+.web-browser-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee8de;background:#faf6ef}
+.web-browser-title{flex:1;min-width:0}
+.web-browser-title b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#403b35}
+.web-browser-title small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;color:#9a9186}
+.web-browser-external,.web-browser-close{flex:0 0 auto;border:0;border-radius:999px;font-size:10.5px;color:#6f5f8f;background:#f1ecf4;padding:7px 10px}
+.web-browser-close{width:30px;height:30px;padding:0;font-size:17px;line-height:1;color:#81786d}
+.web-browser-frame{flex:1;width:100%;border:0;background:#fff}
+.web-browser-foot{padding:7px 12px;border-top:1px solid #eee8de;background:#faf6ef;font-size:9px;line-height:1.5;color:#9a9186}
+.web-browser-inapp{flex:0 0 auto;border:0;border-radius:999px;font-size:10.5px;color:#fbf9fd;background:#8a79aa;padding:7px 10px}

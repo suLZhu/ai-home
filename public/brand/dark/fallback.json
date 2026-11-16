@@ -1,0 +1,11 @@
+{
+  "status": "reserved",
+  "note": "深色版 Logo 尚未设计；当前 dark 一律回退到 light，仅对承载背景做安全适配。",
+  "fallbackTo": "light",
+  "reservedKeys": [
+    "qijian-logo-primary-dark",
+    "qijian-logo-ornamental-dark",
+    "qijian-icon-dark",
+    "qijian-icon-foreground-dark"
+  ]
+}

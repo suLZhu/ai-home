@@ -1,0 +1,243 @@
+/* ═══════════ 像素风 · 黑白选框与图标 ═══════════
+   纯视觉覆盖层：不改任何业务逻辑、不改消息/存储。
+   干净像素美学（黑白）：
+   - 直角硬边（radius 0）、2px 实线描边、2px 硬投影
+   - 不铺噪点纹理：底色留白，靠描边与硬阴影塑造像素感
+   - 按下时块体位移（硬阴影归零），开关滑块分段移动，复古手感
+   - 勾选后反色实心 + 干净的像素阶梯对勾
+   - 彩色 emoji 图标统一灰度化，不再出现彩色
+   颜色取自 --pixel-* 令牌（theme.ts），日/夜主题自动黑白反转。
+
+   兼容说明：勾选对勾用 ::after 绘制，Android Chrome/Edge/Safari 正常；
+   桌面 Firefox 不渲染 input 伪元素，会退化为"反色实心方块"（仍可辨识）。
+
+   注意：美化页的 .beautify-switch 开关有自己的皮肤（见 BeautifySettings.css），
+   不走这里的复选框样式。 */
+
+/* ── 复选框 ───────────────────────────── */
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 4px 0 0;
+  flex-shrink: 0;
+  vertical-align: middle;
+  border: 2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius: 0 !important;
+  background-color: var(--pixel-paper, #f7f5f2) !important;
+  background-image: none !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  cursor: pointer;
+  transition: box-shadow .1s steps(2, end), transform .1s steps(2, end);
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):checked {
+  background-color: var(--pixel-ink, #2f2c33) !important;
+}
+/* 像素对勾：crispEdges 让斜线自然呈阶梯锯齿，即像素画质感 */
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):checked::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--pixel-paper, #f7f5f2);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.2 3.2L13 4.8' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='butt' shape-rendering='crispEdges'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.4l3.2 3.2L13 4.8' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='butt' shape-rendering='crispEdges'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):focus-visible {
+  outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
+  outline-offset: 2px;
+}
+.beautify-pixel input[type="checkbox"]:not(.beautify-switch):disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* ── 下拉选框（保留系统箭头，只换皮肤） ── */
+.beautify-pixel select {
+  border: 2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius: 0 !important;
+  background-color: var(--pixel-paper, #f7f5f2) !important;
+  background-image: none !important;
+  color: var(--pixel-ink, #2f2c33) !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  padding-right: 30px !important;
+  transition: box-shadow .1s steps(2, end);
+}
+.beautify-pixel select:hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+.beautify-pixel select:focus-visible {
+  outline: 2px dashed var(--pixel-ink, #2f2c33) !important;
+  outline-offset: 2px;
+}
+
+/* ── 像素图标框（黑白，不再彩色） ─────── */
+.beautify-pixel .sidebar-logo,
+.beautify-pixel .sidebar-link-icon,
+.beautify-pixel .fun-module-icon,
+.beautify-pixel .settings-module-icon {
+  border: 2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius: 0 !important;
+  background-color: var(--pixel-paper, #f7f5f2) !important;
+  background-image: none !important;
+  color: var(--pixel-ink, #2f2c33) !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  filter: grayscale(1) contrast(1.08);
+  transition: box-shadow .1s steps(2, end), transform .1s steps(2, end);
+}
+.beautify-pixel .sidebar-link-icon:hover,
+.beautify-pixel .fun-module-icon:hover,
+.beautify-pixel .settings-module-icon:hover {
+  box-shadow: 3px 3px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+/* 选中态：整块反色（黑白像素的经典按下效果） */
+.beautify-pixel .sidebar-link.active .sidebar-link-icon {
+  background-color: var(--pixel-ink, #2f2c33) !important;
+  background-image: none !important;
+  color: var(--pixel-paper, #f7f5f2) !important;
+}
+
+/* 大号占位图标也入像素框 */
+.beautify-pixel .module-placeholder span {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius: 0 !important;
+  background-color: var(--pixel-paper, #f7f5f2) !important;
+  background-image: none !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+  filter: grayscale(1) contrast(1.08);
+}
+
+/* 状态点 → 像素小方块 */
+.beautify-pixel .sidebar-status-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 0 !important;
+  background: var(--pixel-ink, #2f2c33) !important;
+}
+
+/* 图标旁的文字箭头去彩 */
+.beautify-pixel .fun-module-arrow { color: var(--pixel-ink, #2f2c33) !important; }
+
+/* 看板空状态 & 自动刷新胶囊入像素风 */
+.beautify-pixel .tool-dash-empty span { filter: grayscale(1) contrast(1.08); }
+.beautify-pixel .tool-dash-auto {
+  border: 2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius: 0 !important;
+  background-color: var(--pixel-paper, #f7f5f2) !important;
+  background-image: none !important;
+  color: var(--pixel-ink, #2f2c33) !important;
+  box-shadow: 2px 2px 0 0 var(--pixel-shadow, rgba(47, 44, 51, .22)) !important;
+}
+
+
+/* ═══════════ 全域像素化：整个界面进入像素世界 ═══════════ */
+
+/* 像素世界没有圆角：所有圆角（含头像圆、药丸、进度条）一律直角 */
+.beautify-pixel *{border-radius:0 !important}
+
+/* 常见卡片/面板：墨线直角 + 硬投影 */
+.beautify-pixel .setting-card,
+.beautify-pixel .settings-module-card,
+.beautify-pixel .settings-inner-card,
+.beautify-pixel .tool-grid > button,
+.beautify-pixel .tool-panel,
+.beautify-pixel .chat-entry,
+.beautify-pixel .room-session-switch,
+.beautify-pixel .calendar-card,
+.beautify-pixel .theme-tile,
+.beautify-pixel .theme-tab-panel,
+.beautify-pixel .theme-setting-tabs,
+.beautify-pixel .beautify-row,
+.beautify-pixel .project-card,
+.beautify-pixel .login-card,
+.beautify-pixel .fun-module-card,
+.beautify-pixel .tool-dash-item,
+.beautify-pixel .tool-dash-chip,
+.beautify-pixel .mcp-connection-card,
+.beautify-pixel .skill-card,
+.beautify-pixel .world-entry,
+.beautify-pixel .usage-panel,
+.beautify-pixel .emoji-panel,
+.beautify-pixel .inbox-toast {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}
+
+/* 聊天气泡：方块 + 墨线 + 硬投影 */
+.beautify-pixel .bubble {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}
+
+/* 通用输入框 / 文本域：和选框同款皮肤 */
+.beautify-pixel input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not(.beautify-switch),
+.beautify-pixel textarea {
+  border:2px solid var(--pixel-ink, #2f2c33) !important;
+  border-radius:0 !important;
+  background-color:var(--pixel-paper, #f7f5f2) !important;
+  color:var(--pixel-ink, #2f2c33) !important;
+  box-shadow:2px 2px 0 0 var(--pixel-shadow, rgba(47,44,51,.22)) !important;
+}
+
+
+/* ── 像素风配色：整站黑白灰（不再跟随主题彩色） ── */
+.shell.beautify-pixel:not(.theme-night){
+  --page-bg:#f3f3f3 !important;
+  --surface:#ffffff !important;
+  --card:#ececec !important;
+  --field:#fafafa !important;
+  --line:#c9c9c9 !important;
+  --muted:#6e6e6e !important;
+  --ink:#2f2c33 !important;
+  --accent:#2f2c33 !important;
+  --accent-soft:#e6e5e3 !important;
+  --user-bubble:#e6e6e6 !important;
+  --assistant-bubble:#f1f1f1 !important;
+  --running:#5f5f66 !important; --running-soft:#e4e4e6 !important;
+  --ok:#4a4a4a !important; --ok-soft:#e2e2e2 !important;
+  --danger:#7a7a7a !important; --danger-soft:#eaeaea !important;
+}
+.shell.theme-night.beautify-pixel{
+  --page-bg:#161616 !important;
+  --surface:#202020 !important;
+  --card:#2a2a2a !important;
+  --field:#242424 !important;
+  --line:#4a4a4a !important;
+  --muted:#a6a6a6 !important;
+  --ink:#ededed !important;
+  --accent:#ededed !important;
+  --accent-soft:#333333 !important;
+  --user-bubble:#333333 !important;
+  --assistant-bubble:#292929 !important;
+  --running:#bdbdbd !important; --running-soft:#3a3a3a !important;
+  --ok:#cfcfcf !important; --ok-soft:#383838 !important;
+  --danger:#d6d6d6 !important; --danger-soft:#454545 !important;
+}
+/* 主题色板也转灰，所见即所得 */
+.beautify-pixel .theme-swatches{filter:grayscale(1)}
+
+/* ── 主页三入口：三列对齐 + 像素选择态 ── */
+.beautify-pixel .home-person.is-me .home-person-circle{transform:none}
+.beautify-pixel .home-person:hover{background:transparent}
+.beautify-pixel .home-person:hover .home-person-circle{background:var(--pixel-ink, #2f2c33);color:var(--pixel-paper, #f7f5f2)}
+.beautify-pixel .home-person:active{transform:none}
+.beautify-pixel .home-person:active .home-person-circle{transform:translate(2px,2px)}
+
+/* ── 模型名称自定义下拉：硬边框 + 无阴影 ── */
+.beautify-pixel .model-combo>input{border:2px solid var(--pixel-ink,#2f2c33);background:var(--pixel-paper,#f7f5f2);color:var(--pixel-ink,#2f2c33)}
+.beautify-pixel .model-combo-caret{color:var(--pixel-ink,#2f2c33)}
+.beautify-pixel .model-combo-list{border:2px solid var(--pixel-ink,#2f2c33);background:var(--pixel-paper,#f7f5f2);box-shadow:3px 3px 0 0 var(--pixel-shadow,rgba(47,44,51,.22))}
+.beautify-pixel .model-combo-list li>button:hover{background:var(--pixel-ink,#2f2c33);color:var(--pixel-paper,#f7f5f2)}
+.beautify-pixel .model-combo-list li>button.current{color:var(--pixel-ink,#2f2c33);text-decoration:underline}

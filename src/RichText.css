@@ -1,0 +1,58 @@
+/* 聊天富文本：只作用于气泡内部，不改气泡本身的排版变量。 */
+.bubble .rich-text{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+.rich-text > :first-child{margin-top:0}
+.rich-text > :last-child{margin-bottom:0}
+.rich-text p{margin:.45em 0;line-height:1.68}
+.rich-text h1,.rich-text h2,.rich-text h3,.rich-text h4{margin:.7em 0 .4em;line-height:1.35;font-weight:700}
+.rich-text h1{font-size:1.32em}
+.rich-text h2{font-size:1.2em}
+.rich-text h3{font-size:1.1em}
+.rich-text h4{font-size:1.02em}
+.rich-text strong{font-weight:700}
+.rich-text em{font-style:italic}
+.rich-text del{opacity:.65}
+.rich-text ul,.rich-text ol{margin:.45em 0;padding-left:1.35em}
+.rich-text li{margin:.18em 0;line-height:1.6}
+.rich-text li>p{margin:.15em 0}
+.rich-text code{
+  padding:1px 5px;border-radius:5px;
+  background:color-mix(in srgb,var(--ink,#403b35) 8%,transparent);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.9em;
+}
+.rich-text pre{
+  margin:.6em 0;padding:10px 12px;border-radius:10px;overflow-x:auto;
+  background:color-mix(in srgb,var(--ink,#403b35) 6%,transparent);
+  border:1px solid var(--line,#ddd5c7);
+}
+.rich-text pre code{padding:0;background:transparent;font-size:.88em;line-height:1.6}
+.rich-text blockquote{margin:.55em 0;padding:2px 0 2px 10px;border-left:3px solid var(--line,#ddd5c7);color:var(--muted,#81786d)}
+.rich-text hr{border:0;border-top:1px solid var(--line,#ddd5c7);margin:.8em 0}
+.rich-text table{
+  display:block;width:100%;max-width:100%;overflow-x:auto;
+  border-collapse:collapse;margin:.6em 0;font-size:.92em;
+}
+.rich-text th,.rich-text td{border:1px solid var(--line,#ddd5c7);padding:5px 8px;text-align:left;white-space:nowrap}
+.rich-text th{background:color-mix(in srgb,var(--ink,#403b35) 6%,transparent);font-weight:600}
+.rich-text a{color:var(--accent,#8871a5);text-decoration:underline;text-underline-offset:2px}
+.rich-text mark{background:color-mix(in srgb,#f2d06b 55%,transparent);color:inherit;padding:0 2px;border-radius:3px}
+.rich-text sup,.rich-text sub{font-size:.75em;line-height:0}
+.rich-text kbd{
+  padding:1px 5px;border:1px solid var(--line,#ddd5c7);border-bottom-width:2px;border-radius:5px;
+  background:var(--card,#fffdf9);font-family:ui-monospace,monospace;font-size:.85em;
+}
+/* 折叠块 */
+.rich-text details{
+  margin:.55em 0;padding:2px 10px;
+  border:1px solid var(--line,#ddd5c7);border-radius:10px;
+  background:color-mix(in srgb,var(--card,#fffdf9) 70%,transparent);
+}
+.rich-text summary{cursor:pointer;padding:8px 0;font-weight:600;list-style:none;user-select:none}
+.rich-text summary::-webkit-details-marker{display:none}
+.rich-text summary::before{content:'▸';display:inline-block;margin-right:6px;transition:transform .15s ease;color:var(--muted,#81786d)}
+.rich-text details[open]>summary::before{content:'▾'}
+.rich-text details>summary+*{margin-top:0}
+.rich-text details>*:not(summary):last-child{margin-bottom:8px}
+
+/* 富文本里的图床图片（AI 也可以用 ![](url) 发表情包） */
+.rich-text img{max-width:100%;height:auto;border-radius:12px;display:block;margin:6px 0}

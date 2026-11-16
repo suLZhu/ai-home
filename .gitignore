@@ -25,6 +25,17 @@ dist-ssr
 
 .ai-home.env
 data/
+.tmp-agenttest/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+# Capacitor Android build artifacts (regenerate with `npm run android:apk`)
+android/app/build
+android/build
+android/.gradle
+android/capacitor-cordova-android-plugins/build
+android/app/src/main/assets/public
+android/app/src/main/assets/capacitor.config.json
+local.properties
+# 会话工作区（参考材料 + CDP 探针脚本，不入库）
+scratch-lutopia/

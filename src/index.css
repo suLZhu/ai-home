@@ -1,1 +1,28 @@
-html { -webkit-text-size-adjust:100%; }
+/* 系统「字体大小 / 显示大小」由原生层 WebView.setTextZoom 承载，
+   这里不再用 -webkit-text-size-adjust:100% 全局禁用用户字体缩放。 */
+:root {
+  /* Mist 兜底：正式值由 theme.ts 注入到 .shell，此处保证 .shell 外也能解析变量。 */
+  --font-scale:1;
+  --page-bg:#f3f0f4; --surface:#ffffff; --surface-elevated:#ffffff;
+  --card:#faf8fc; --field:#f7f4fa;
+  --ink:#302c37; --muted:#8b8494;
+  --text-primary:#302c37; --text-secondary:#8b8494;
+  --line:#e8e2ee; --divider:#eee9f1; --border-subtle:#eee9f1;
+  --accent:#8a79aa; --accent-soft:#ede7f4;
+  --primary:#8a79aa; --primary-soft:#ede7f4;
+  --danger:#ac5f68; --danger-soft:#f4dee1;
+  --bubble-assistant:#f8f6fa; --bubble-user:#e9e1f3;
+  --assistant-bubble:#f8f6fa; --user-bubble:#e9e1f3;
+  --radius-sm:10px; --radius-md:14px; --radius-lg:20px; --radius-sheet:24px; --radius-pill:999px;
+  --shadow-sm:0 2px 8px rgba(48,42,58,.06); --shadow-md:0 10px 28px rgba(48,42,58,.10);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
+  --type-display:calc(21px * var(--font-scale,1));
+  --type-title:calc(16px * var(--font-scale,1));
+  --type-body:calc(16px * var(--font-scale,1));
+  --type-body-line:calc(24px * var(--font-scale,1));
+  --type-item:calc(14.5px * var(--font-scale,1));
+  --type-button:calc(14px * var(--font-scale,1));
+  --type-caption:calc(12.5px * var(--font-scale,1));
+  --type-meta:calc(11px * var(--font-scale,1));
+}
+html { -webkit-text-size-adjust:auto; text-size-adjust:auto; }
