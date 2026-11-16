@@ -291,6 +291,44 @@ final class SystemBridge {
         } catch (Exception e) { return false; }
     }
 
+    // ── 应用锁：只暴露名单 / PIN / 无障碍状态，不做点击自动化 ──────────────
+    @JavascriptInterface
+    public String appLockStatus() {
+        try {
+            return new JSONObject()
+                .put("accessibility", AppLockStore.accessibilityEnabled(ctx()))
+                .put("hasPin", AppLockStore.hasPin(ctx()))
+                .put("locked", AppLockStore.locked(ctx()).size())
+                .toString();
+        } catch (Exception e) { return "{}"; }
+    }
+
+    @JavascriptInterface
+    public String appLockApps() {
+        return AppLockStore.apps(ctx()).toString();
+    }
+
+    @JavascriptInterface
+    public String appLockSetLocked(String pkg, boolean locked) {
+        try {
+            AppLockStore.setLocked(ctx(), pkg, locked);
+            return new JSONObject().put("ok", true).toString();
+        } catch (Exception e) { return "{\"ok\":false}"; }
+    }
+
+    @JavascriptInterface
+    public String appLockSetPin(String pin) {
+        try {
+            boolean ok = AppLockStore.setPin(ctx(), pin);
+            return new JSONObject().put("ok", ok).put("error", ok ? "" : "PIN 需要 4–32 位").toString();
+        } catch (Exception e) { return "{\"ok\":false,\"error\":\"保存失败\"}"; }
+    }
+
+    @JavascriptInterface
+    public void appLockOpenSettings() {
+        AppLockStore.openAccessibilitySettings(ctx());
+    }
+
     private boolean backgroundRestricted(Context c) {
         if (Build.VERSION.SDK_INT < 28) return false; // 老系统没有这个 API，不伪造「正常」以外的数据
         try {

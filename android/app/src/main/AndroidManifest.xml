@@ -26,6 +26,27 @@
 
         </activity>
 
+        <!-- 应用锁：只监听前台应用切换，命中锁定名单时拉起解锁页。 -->
+        <service
+            android:name=".AppLockService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/app_lock_service" />
+        </service>
+
+        <activity
+            android:name=".AppLockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <service
             android:name=".GenerationService"
             android:exported="false"

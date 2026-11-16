@@ -2462,3 +2462,20 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .skill-import button{height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--line,#e2d9cc);background:var(--card,#fffdf9);font-size:11.5px}
 .skill-import input{display:none}
 .skill-import small{font-size:10.5px;color:var(--muted,#8a7d6d)}
+
+/* 应用锁设置 */
+.app-lock-state{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:9px;margin:6px 0 10px;font-size:11.5px}
+.app-lock-state.ok{background:#eef5ee;color:#3f6b46}
+.app-lock-state.bad{background:#f8ece9;color:#9c4f45}
+.app-lock-state button{height:28px;padding:0 10px;border-radius:7px;border:1px solid currentColor;background:transparent;color:inherit;font-size:11px}
+.app-lock-pin{display:flex;align-items:flex-end;gap:8px;margin-bottom:8px}
+.app-lock-pin label{flex:1;display:flex;flex-direction:column;gap:4px;font-size:10.5px;color:var(--muted,#8a7d6d)}
+.app-lock-pin input{height:32px;padding:0 9px;border:1px solid var(--line,#e2d9cc);border-radius:8px;background:var(--card,#fffdf9);font-size:12px}
+.app-lock-pin button{height:32px;padding:0 12px;border-radius:8px;border:0;background:var(--accent,#8a79aa);color:#fff;font-size:11.5px}
+.app-lock-pin button:disabled{opacity:.5}
+.app-lock-list{display:flex;flex-direction:column;gap:2px;max-height:52vh;overflow:auto;margin-top:6px}
+.app-lock-row{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;border:1px solid var(--line,#eee7db)}
+.app-lock-row input{width:18px;height:18px;accent-color:var(--accent,#8a79aa)}
+.app-lock-name{display:flex;flex-direction:column;min-width:0}
+.app-lock-name b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-lock-name small{font-size:9.5px;color:var(--muted,#8a7d6d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

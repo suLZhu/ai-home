@@ -4,4 +4,5 @@
     <string name="title_activity_main">栖间</string>
     <string name="package_name">com.sulzhu.aihome</string>
     <string name="custom_url_scheme">com.sulzhu.aihome</string>
+    <string name="app_lock_service_desc">应用锁需要监听当前打开的应用，命中锁定名单时显示解锁页；不会读取屏幕内容，也不会模拟点击。</string>
 </resources>
