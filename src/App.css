@@ -1,4 +1,4 @@
-:root{--app-safe-top:max(env(safe-area-inset-top,0px),var(--native-safe-top,0px));--app-safe-bottom:max(env(safe-area-inset-bottom,0px),var(--native-safe-bottom,0px))}
+﻿:root{--app-safe-top:max(env(safe-area-inset-top,0px),var(--native-safe-top,0px));--app-safe-bottom:max(env(safe-area-inset-bottom,0px),var(--native-safe-bottom,0px))}
 /* 禁用 Android WebView/Chrome 的文本自动放大（text autosizing）：
    它会把 14px 正文悄悄放大到 18px+，是「整体太大像老人机」的主因。 */
 /* 禁止 WebView 的「字体自动放大」(font boosting)：安卓系统字体一调大，
@@ -2757,10 +2757,26 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .theme-pack-error{font-size:10.5px;color:var(--danger,#ac5f68);margin:4px 0 0}
 .theme-pack-notice{font-size:10.5px;color:var(--ok,#4f7d62);margin:4px 0 0}
 .theme-pack-hint{margin-top:6px!important;font-size:9.5px!important}
-.shell.has-pack .chat-body{background-image:var(--pack-chat-bg,none);background-size:cover;background-position:center;background-repeat:no-repeat}
-.shell.has-pack .message-row.assistant .bubble{background:var(--bubble-ai-bg,var(--surface))}
-.shell.has-pack .message-row.user .bubble{background:var(--bubble-me-bg,var(--accent-soft))}
+body.has-pack .chat-body{background-image:var(--pack-chat-bg,none);background-size:cover;background-position:center;background-repeat:no-repeat}
+body.has-pack .message-row.assistant .bubble{background:var(--bubble-ai-bg,var(--surface))}
+body.has-pack .message-row.user .bubble{background:var(--bubble-me-bg,var(--accent-soft))}
 body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",serif)}
 
 .pack-icon{width:16px;height:16px;object-fit:contain;vertical-align:-3px;image-rendering:pixelated;margin-right:2px}
 .settings-row-icon .pack-icon{width:18px;height:18px;vertical-align:middle}
+
+/* 新气泡：quill（手绘抖线感）与 pixel（像素缺口框） */
+.shell.bubble-quill .bubble{background:transparent!important;border:2px solid var(--ink,#3a2f24)!important;border-radius:20px 26px 18px 24px!important;transform:rotate(-.25deg);box-shadow:2px 3px 0 rgba(60,45,30,.08)!important}
+.shell.bubble-quill .message-row.user .bubble{border-radius:24px 18px 26px 20px!important;transform:rotate(.2deg)}
+.shell.bubble-pixel .bubble{border-radius:0!important;border:3px solid var(--accent,#ffb000)!important;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);box-shadow:none!important;background:var(--bubble-ai-bg,#0c1c2e)!important}
+.shell.bubble-pixel .message-row.user .bubble{background:var(--bubble-me-bg,#2a1c08)!important;border-color:var(--accent,#ffb000)!important}
+.shell.bubble-pixel .message-row.assistant .bubble{border-color:#4de1ff!important}
+
+/* 覆盖 mist.css 里的气泡预览样式（同名 bubble-pixel） */
+.shell.bubble-pixel .bubble{color:var(--ink,#eaf6ff)}
+.shell.bubble-pixel .message-row.assistant .bubble{background:var(--bubble-ai-bg,#0c1c2e)!important;border-color:#4de1ff!important}
+.shell.bubble-pixel .message-row.user .bubble{background:var(--bubble-me-bg,#2a1c08)!important;border-color:#ffb000!important}
+
+.shell.bubble-pixel .message-row .bubble,.shell.bubble-pixel .message-row .bubble .md{color:#eaf6ff!important}
+.shell.bubble-pixel .message-row .bubble a{color:#7dff8a!important}
+.shell.bubble-pixel .message-row .bubble .tool-call-row,.shell.bubble-pixel .message-row .bubble code{color:#cfe9ff!important}

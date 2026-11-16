@@ -44,7 +44,7 @@ export async function readZip(input) {
     if (method === 0) data = raw.slice()
     else if (method === 8) data = await inflateRaw(raw)
     else throw new Error(`不支持 ZIP 压缩方式 ${method}（只支持 store/deflate）。`)
-    files.set(name.replace(/^\.\//, ''), data)
+    files.set(name.replace(/\\/g, '/').replace(/^\.\//, ''), data)
   }
   if (!files.size) throw new Error('ZIP 里没有文件。')
   return files

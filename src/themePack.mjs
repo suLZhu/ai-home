@@ -23,7 +23,7 @@ export const ACTIVE_PACK_KEY = 'ai-home.themePackActive'
 
 export const PACK_TOKEN_KEYS = ['accent', 'accentSoft', 'surface', 'field', 'ink', 'muted', 'line', 'danger', 'ok']
 export const PACK_ICON_KEYS = ['world', 'chat', 'mcp', 'skill', 'memory', 'settings', 'assistant', 'models', 'appearance', 'workspace', 'system']
-export const PACK_BUBBLE_STYLES = ['soft', 'outlined', 'bare', 'letter', 'frame', 'glass', 'comic', 'note']
+export const PACK_BUBBLE_STYLES = ['soft', 'outlined', 'bare', 'letter', 'frame', 'glass', 'comic', 'note', 'quill', 'pixel']
 
 const isColor = (v) => typeof v === 'string' && /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|var\()/i.test(v.trim())
 

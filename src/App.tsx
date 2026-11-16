@@ -2268,6 +2268,19 @@ function Room(props: {
     if (historyRef.current) historyRef.current.open = localStorage.getItem('ai-home.roomHistoryExpanded') !== '0'
     if (toolsRef.current) toolsRef.current.open = localStorage.getItem('ai-home.roomToolsExpanded') !== '0'
   }, [])
+  const [roomLayout,setRoomLayout]=useState<RoomLayout>(()=>loadRoomLayout(props.person))
+  useEffect(()=>{ setRoomLayout(loadRoomLayout(props.person)) },[props.person])
+  useEffect(()=>{ const onLayout=()=>setRoomLayout(loadRoomLayout(props.person)); window.addEventListener('aihome:room-layout',onLayout); return ()=>window.removeEventListener('aihome:room-layout',onLayout) },[props.person])
+  useEffect(()=>{
+    (window as any).AiHomeRoom={
+      get:()=>loadRoomLayout(props.person),
+      set:(layout:RoomLayout)=>{saveRoomLayout(props.person,layout);window.dispatchEvent(new Event('aihome:room-layout'))},
+      reset:()=>{resetRoomLayout(props.person);window.dispatchEvent(new Event('aihome:room-layout'))},
+      template:DEFAULT_ROOM_LAYOUT,
+      buildItem:(input:any)=>({id:`item-${Date.now()}`,kind:'hotspot',label:'新入口',action:'chat',...input}),
+    }
+    return ()=>{ delete (window as any).AiHomeRoom }
+  },[props.person])
   if (props.chatOpen) return <Chat {...props} />
   // 头部右侧是助手切换器：两个以内只放一个「切换」按钮（不铺开默认名
   // assistant-001/002 这类编号），超过两个才用下拉选框选择当前房间。
@@ -2297,19 +2310,6 @@ function Room(props: {
   const mcpCount=Object.values(props.mcpConnections||{}).reduce((n,list)=>n+(list||[]).length,0)
   const skillCount=loadSkills(person).length
   const memoryCount=(props.memoryEntries?.[person]||[]).length
-  const [roomLayout,setRoomLayout]=useState<RoomLayout>(()=>loadRoomLayout(person))
-  useEffect(()=>{ setRoomLayout(loadRoomLayout(person)) },[person])
-  useEffect(()=>{ const onLayout=()=>setRoomLayout(loadRoomLayout(person)); window.addEventListener('aihome:room-layout',onLayout); return ()=>window.removeEventListener('aihome:room-layout',onLayout) },[person])
-  useEffect(()=>{
-    (window as any).AiHomeRoom={
-      get:()=>loadRoomLayout(person),
-      set:(layout:RoomLayout)=>{saveRoomLayout(person,layout);window.dispatchEvent(new Event('aihome:room-layout'))},
-      reset:()=>{resetRoomLayout(person);window.dispatchEvent(new Event('aihome:room-layout'))},
-      template:DEFAULT_ROOM_LAYOUT,
-      buildItem:(input:any)=>({id:`item-${Date.now()}`,kind:'hotspot',label:'新入口',action:'chat',...input}),
-    }
-    return ()=>{ delete (window as any).AiHomeRoom }
-  },[person])
   function saveActiveMessages(){props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c)}))}
   function openConversation(id:string){if(id!==activeId){saveActiveMessages();const target=convs.find(c=>c.id===id);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}));props.setChatError('')}props.setChatOpen(true)}
   return <div className="room-screen">

@@ -21,8 +21,8 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
 
   const applyPack = (pack: ThemePack | null) => {
     applyPackVars(pack)
-    window.dispatchEvent(new Event('aihome:theme-pack'))
     setActivePack(pack ? pack.id : '')
+    window.dispatchEvent(new Event('aihome:theme-pack'))
     setActiveId(pack ? pack.id : '')
     if (pack?.bubble?.style) update({ bubble: pack.bubble.style as ThemePrefs['bubble'] })
     setNotice(pack ? `已应用「${pack.name}」` : '已恢复默认外观')
