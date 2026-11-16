@@ -2761,3 +2761,6 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell.has-pack .message-row.assistant .bubble{background:var(--bubble-ai-bg,var(--surface))}
 .shell.has-pack .message-row.user .bubble{background:var(--bubble-me-bg,var(--accent-soft))}
 body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",serif)}
+
+.pack-icon{width:16px;height:16px;object-fit:contain;vertical-align:-3px;image-rendering:pixelated;margin-right:2px}
+.settings-row-icon .pack-icon{width:18px;height:18px;vertical-align:middle}

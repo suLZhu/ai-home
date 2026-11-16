@@ -77,3 +77,12 @@ test('ZIP 没有 pack.json 会报错', async () => {
   const zip = makeStoredZip([{ name: 'readme.txt', data: enc.encode('hi') }])
   await assert.rejects(() => packFromZip(zip), /pack\.json/)
 })
+
+test('ZIP 包内 icons 相对路径会转成 data URL', async () => {
+  const zip = makeStoredZip([
+    { name: 'pack.json', data: enc.encode(JSON.stringify({ format: 'qijian-theme-pack', name: '图标包', tokens: { accent: '#333' }, icons: { chat: 'icons/chat.png' } })) },
+    { name: 'icons/chat.png', data: new Uint8Array([1, 2, 3]) },
+  ])
+  const pack = await packFromZip(zip)
+  assert.match(pack.icons.chat, /^data:image\/png;base64,/)
+})

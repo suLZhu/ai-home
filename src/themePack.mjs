@@ -58,7 +58,10 @@ export function normalizeThemePack(input) {
   const icons = {}
   if (input.icons && typeof input.icons === 'object') {
     for (const [key, value] of Object.entries(input.icons)) {
-      if (typeof value === 'string' && value.trim() && PACK_ICON_KEYS.includes(String(key))) icons[String(key)] = value.trim().slice(0, 4)
+      if (typeof value !== 'string' || !value.trim() || !PACK_ICON_KEYS.includes(String(key))) continue
+      const icon = value.trim()
+      if (/^data:image\//.test(icon)) { if (icon.length < 400000) icons[String(key)] = icon }
+      else icons[String(key)] = icon.slice(0, 4)
     }
   }
   return {
@@ -175,6 +178,7 @@ export async function packFromZip(buffer) {
     return bytes ? bytesToDataUrl(bytes, mimeOf(ref)) : ref
   }
   if (raw.background && typeof raw.background === 'object') raw.background.image = resolve(raw.background.image)
+  if (raw.icons && typeof raw.icons === 'object') for (const key of Object.keys(raw.icons)) raw.icons[key] = resolve(raw.icons[key])
   if (raw.font && typeof raw.font === 'object') raw.font.src = resolve(raw.font.src)
   return normalizeThemePack(raw)
 }

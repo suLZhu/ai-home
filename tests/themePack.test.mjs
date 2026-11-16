@@ -69,3 +69,11 @@ test('CSS 变量包含字体族', () => {
   const pack = normalizeThemePack({ ...valid, font: { family: 'Georgia' } })
   assert.equal(packCssVars(pack)['--pack-font-family'], 'Georgia')
 })
+
+test('图标支持 data:image，并限制在 400KB 内', () => {
+  const png = 'data:image/png;base64,' + 'A'.repeat(40)
+  const pack = normalizeThemePack({ ...valid, icons: { chat: png } })
+  assert.equal(pack.icons.chat, png)
+  const huge = 'data:image/png;base64,' + 'A'.repeat(400001)
+  assert.equal(normalizeThemePack({ ...valid, icons: { chat: huge } }).icons, undefined)
+})
