@@ -3805,7 +3805,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
-  const openVendorPage=(id:string)=>{setTab('config');resetEditUI();onSection('vendor:'+id)}
+  const openVendorPage=(id:string)=>{setTab('model');resetEditUI();onSection('vendor:'+id)}
   const addVendor=(e:FormEvent)=>{
     e.preventDefault()
     const name=newName.trim(),endpoint=newEndpoint.trim()
@@ -3897,30 +3897,39 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         {!active.builtin&&<button type="button" className="vendor-remove" onClick={()=>{void confirmDialog({ title:'删除供应商', message:'删除「'+active.name+'」及其 '+active.keys.length+' 把 Key？', confirmLabel:'删除', danger:true }).then(ok=>{if(!ok)return;commit(vendors.filter(x=>x.id!==active.id));backToList()})}}>删除这家供应商</button>}
       </div>}
 
-      {tab==='model'&&<div className="vendor-card-body">
-        <div className="vendor-section"><b>已选模型 <small>取消后从聊天可选里移除</small></b>
-          {pickedModels.length===0&&<p className="muted">还没有选模型，从下面的网址里点选。</p>}
-          {pickedModels.map(m=><div className="vendor-model-row selected" key={m.id}><i className="vendor-model-check" aria-hidden="true">✓</i><span>{m.name}</span><button type="button" className="vendor-model-remove" aria-label={'取消选择 '+m.name} onClick={()=>unpickModel(active.id,m.id)}>取消 ×</button></div>)}
+      {tab==='model'&&<div className="vendor-card-body vendor-models-kelivo">
+        <div className="vendor-models-heading">
+          <div><b>模型管理</b><small>{active.name} · 已启用 {pickedModels.length} 个模型</small></div>
+          <button type="button" className="vendor-refresh" disabled={listState.loading} onClick={()=>void fetchRemote(active)} aria-label="从当前供应商拉取模型">{listState.loading?'获取中…':'⟳ 获取模型'}</button>
         </div>
-        <button type="button" className={'vendor-model-toggle'+(pickerOpen?' open':'')} aria-label="从这个网址选择模型" aria-expanded={pickerOpen} onClick={()=>{const next=!pickerOpen;setPickerOpen(next);if(next&&!remoteModels[active.id]?.length)void fetchRemote(active)}}>＋ 从这个网址选择模型 <span aria-hidden="true">▾</span></button>
-        {pickerOpen&&<div className="vendor-model-picker">
-          <div className="vendor-model-tools">
-            <input aria-label="筛选模型名称" value={modelQuery} onChange={e=>setModelQuery(e.target.value)} placeholder="输入模型名称筛选"/>
-            <button type="button" aria-label="添加筛选出的全部模型" title="添加筛选出的全部模型" onClick={()=>pickModels(active.id,visibleGroups.flatMap(g=>g.models))}>☑</button>
-            <button type="button" aria-label="刷新模型列表" title="从该网址重新拉取模型" onClick={()=>void fetchRemote(active)}>⟳</button>
-          </div>
-          {listState.loading&&<p className="muted">正在从这个网址获取模型…</p>}
-          {listState.error&&<p className="mcp-error">{listState.error}</p>}
-          {!listState.loading&&visibleGroups.length===0&&<p className="muted">{remoteIds.length?'没有匹配的模型，换个关键词试试。':'点右上角 ⟳ 从这个网址拉取它自己的模型；拉取失败也可以手动输入模型名。'}</p>}
+        <div className="vendor-model-tools vendor-model-tools-visible">
+          <input aria-label="搜索当前供应商模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)} placeholder="搜索模型名称…"/>
+          <button type="button" title="选中当前搜索结果" aria-label="选中搜索结果" disabled={!visibleGroups.length} onClick={()=>pickModels(active.id,visibleGroups.flatMap(g=>g.models))}>全选</button>
+        </div>
+        {listState.error&&<p className="mcp-error">{listState.error} <button type="button" onClick={()=>setTab('config')}>检查配置</button></p>}
+        <section className="vendor-selected-models" aria-label="已添加到聊天选择器的模型">
+          <div className="vendor-model-list-head"><b>已启用</b><small>{pickedModels.length} 个 · 点击取消可移除</small></div>
+          {pickedModels.length===0?<p className="muted">尚未启用模型。点击「获取模型」，然后在列表中勾选。</p>:<div className="vendor-selected-chips">{pickedModels.filter(m=>!query||m.name.toLowerCase().includes(query)).map(m=><button type="button" key={m.id} className="vendor-selected-chip" title={'取消启用 '+m.name} onClick={()=>unpickModel(active.id,m.id)}><span>{m.name}</span><span aria-hidden="true">×</span></button>)}</div>}
+        </section>
+        <section className="vendor-available-models" aria-label="当前供应商提供的模型">
+          <div className="vendor-model-list-head"><b>可用模型</b><small>{remoteIds.length?remoteIds.length+' 个已获取':'尚未获取列表'}</small></div>
+          {!listState.loading&&remoteIds.length===0&&<p className="muted">点击右上角「获取模型」，只读取「{active.name}」这家中转站的模型。也支持手动添加。</p>}
+          {listState.loading&&<p className="muted">正在读取当前供应商的模型列表…</p>}
           {visibleGroups.map(g=><div className="vendor-model-group" key={g.id}>
-            <button type="button" className="vendor-model-group-head" aria-expanded={!collapsed[g.id]} onClick={()=>setCollapsed(c=>({...c,[g.id]:!c[g.id]}))}><span aria-hidden="true">{collapsed[g.id]?'▸':'▾'}</span> {g.label}</button>
+            <button type="button" className="vendor-model-group-head" aria-expanded={!collapsed[g.id]} onClick={()=>setCollapsed(prev=>({...prev,[g.id]:!prev[g.id]}))}><span aria-hidden="true">{collapsed[g.id]?'▸':'▾'}</span> {g.label} <small>{g.models.length}</small></button>
             {!collapsed[g.id]&&g.models.map(id=>{
               const picked=!!active.models.find(m=>m.id===id)?.selected
-              return <div className={'vendor-model-item'+(picked?' picked':'')} key={id}><span>{id}</span><button type="button" aria-label={(picked?'取消选择模型 ':'添加模型 ')+id} onClick={()=>toggleModel(active.id,id,picked)}>{picked?'✓':'＋'}</button></div>
+              return <label className={'vendor-model-item vendor-model-choice'+(picked?' picked':'')} key={id}>
+                <input type="checkbox" checked={picked} aria-label={'启用模型 '+id} onChange={()=>toggleModel(active.id,id,picked)}/>
+                <span>{id}</span><small>{picked?'已启用':'点击启用'}</small>
+              </label>
             })}
           </div>)}
-          {!customModelOpen?<button type="button" className="vendor-model-manual" onClick={()=>setCustomModelOpen(true)}>✎ 手动输入模型名</button>:<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDraft} onChange={e=>setModelDraft(e.target.value)} placeholder="模型名，如 my-model" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
-        </div>}
+          {query&&remoteIds.length>0&&!visibleGroups.length&&<p className="muted">没有找到匹配的模型。</p>}
+        </section>
+        <div className="vendor-model-manual-area">
+          {!customModelOpen?<button type="button" className="vendor-model-manual" onClick={()=>setCustomModelOpen(true)}>＋ 手动添加模型</button>:<div className="vendor-add-row"><input aria-label="自定义模型名" value={modelDraft} onChange={e=>setModelDraft(e.target.value)} placeholder="输入完整模型 ID" onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();if(modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
+        </div>
       </div>}
       </div>
     </section>}
