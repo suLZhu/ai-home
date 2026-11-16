@@ -224,3 +224,14 @@ test('app_state 时区非法时 Runner 回退默认时区', async () => {
   const timeMsg = requests[0].messages.find(m => m.role === 'system' && String(m.content).includes('【当前时间上下文】'))
   assert.match(timeMsg.content, /Asia\/Shanghai/)
 })
+
+test('相邻两轮请求刷新分钟时间，不把旧时间永久写入会话', () => {
+  const messages = [{ role: 'user', content: '现在几点？' }]
+  const first = injectTimeContext(messages, new Date('2026-11-16T12:59:00Z'), 'Asia/Shanghai')
+  const second = injectTimeContext(messages, new Date('2026-11-16T13:01:00Z'), 'Asia/Shanghai')
+  assert.match(first[0].content, /本地时间：20:59/)
+  assert.match(second[0].content, /本地时间：21:01/)
+  assert.match(second[0].content, /本轮请求时实时生成/)
+  assert.equal(messages.length, 1)
+  assert.doesNotMatch(second[0].content, /天气预报|用户位置|GPS/)
+})
