@@ -97,7 +97,7 @@ AiHomeRoom.template   // 只读模板
 ## 十、美化包（Theme Pack）
 
 - 位置：设置 → 外观与聊天 → 主题 → 美化包；
-- 一个包是一份 .json，导入后会出现在列表里，点一下应用、点 × 删除；
+- 一个包可以是单个 .json，也可以是 .zip（根目录 pack.json + bg.png / font.ttf 等资源，自动转 data URL）；导入后出现在列表里，点一下应用、点 × 删除；
 - 包里可以一次换掉：色调 tokens、聊天背景、气泡颜色、可选图标。
 
 \`\`\`json

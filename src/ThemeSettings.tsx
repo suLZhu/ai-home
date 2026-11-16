@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_THEME, type ThemePrefs } from './theme'
-import { getActivePackId, loadThemePacks, parseThemePack, removeThemePack, setActivePack, upsertThemePack, applyPackVars, type ThemePack } from './themePack.mjs'
+import { getActivePackId, loadThemePacks, packFromZip, parseThemePack, removeThemePack, setActivePack, upsertThemePack, applyPackVars, type ThemePack } from './themePack.mjs'
 import './ThemeSettings.css'
 
 // 主题系统：一套默认外观 + 字体/圆角/字号 + 可导入的「美化包」。
@@ -33,8 +33,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
     if (!file) return
     setError('')
     try {
-      const text = await file.text()
-      const pack = parseThemePack(text)
+      const pack = /\.zip$/i.test(file.name) ? await packFromZip(await file.arrayBuffer()) : parseThemePack(await file.text())
       const next = upsertThemePack(pack)
       setPacks(next)
       applyPack(pack)
@@ -81,9 +80,9 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
         </div>)}
       </div>}
       <div className="theme-pack-actions">
-        <button type="button" className="theme-pack-import" onClick={() => fileRef.current?.click()}>导入 .json 美化包</button>
+        <button type="button" className="theme-pack-import" onClick={() => fileRef.current?.click()}>导入 .json / .zip 美化包</button>
         {activeId && <button type="button" className="theme-pack-reset" onClick={() => applyPack(null)}>取消美化包</button>}
-        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={e => void importPack(e.target.files?.[0])}/>
+        <input ref={fileRef} type="file" accept=".json,.zip,application/json,application/zip" hidden onChange={e => void importPack(e.target.files?.[0])}/>
       </div>
       {error && <p className="theme-pack-error">{error}</p>}
       {notice && <p className="theme-pack-notice">{notice}</p>}

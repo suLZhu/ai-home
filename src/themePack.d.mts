@@ -28,3 +28,4 @@ export function getActivePackId(storage?: Storage): string
 export function setActivePack(id: string, storage?: Storage): void
 export function packCssVars(pack: ThemePack | null): Record<string, string>
 export function applyPackVars(pack: ThemePack | null): void
+export function packFromZip(buffer: ArrayBuffer | Uint8Array): Promise<ThemePack>

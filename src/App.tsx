@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -1950,7 +1950,7 @@ export default function App() {
   const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(nativeTextZoomAvailable()?{'--font-scale':'1'}:{}),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
     {/* 全面屏：百宝箱与历史聊天都收进左侧抽屉，默认只露一条贴边细把手，点一下才滑出。 */}
-    <button type="button" className="mobile-menu-toggle" aria-label={sidebarOpen?'收起菜单':'打开菜单'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">☰</span><b>菜单</b></button>
+    {page!=='settings'&&<button type="button" className="mobile-menu-toggle" aria-label={sidebarOpen?'收起菜单':'打开菜单'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">☰</span><b>菜单</b></button>}
     {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
       <div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}>×</button></div>

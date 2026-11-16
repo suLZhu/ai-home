@@ -1,3 +1,4 @@
+import { readZip, bytesToDataUrl } from './zip.mjs'
 // 美化包（Theme Pack）格式 v1。
 // 一个包就是一份 JSON：名字、色调 tokens、聊天气泡、背景、可选图标。
 // 用户在 设置 → 外观与聊天 → 主题 → 美化包 里导入 .json 即可切换。
@@ -154,4 +155,26 @@ function applyPackFont(pack){
     if(!el){el=doc.createElement('style');el.id=FONT_STYLE_ID;doc.head.appendChild(el)}
     el.textContent='@font-face{font-family:pack-'+pack.id+';src:url('+pack.font.src+');font-display:swap}'
   }else if(el){el.remove()}
+}
+
+// ── ZIP 美化包：pack.json + 同目录资源（图片 / 字体）──
+const MIME_BY_EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf' }
+function mimeOf(name) { const ext = String(name).split('.').pop()?.toLowerCase() || ''; return MIME_BY_EXT[ext] || 'application/octet-stream' }
+
+export async function packFromZip(buffer) {
+  const files = await readZip(buffer)
+  const names = [...files.keys()]
+  const jsonName = names.find((n) => /(^|\/)pack\.json$/i.test(n)) || names.find((n) => /\.json$/i.test(n))
+  if (!jsonName) throw new Error('ZIP 里缺少 pack.json。')
+  const base = jsonName.includes('/') ? jsonName.slice(0, jsonName.lastIndexOf('/') + 1) : ''
+  let raw
+  try { raw = JSON.parse(new TextDecoder().decode(files.get(jsonName))) } catch { throw new Error('pack.json 不是合法 JSON。') }
+  const resolve = (ref) => {
+    if (typeof ref !== 'string' || !ref || /^(data:|https?:)/i.test(ref)) return ref
+    const bytes = files.get(base + ref) || files.get(ref)
+    return bytes ? bytesToDataUrl(bytes, mimeOf(ref)) : ref
+  }
+  if (raw.background && typeof raw.background === 'object') raw.background.image = resolve(raw.background.image)
+  if (raw.font && typeof raw.font === 'object') raw.font.src = resolve(raw.font.src)
+  return normalizeThemePack(raw)
 }
