@@ -370,8 +370,17 @@ export default function App() {
   // Read receipts dismiss only the visible conversation's message notifications.
   // This does not stop or dismiss the foreground generation service.
   useEffect(() => {
-    if (page !== 'room' || !chatOpen || document.hidden || !readNotificationPrefs().autoClear) return
-    clearConversationNotifications(person, activeConversationIds[person] || '')
+    const clearViewed = () => {
+      if (page !== 'room' || !chatOpen || document.hidden || !readNotificationPrefs().autoClear) return
+      clearConversationNotifications(person, activeConversationIds[person] || '')
+    }
+    clearViewed()
+    document.addEventListener('visibilitychange', clearViewed)
+    window.addEventListener('focus', clearViewed)
+    return () => {
+      document.removeEventListener('visibilitychange', clearViewed)
+      window.removeEventListener('focus', clearViewed)
+    }
   }, [page, chatOpen, person, activeConversationIds])
 
   // 「成功写入聊天」是唯一允许发通知的入口；重复调用也不会发第二条。
