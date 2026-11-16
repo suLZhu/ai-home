@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   android-debug:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,11 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"; fi
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
       - name: Install JavaScript dependencies
         run: npm ci
       - name: Type-check and build web assets
