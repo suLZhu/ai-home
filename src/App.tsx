@@ -17,7 +17,7 @@ import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
 import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
-import { applyWebUpdate, currentBundle, liveUpdateSupported, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
+import { applyWebUpdate, compareVersions, currentBundle, liveUpdateSupported, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
 import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
@@ -559,7 +559,7 @@ export default function App() {
         const bundleUrl=String(data.webUrl||'')
         if(!version||!bundleUrl)return
         const cur=await currentBundle()
-        if(cur?.bundle?.version===version)return
+        if(cur?.bundle?.version&&compareVersions(version,cur.bundle.version)<=0)return
         await applyWebUpdate(bundleUrl,version,String(data.webChecksum||'')||undefined)
       }catch{ /* 自动检查失败不打扰用户 */ }
     })() },5000)
@@ -3524,6 +3524,8 @@ function AppUpdateCard() {
       const version = String(data.webVersion || '')
       const bundleUrl = String(data.webUrl || '')
       if (!version || !bundleUrl) { setMsg('清单缺少 webVersion / webUrl'); return }
+      const cur = await currentBundle()
+      if (cur?.bundle?.version && compareVersions(version, cur.bundle.version) <= 0) { setMsg('界面已是最新：' + cur.bundle.version); return }
       if (!window.confirm('发现新界面 ' + version + '，下载后立即生效，继续？')) { setMsg('已取消'); return }
       setMsg('正在下载界面包…')
       await applyWebUpdate(bundleUrl, version, String(data.webChecksum || '') || undefined)
