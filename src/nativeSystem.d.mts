@@ -11,6 +11,7 @@ export declare function setGenerationForeground(payload: unknown): boolean
 export declare function nativeTextZoomAvailable(): boolean
 export declare function setAppTextZoom(scalePercent: number): boolean
 export declare function showSystemNotification(payload: unknown): boolean
+export declare function clearConversationNotifications(person: string, conversationId?: string): boolean
 export declare function syncSystemChannels(channels: unknown[]): boolean
 export declare function syncSystemAlarms(plan: unknown[]): Record<string, unknown> | null
 export declare function consumePendingOpen(): unknown
