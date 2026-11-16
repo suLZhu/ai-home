@@ -2669,3 +2669,11 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .app-lock-list{max-height:132px!important}
 
 .shell .settings-heading .settings-back-room{margin:0 0 8px!important;height:28px!important;min-height:28px!important;padding:0 10px!important;font-size:11px!important;border-radius:8px!important}
+
+/* 抽屉顶部 主页 / 房间 入口 */
+.shell .sidebar-nav{display:flex;flex-direction:column;gap:4px;margin:0 0 8px}
+.shell .sidebar-nav-row{display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;border:1px solid var(--line,#e6ded2);border-radius:10px;background:var(--card,#fffdf9);color:var(--ink,#403b35);font-size:12px}
+.shell .sidebar-nav-row b{font-weight:600}
+.shell .sidebar-nav-row small{margin-left:auto;font-size:9.5px;color:var(--muted,#8a7d6d)}
+.shell .sidebar-nav-row.active{background:var(--accent,#8a79aa);border-color:transparent;color:#fff}
+.shell .sidebar-nav-row.active small{color:rgba(255,255,255,.75)}
