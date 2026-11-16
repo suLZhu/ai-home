@@ -490,6 +490,11 @@ final class SystemBridge {
     }
 
     @JavascriptInterface
+    public void clearConversationNotifications(String assistantId, String conversationId) {
+        SystemNotifier.clearConversation(ctx(), assistantId, conversationId);
+    }
+
+    @JavascriptInterface
     public void syncChannels(String json) {
         try {
             JSONObject body = new JSONObject(json == null ? "{}" : json);
