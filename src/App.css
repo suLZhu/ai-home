@@ -2681,3 +2681,28 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 /* 聊天回到底部按钮 */
 .chat-jump-bottom{position:fixed;right:14px;bottom:96px;z-index:20;width:38px;height:38px;border-radius:50%;border:1px solid var(--line,#e6ded2);background:var(--card,#fffdf9);color:var(--ink,#403b35);font-size:16px;box-shadow:0 6px 18px rgba(60,45,30,.18);display:grid;place-items:center}
 .chat-jump-bottom:active{transform:scale(.94)}
+
+/* 房间：标签贴在物件上，物件可点 */
+.room-screen .room-illustration .ri-hit{position:absolute;z-index:3;border:0;background:transparent;padding:0;margin:0;display:flex;align-items:flex-end;justify-content:center;pointer-events:auto}
+.room-screen .room-illustration .ri-tag{font-size:9.5px;line-height:1.2;color:#5f4f3c;background:rgba(255,253,248,.86);border-radius:6px;padding:2px 6px;box-shadow:0 1px 4px rgba(90,70,50,.12);white-space:nowrap}
+.room-screen .room-illustration .ri-tag small{font-size:8px;color:#8b7f75;margin-left:2px}
+.ri-hit.shelf{right:5%;top:7%;width:34%;height:28%}
+.ri-hit.chat{left:11%;bottom:31%;width:28%;height:17%}
+.ri-hit.mcp{right:15%;bottom:31%;width:14%;height:12%}
+.ri-hit.skill{left:6%;top:43.5%;width:15%;height:10%}
+.ri-hit.memory{left:18%;bottom:6%;width:22%;height:9%}
+.ri-hit.settings{right:6%;bottom:30%;width:12%;height:13%}
+.ri-router{position:absolute;right:19%;bottom:36%;width:7%;height:6%;border-radius:4px;background:#8b7f75;box-shadow:inset 0 0 0 2px #6f655c}
+.ri-router:before{content:"";position:absolute;left:50%;top:-8px;width:2px;height:8px;background:#6f655c;transform:translateX(-50%)}
+.ri-spot{display:none!important}
+/* 聊天滚动条：细、低调，自绘指示条关闭 */
+.chat-scroll-indicator{display:none!important}
+.chat-body{scrollbar-width:thin;scrollbar-color:rgba(120,100,80,.28) transparent}
+.chat-body::-webkit-scrollbar{width:3px}
+.chat-body::-webkit-scrollbar-thumb{background:rgba(120,100,80,.28);border-radius:3px}
+.chat-body::-webkit-scrollbar-track{background:transparent}
+
+/* 微调：MCP 标签贴路由器，设置标签在灯罩上 */
+.ri-hit.mcp{right:16.5%;bottom:37%;width:11%;height:7%;align-items:flex-start}
+.ri-hit.settings{right:5%;bottom:31%;width:12%;height:14%;align-items:flex-start}
+.room-screen .room-illustration .ri-tag{background:rgba(255,253,248,.72);box-shadow:none}
