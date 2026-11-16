@@ -2706,3 +2706,14 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .ri-hit.mcp{right:16.5%;bottom:37%;width:11%;height:7%;align-items:flex-start}
 .ri-hit.settings{right:5%;bottom:31%;width:12%;height:14%;align-items:flex-start}
 .room-screen .room-illustration .ri-tag{background:rgba(255,253,248,.72);box-shadow:none}
+
+/* 标签直接写在物件上：无底色、无阴影 */
+.room-screen .room-illustration .ri-tag{background:none!important;box-shadow:none!important;padding:0!important;border-radius:0!important;color:#5a4836!important;font-weight:600;font-size:9.5px;letter-spacing:.02em;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+.room-screen .room-illustration .ri-tag small{color:#6f5d49!important;font-weight:500;text-shadow:0 1px 0 rgba(255,255,255,.55)}
+
+/* 深色物件上的标签用浅字 + 暗投影，保证无底色也看得清 */
+.room-screen .room-illustration .ri-hit.chat .ri-tag,
+.room-screen .room-illustration .ri-hit.mcp .ri-tag{color:#fdf8ef!important;text-shadow:0 1px 3px rgba(40,30,20,.75)}
+.room-screen .room-illustration .ri-hit.chat .ri-tag small,
+.room-screen .room-illustration .ri-hit.mcp .ri-tag small{color:#f3e9db!important;text-shadow:0 1px 3px rgba(40,30,20,.75)}
+.room-screen .room-illustration .ri-hit.settings .ri-tag{color:#5a4836!important}
