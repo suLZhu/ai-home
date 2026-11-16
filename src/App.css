@@ -2959,3 +2959,31 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .vendor-model-choice>span{min-width:0;flex:1;overflow-wrap:anywhere}
 .vendor-center .vendor-model-choice small{color:var(--muted);font-size:11px}
 .vendor-center .vendor-model-manual-area{padding:0 2px 8px}
+
+/* Provider configuration — Kelivo-inspired mobile settings, without changing Settings categories. */
+.vendor-center .vendor-config-kelivo{display:flex;flex-direction:column;gap:16px;padding:12px 0 18px}
+.vendor-center .vendor-config-section-title{font-size:13px;letter-spacing:.08em;color:var(--muted);padding:2px 12px 0}
+.vendor-center .vendor-config-section-title small{letter-spacing:normal;font-size:11px}
+.vendor-center .vendor-config-menu,.vendor-center .vendor-config-fields,.vendor-center .vendor-config-keys{background:var(--card,#fff);border:1px solid var(--line,#e6e1e9);border-radius:20px;padding:5px 14px}
+.vendor-center .vendor-config-info{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:9px 3px;border-bottom:1px solid var(--line,#ece8ef);font-size:14px}
+.vendor-center .vendor-config-info:last-child{border-bottom:0}
+.vendor-center .vendor-config-info>span:first-child{font-weight:500;color:var(--ink)}
+.vendor-center .vendor-config-info>span:last-child{color:var(--muted);text-align:right}
+.vendor-center .vendor-config-info button{border:0;background:transparent;color:var(--muted);text-align:right;font:inherit;padding:6px 0}
+.vendor-center .vendor-config-info small{display:block;font-size:11px;line-height:1.5;font-weight:400;color:var(--muted)}
+.vendor-center .vendor-config-switch input{height:22px;width:40px;flex:0 0 auto;accent-color:var(--accent,#917ab0)}
+.vendor-center .vendor-config-fields .vendor-field{display:flex;flex-direction:column;gap:8px;padding:12px 0;margin:0;border-bottom:1px solid var(--line,#ece8ef);font-size:13px}
+.vendor-center .vendor-config-fields .vendor-field:last-of-type{border-bottom:0}
+.vendor-center .vendor-config-fields .vendor-field small{font-size:11px;color:var(--muted);font-weight:400}
+.vendor-center .vendor-config-fields input{max-width:100%;width:100%;min-height:45px;border-radius:13px}
+.vendor-center .vendor-config-fields .vendor-key-input{display:flex;align-items:center;gap:6px;min-width:0}
+.vendor-center .vendor-config-fields .vendor-key-input input{flex:1;min-width:0;width:0}
+.vendor-center .vendor-config-fields .vendor-key-input button{flex:0 0 auto}
+.vendor-center .vendor-config-fields .vendor-url-hint{margin:0;padding:8px 0 12px;font-size:11px;overflow-wrap:anywhere}
+.vendor-center .vendor-config-fields .vendor-url-hint b{font-weight:400}
+.vendor-center .vendor-config-keys{display:flex;flex-direction:column;gap:10px;padding:12px}
+.vendor-center .vendor-config-keys .vendor-key-row{min-width:0;flex-wrap:wrap}
+.vendor-center .vendor-config-keys .vendor-key-row input{min-width:0;flex:1 1 130px}
+.vendor-center .vendor-config-keys .vendor-add-row{display:flex;flex-wrap:wrap;gap:8px}
+.vendor-center .vendor-config-keys .vendor-add-row input{min-width:0;flex:1 1 130px}
+@media(max-width:520px){.vendor-center .vendor-config-kelivo{padding-top:8px}.vendor-center .vendor-config-menu,.vendor-center .vendor-config-fields{padding-left:12px;padding-right:12px}}
