@@ -17,6 +17,7 @@ import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
 import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
+import { applyPackVars, getActivePackId, loadThemePacks } from './themePack.mjs'
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
@@ -542,6 +543,7 @@ export default function App() {
   const [drawerRenameId,setDrawerRenameId]=useState<string|null>(null)
   const [drawerRenameDraft,setDrawerRenameDraft]=useState('')
   useEffect(()=>{ (window as any).AiHomeGuide=GUIDE_MARKDOWN; return ()=>{ delete (window as any).AiHomeGuide } },[])
+  useEffect(()=>{ const id=getActivePackId(); applyPackVars(loadThemePacks().find(p=>p.id===id)||null) },[])
   useEffect(()=>{
     if(!sidebarOpen)return
     const inside=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('.app-sidebar,.sidebar-edge-handle')

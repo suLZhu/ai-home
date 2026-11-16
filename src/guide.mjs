@@ -93,6 +93,31 @@ AiHomeRoom.template   // 只读模板
 - 修改房间前先调用 「room_get_layout」（或 AiHomeRoom.get()），在原有 items 上增删，别整份覆盖；
 - 房间布局按助手隔离，存储键 ai-home.roomLayout.<person>；
 - 可用工具：「room_get_layout」 / 「room_set_layout」（房间）、「web_search」 / 「open_web_page」（联网与内置浏览器）、「scheduled_task_list/create/manage」（提醒）、「widget_*」（房间小组件）、「memory_search/add」、「worldbook_*」、「ledger_*」、「conversation_search」。
+
+## 十、美化包（Theme Pack）
+
+- 位置：设置 → 外观与聊天 → 主题 → 美化包；
+- 一个包是一份 .json，导入后会出现在列表里，点一下应用、点 × 删除；
+- 包里可以一次换掉：色调 tokens、聊天背景、气泡颜色、可选图标。
+
+\`\`\`json
+{
+  "format": "qijian-theme-pack",
+  "version": 1,
+  "name": "海盐",
+  "author": "you",
+  "tokens": { "accent": "#5b8fb9", "surface": "#f4f8fb",
+              "field": "#ffffff", "ink": "#33414d", "line": "#dbe6ee" },
+  "background": { "color": "#eaf4fb" },
+  "bubble": { "style": "soft", "me": "#dcecf7", "ai": "#ffffff" },
+  "icons": { "world": "📚", "chat": "💬" }
+}
+\`\`\`
+
+- tokens 支持 accent / accentSoft / surface / field / ink / muted / line / danger / ok；
+- background 支持 color 或 image（https 或 data:image），opacity 0.1–1；
+- bubble.style 选 soft / outlined / bare / letter / frame / glass / comic / note，me/ai 是气泡底色；
+- icons 只是预留（当前用于后续图标替换），可以留空。
 `
 
 export const GUIDE_BRIEF = `【栖间速查】应用有 主页/房间/聊天 三块；菜单在左上角，含历史聊天、助手工具和设置。设置分 助手设定（世界书/MCP/技能/记忆）、模型与费用、外观与聊天、工作区、系统与权限。房间是开放场景，可用工具 room_get_layout / room_set_layout 读取和设计（background + items，x/y/w/h 百分比、style、emoji/text、action∈chat/world/mcp/skill/memory/settings）。内置浏览器：web_search 搜索、open_web_page 打开（有地址栏、前进后退、刷新、下载）。完整说明见 设置→系统与权限→说明，或 window.AiHomeGuide。`

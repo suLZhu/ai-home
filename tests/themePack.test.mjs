@@ -1,0 +1,58 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { normalizeThemePack, parseThemePack, packCssVars, loadThemePacks, saveThemePacks, upsertThemePack, removeThemePack, getActivePackId, setActivePack } from '../src/themePack.mjs'
+
+function mem() {
+  const map = new Map()
+  return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), removeItem: (k) => map.delete(k) }
+}
+
+const valid = {
+  format: 'qijian-theme-pack',
+  name: '海盐',
+  author: 'tester',
+  tokens: { accent: '#5b8fb9', surface: '#f4f8fb', ink: '#33414d' },
+  bubble: { style: 'soft', radius: 18 },
+  background: { color: '#eaf4fb' },
+  icons: { world: '📚' },
+}
+
+test('解析合法美化包并生成 id', () => {
+  const pack = normalizeThemePack(valid)
+  assert.equal(pack.name, '海盐')
+  assert.equal(pack.tokens.accent, '#5b8fb9')
+  assert.equal(pack.bubble.style, 'soft')
+  assert.ok(pack.id.startsWith('pack-'))
+})
+
+test('颜色不合法 / 缺名字会报错', () => {
+  assert.throws(() => normalizeThemePack({ ...valid, tokens: { accent: 'not-a-color' } }))
+  assert.throws(() => normalizeThemePack({ tokens: { accent: '#fff' } }))
+})
+
+test('parseThemePack 拒绝坏 JSON 和非栖间包', () => {
+  assert.throws(() => parseThemePack('{bad'))
+  assert.throws(() => parseThemePack(JSON.stringify({ format: 'other', name: 'x', tokens: { accent: '#fff' } })))
+})
+
+test('packCssVars 输出变量（含背景与气泡）', () => {
+  const pack = normalizeThemePack({ ...valid, bubble: { style: 'soft', me: '#fff0f0', ai: '#f0fff0' }, background: { color: '#eaf4fb' } })
+  const vars = packCssVars(pack)
+  assert.equal(vars['--accent'], '#5b8fb9')
+  assert.equal(vars['--pack-chat-bg'], '#eaf4fb')
+  assert.equal(vars['--bubble-me-bg'], '#fff0f0')
+})
+
+test('多包存储可增删、active 记录独立', () => {
+  const storage = mem()
+  saveThemePacks([], storage)
+  upsertThemePack(normalizeThemePack(valid), storage)
+  const second = normalizeThemePack({ ...valid, name: '夜色', tokens: { accent: '#333344' } })
+  upsertThemePack(second, storage)
+  assert.equal(loadThemePacks(storage).length, 2)
+  setActivePack(second.id, storage)
+  assert.equal(getActivePackId(storage), second.id)
+  removeThemePack(second.id, storage)
+  assert.equal(loadThemePacks(storage).length, 1)
+  assert.equal(getActivePackId(storage), '')
+})
