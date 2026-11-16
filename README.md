@@ -1,10 +1,10 @@
 # 私人 AI 前端 · 空房子原型
 
-独立于 Kelivo 的 React + TypeScript + Vite 安卓优先网页原型，后端使用 Node.js 与 SQLite。
+ React + TypeScript + Vite 安卓优先网页原型，后端使用 Node.js 与 SQLite。
 
 ## 当前已实现
 - 书页风格首页、房间目录与底部导航
-- 晏未晞、言朔（`assistant-yanweixi` / `assistant-yanshuo`，显示名可改、数据归属不随显示名漂移）各自独立聊天记录、人物设定、长期记忆和世界书
+- assistant-001` / `assistant-002`，显示名可改、数据归属不随显示名漂移）各自独立聊天记录、人物设定、长期记忆和世界书
 - 世界书关键词匹配与常驻条目注入当前轮提示词
 - OpenAI 兼容 Chat Completions 流式聊天；API Key 经 AES-256-GCM 加密保存在服务端
 - 图片/文件选择与附件预览；常见文本文件读取
@@ -66,5 +66,3 @@ npm start    # scripts/start-server.mjs
 输入打印的密码登录即可（7 天免登）。登录凭证由服务端以 token 返回，客户端自动附加
 （JSON 走 `Authorization: Bearer`，图片与 SSE 走 `?token=`），跨源 http 不依赖 Cookie，
 无需 HTTPS 反向代理。多网卡时可在 `.ai-home.env` 加 `AI_HOME_LAN_IP=<你的局域网IP>` 强制指定。
-
-不修改 Kelivo，不占用现有 PocketBase 服务。
