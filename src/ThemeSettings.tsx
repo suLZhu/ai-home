@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_THEME, type ThemePrefs } from './theme'
 import { getActivePackId, loadThemePacks, packFromZip, parseThemePack, removeThemePack, setActivePack, upsertThemePack, applyPackVars, type ThemePack } from './themePack.mjs'
 import './ThemeSettings.css'
+import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 
 // 主题系统：一套默认外观 + 字体/圆角/字号 + 可导入的「美化包」。
 // 美化包一次性替换色调、聊天背景、气泡颜色；之后会扩展图标。
 export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange: (v: ThemePrefs) => void }) {
-  const [packs, setPacks] = useState<ThemePack[]>(() => loadThemePacks())
+  const [packs, setPacks] = useState<ThemePack[]>(() => [...BUILTIN_THEME_PACKS, ...loadThemePacks().filter(p => !BUILTIN_THEME_PACKS.some(b => b.id === p.id))])
   const [activeId, setActiveId] = useState<string>(() => getActivePackId())
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -46,6 +47,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
   }
 
   const removePack = (id: string) => {
+    if (BUILTIN_THEME_PACKS.some(p => p.id === id)) return
     const next = removeThemePack(id)
     setPacks(next)
     if (activeId === id) applyPack(null)
@@ -76,7 +78,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
             <span className="theme-pack-text"><b>{pack.name}</b><small>{pack.author || '未署名'}{pack.description ? ' · ' + pack.description : ''}</small></span>
             <span className="theme-pack-state">{pack.id === activeId ? '使用中' : '应用'}</span>
           </button>
-          <button type="button" className="theme-pack-del" aria-label={'删除 ' + pack.name} onClick={() => removePack(pack.id)}>×</button>
+          {!BUILTIN_THEME_PACKS.some(p => p.id === pack.id) && <button type="button" className="theme-pack-del" aria-label={'删除 ' + pack.name} onClick={() => removePack(pack.id)}>×</button>}
         </div>)}
       </div>}
       <div className="theme-pack-actions">
