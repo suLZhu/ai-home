@@ -120,6 +120,13 @@ AiHomeRoom.template   // 只读模板
 - bubble.style 选 soft / outlined / bare / letter / frame / glass / comic / note，me/ai 是气泡底色；
 - font 支持 family（系统字体名）或 src（data:font/… 内嵌字体，< 2MB）；应用后全站字体切换。
 - icons 可用键：world / chat / mcp / skill / memory / settings / assistant / models / appearance / workspace / system，显示为对应 emoji。
+
+## 十一、应用更新
+
+- 位置：设置 → 系统与权限 → 关于 → 应用更新；
+- 填后端清单地址并保存；清单 JSON：versionCode / versionName / apkUrl / notes；
+- 点「检查更新」：发现 versionCode 更大时弹窗，确认后下载并拉起系统安装器；
+- 这一步仍需要系统安装确认；完全免安装的热更新要后续接入 Live Update。
 `
 
 export const GUIDE_BRIEF = `【栖间速查】应用有 主页/房间/聊天 三块；菜单在左上角，含历史聊天、助手工具和设置。设置分 助手设定（世界书/MCP/技能/记忆）、模型与费用、外观与聊天、工作区、系统与权限。房间是开放场景，可用工具 room_get_layout / room_set_layout 读取和设计（background + items，x/y/w/h 百分比、style、emoji/text、action∈chat/world/mcp/skill/memory/settings）。内置浏览器：web_search 搜索、open_web_page 打开（有地址栏、前进后退、刷新、下载）。完整说明见 设置→系统与权限→说明，或 window.AiHomeGuide。`

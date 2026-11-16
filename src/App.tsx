@@ -3446,12 +3446,39 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
 
 {!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}
 <div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置已按「聊天与外观 / 模型与助手 / 工作区与工具 / 数据与系统」分类；主题美化、供应商各有两个二级页。版本 v{appVersion()}。</p></div><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details>
-</div>}{section==='about'&&<div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div>}</div>}</div>
+</div>}{section==='about'&&<><AppUpdateCard/><div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div></>}</div>}</div>
 }
 
 // 二级设置：两个分组名横排成小标签，点一个只显示那一个内容，不再铺两行大卡片。
 function SettingsTabBar({title,items,value,onChange}:{title:string;items:Array<[string,string]>;value:string;onChange:(id:string)=>void}) {
   return <div className="settings-tabs"><b className="settings-tabs-title">{title}</b><div className="settings-tabs-row" role="tablist">{items.map(([id,label])=><button type="button" role="tab" key={id} aria-selected={value===id} className={'settings-tab'+(value===id?' active':'')} onClick={()=>onChange(id)}>{label}</button>)}</div></div>
+}
+
+function AppUpdateCard() {
+  const [url, setUrl] = useState(() => { try { return localStorage.getItem('ai-home.updateUrl') || '' } catch { return '' } })
+  const [msg, setMsg] = useState('')
+  const save = () => { try { localStorage.setItem('ai-home.updateUrl', url.trim()) } catch {} setMsg('更新地址已保存') }
+  const check = () => {
+    const bridge = (window as any).AiHomeSystem
+    if (!bridge || typeof bridge.checkAppUpdate !== 'function') { setMsg('仅 Android App 内支持检查更新'); return }
+    const target = url.trim()
+    if (!/^https?:\/\//i.test(target)) { setMsg('请先填写 http(s) 的更新清单地址'); return }
+    try { localStorage.setItem('ai-home.updateUrl', target) } catch {}
+    bridge.checkAppUpdate(target)
+    setMsg('已发起检查，发现新版本会弹窗提示下载安装')
+  }
+  return <div className="setting-card settings-inner-card">
+    <b>应用更新</b>
+    <p className="muted">填后端更新清单地址（JSON：versionCode / versionName / apkUrl / notes）。检查到新版本会下载并拉起系统安装器；真正的免安装热更新需要后续接入 Live Update。</p>
+    <input className="memory-search" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://your-server/qijian/latest.json" aria-label="更新清单地址"/>
+    <div className="settings-shortcuts">
+      <div className="settings-shortcut-group"><div>
+        <button type="button" onClick={save}>保存地址</button>
+        <button type="button" onClick={check}>检查更新</button>
+      </div></div>
+    </div>
+    {msg && <p className="muted">{msg}</p>}
+  </div>
 }
 
 function SettingsGuidePage() {

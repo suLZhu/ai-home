@@ -8,7 +8,16 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.app.AlertDialog;
+import android.app.DownloadManager;
 import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import androidx.core.content.FileProvider;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -680,6 +689,100 @@ final class SystemBridge {
             SystemStore.setPendingOpen(ctx(), new JSONObject(raw));
         } catch (Exception ignored) { }
         intent.removeExtra(SystemNotifier.EXTRA_FROM_NOTIFICATION);
+    }
+
+    /** 应用内检查更新：manifest JSON = {versionCode,versionName,apkUrl,notes}，下载后拉起系统安装器。 */
+    @JavascriptInterface
+    public void checkAppUpdate(String manifestUrl) {
+        final String url = manifestUrl == null ? "" : manifestUrl.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            android.widget.Toast.makeText(ctx(), "更新地址必须是 http(s)", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new Thread(() -> {
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(10000);
+                conn.setRequestProperty("Accept", "application/json");
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = br.readLine()) != null) sb.append(line);
+                }
+                JSONObject j = new JSONObject(sb.toString());
+                final int latest = j.optInt("versionCode", 0);
+                final String name = j.optString("versionName", "");
+                final String apkUrl = j.optString("apkUrl", "");
+                final String notes = j.optString("notes", "");
+                int current;
+                if (Build.VERSION.SDK_INT >= 28) {
+                    current = (int) activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).getLongVersionCode();
+                } else {
+                    current = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionCode;
+                }
+                if (latest <= 0 || apkUrl.isEmpty()) {
+                    activity.runOnUiThread(() -> android.widget.Toast.makeText(ctx(), "更新配置不完整", android.widget.Toast.LENGTH_SHORT).show());
+                    return;
+                }
+                if (latest <= current) {
+                    activity.runOnUiThread(() -> android.widget.Toast.makeText(ctx(), "已是最新版本（" + current + "）", android.widget.Toast.LENGTH_SHORT).show());
+                    return;
+                }
+                activity.runOnUiThread(() -> new AlertDialog.Builder(activity)
+                    .setTitle("发现新版本 " + (name.isEmpty() ? String.valueOf(latest) : name))
+                    .setMessage(notes.isEmpty() ? "是否下载并安装？" : notes)
+                    .setPositiveButton("更新", (d, w) -> downloadAndInstall(apkUrl))
+                    .setNegativeButton("稍后", null)
+                    .show());
+            } catch (Exception e) {
+                activity.runOnUiThread(() -> android.widget.Toast.makeText(ctx(), "检查更新失败：" + e.getMessage(), android.widget.Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private void downloadAndInstall(String apkUrl) {
+        try {
+            File dir = ctx().getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (dir == null) dir = ctx().getFilesDir();
+            if (!dir.exists()) dir.mkdirs();
+            final File apk = new File(dir, "qijian-update.apk");
+            if (apk.exists()) apk.delete();
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(apkUrl));
+            req.setTitle("栖间更新");
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            req.setDestinationUri(Uri.fromFile(apk));
+            DownloadManager dm = (DownloadManager) ctx().getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm == null) throw new IllegalStateException("系统下载服务不可用");
+            final long id = dm.enqueue(req);
+            BroadcastReceiver receiver = new BroadcastReceiver() {
+                @Override public void onReceive(Context context, Intent intent) {
+                    if (intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) != id) return;
+                    try { activity.unregisterReceiver(this); } catch (Exception ignored) { }
+                    installApk(apk);
+                }
+            };
+            if (Build.VERSION.SDK_INT >= 33) {
+                activity.registerReceiver(receiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED);
+            } else {
+                activity.registerReceiver(receiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+            }
+            android.widget.Toast.makeText(ctx(), "开始下载更新…", android.widget.Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            android.widget.Toast.makeText(ctx(), "下载失败：" + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void installApk(File apk) {
+        try {
+            Uri uri = FileProvider.getUriForFile(ctx(), activity.getPackageName() + ".fileprovider", apk);
+            Intent i = new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(i);
+        } catch (Exception e) {
+            android.widget.Toast.makeText(ctx(), "无法拉起安装器：" + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
+        }
     }
 
     /** 从系统设置页返回 / 解锁回来：刷新状态列表，并补一次通知点击消费。 */
