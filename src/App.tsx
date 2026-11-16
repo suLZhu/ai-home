@@ -296,6 +296,7 @@ export default function App() {
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<string,string>>('ai-home.activeConversationIds',{});const all=initialConversations();return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,all[id].some(c=>c.id===saved[id])?saved[id]:all[id][0]?.id||''])) as Record<Person,string>})
   // Drafts are isolated by assistant AND conversation, including during background generation.
   const draftKey = pendingScopeKey(person, activeConversationIds[person] || '')
+  const sending = !!sendingScopes[draftKey]
   const draft = drafts[draftKey] || ''
   const setDraft = (value: string | ((previous: string) => string)) => {
     setDrafts(previous => {
@@ -316,7 +317,7 @@ export default function App() {
   // 本机工作区配置（按助手）：只在服务器模式下有；聊天工具据此决定是否向模型开放文件/Git/命令。
   const [workspaceConfigs, setWorkspaceConfigs] = useState<Record<string, WorkspaceConfig>>({})
   const [webPage, setWebPage] = useState<WebPage | null>(null)
-  const [sending, setSending] = useState(false)
+  const [sendingScopes, setSendingScopes] = useState<Record<string,boolean>>({})
   const [chatError, setChatError] = useState('')
   const [memory, setMemory] = useState<Record<Person, string>>(() => { const saved=read<Record<string,string>>('ai-home.memory',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,saved?.[id]||''])) as Record<Person,string> })
   const [memoryEntries, setMemoryEntries] = useState<Record<Person,MemoryEntry[]>>(() => { const saved=read<Record<string,MemoryEntry[]>>('ai-home.memoryEntries',{}); return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,Array.isArray(saved?.[id])?saved[id]:[]])) as Record<Person,MemoryEntry[]> })
@@ -392,13 +393,12 @@ export default function App() {
     if (sent) markNotified(localStorage, payload.key, Date.now())
     return sent
   }, [])
-  const sendingRef = useRef(false)
-  useEffect(() => { sendingRef.current = sending }, [sending])
+  const sendingRef = useRef<Record<string,boolean>>({})
   // 切后台/锁屏期间 WebView 若被系统回收，快照里会残留一条空内容的助手占位气泡。
   // 回前台或冷启动状态就绪后，只把它标成「上次回复未完成」，不覆盖已写出的内容。
   const recoverStaleGeneration = useCallback(() => {
     const active = readActiveGeneration(localStorage)
-    if (!active || !needsGenerationRecovery(active, sendingRef.current)) return false
+    if (!active || !needsGenerationRecovery(active, Object.values(sendingRef.current).some(Boolean))) return false
     const personId = String(active.person || '')
     const convId = String(active.conversationId || '')
     const messageId = String(active.messageId || '')
@@ -1166,7 +1166,7 @@ export default function App() {
   // 返回 'ok'（完整走完）| 'fail'（配置或请求失败，调用方不得自动重试）| 'noop'（有请求在跑，本次未发出）。
   // 正在进行的模型请求：删除「正在生成」的助手消息时中止它；回写全部按 id 匹配，
   //   消息删除后天然无处可写，绝不会删除后又重新出现。
-  const sendAbortRef = useRef<{ id: string; controller: AbortController } | null>(null)
+  const sendAbortRef = useRef<Record<string,{ id: string; controller: AbortController }>>({})
   async function send(textInput: string, attachments: MessageAttachment[] = [], options: { conversationId?: string; queuedIds?: string[]; insertUser?: boolean; historyEndIndex?: number; regenerate?: { replaceId: string; originalContent: string; originalUsage?: TokenUsage }; onUserInserted?: () => void } = {}): Promise<'ok'|'fail'|'noop'> {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
@@ -1254,7 +1254,8 @@ export default function App() {
     const toolRunId = crypto.randomUUID()
     const toolConversationId = sendConversationId
     const abortController = new AbortController()
-    sendAbortRef.current = { id: assistantMessageId, controller: abortController }
+    const sendScope = pendingScopeKey(target,sendConversationId)
+    sendAbortRef.current[sendScope] = { id: assistantMessageId, controller: abortController }
     // 重新生成失败/空白时恢复原有有效回复；消息若已被用户删除，map 匹配不到、天然无副作用。
     const restoreRegenerate = () => {
       if (!regen) return
@@ -1271,7 +1272,7 @@ export default function App() {
     if(options.insertUser!==false)setDrafts(previous=>({...previous,[pendingScopeKey(target,sendConversationId)]:''}))
     // 用户气泡一入列就算「发出去了」：待发送卡片立刻消失，不必等助手回复生成完。
     options.onUserInserted?.()
-    setChatError('');setSending(true)
+    setChatError('');sendingRef.current[sendScope]=true;setSendingScopes(prev=>({...prev,[sendScope]:true}))
     // 进程被系统回收时靠这条标记恢复「上次未完成的生成」，不丢空白占位气泡。
     startGeneration(localStorage,{person:target,conversationId:sendConversationId,messageId:assistantMessageId},Date.now())
     genDebug('generation_started',{person:target,conversationId:sendConversationId,messageId:assistantMessageId})
@@ -1713,8 +1714,9 @@ export default function App() {
       genOutcome='fail'
       return 'fail'
     } finally {
-      if(sendAbortRef.current&&sendAbortRef.current.id===assistantMessageId)sendAbortRef.current=null
-      setSending(false)
+      if(sendAbortRef.current[sendScope]?.id===assistantMessageId)delete sendAbortRef.current[sendScope]
+      delete sendingRef.current[sendScope]
+      setSendingScopes(prev=>({...prev,[sendScope]:false}))
       finishGeneration(localStorage, assistantMessageId)
       setGenerationForeground({action:'stop', messageId:assistantMessageId})
       // 生成成功 → 自动补发同会话的 pending，开启下一轮；报错/中断不自动发（保留给用户）。
@@ -1779,7 +1781,7 @@ export default function App() {
     // 仍在生成中：让出一次重渲染再试（send() 的 finally 里 setSending(false) 是异步的，
     // 需等 React 提交后 sendingRef/sendRef 才刷新到最新值，否则会拿到过期的 send 闭包）。
     // 这是「等当前生成结束」的事件驱动让步，不是定时缓发；有界重试杜绝无限轮询。
-    if (sendingRef.current) {
+    if (sendingRef.current[pendingScopeKey(assistantId,conversationId)]) {
       if (waitsLeft <= 0) {
         genDebug('pending_flush_wait_timeout', { assistantId, conversationId })
         return // 保留 pending，绝不自动发；用户可手动发或下次生成结束再触发
@@ -1814,7 +1816,7 @@ export default function App() {
 
   // 用户主动停止当前生成（AbortController）。pending 保留，可由用户随后手动发送。
   function stopGeneration() {
-    const inf = sendAbortRef.current
+    const inf = sendAbortRef.current[pendingScopeKey(person,activeConversationIds[person] || '')]
     if (inf && inf.controller) { try { inf.controller.abort() } catch { /* 已结束 */ } }
   }
 
@@ -1869,7 +1871,7 @@ export default function App() {
     if (!idSet.size) return
     const target = person
     const convId = activeConversationIds[target] || ''
-    const inFlight = sendAbortRef.current
+    const inFlight = sendAbortRef.current[pendingScopeKey(target,convId)]
     if (inFlight && inFlight.id && idSet.has(inFlight.id)) { try { inFlight.controller.abort() } catch { /* 请求可能已结束 */ } }
     updateActiveConversationMessages(target, prev => prev.filter(m => !(m.id && idSet.has(m.id))), convId)
     markConversationDirty()
