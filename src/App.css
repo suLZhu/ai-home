@@ -2717,3 +2717,12 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .room-screen .room-illustration .ri-hit.chat .ri-tag small,
 .room-screen .room-illustration .ri-hit.mcp .ri-tag small{color:#f3e9db!important;text-shadow:0 1px 3px rgba(40,30,20,.75)}
 .room-screen .room-illustration .ri-hit.settings .ri-tag{color:#5a4836!important}
+
+/* 自由场景物件：任意位置/样式 */
+.free-item{position:absolute;pointer-events:none;display:flex;align-items:center;justify-content:center;line-height:1.2}
+.free-hotspot{position:absolute;border:0;background:transparent;padding:0;margin:0;display:flex;align-items:center;justify-content:center;color:inherit;line-height:1.2}
+.free-hotspot .ri-tag{margin-left:4px}
+
+/* 自由背景时隐藏模板地板线；自由热点文字跟随自身颜色 */
+.room-illustration.free-bg:before{display:none}
+.free-hotspot .ri-tag{color:inherit!important;text-shadow:none!important;font-size:inherit!important}

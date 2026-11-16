@@ -47,9 +47,10 @@ export function normalizeRoomLayout(input) {
   const items = input.items
     .filter((it) => it && typeof it === 'object' && typeof it.id === 'string')
     .map((it) => ({ ...it }))
-    .slice(0, 60)
-  if (!items.length) return base
-  return { version: 1, name: String(input.name || '自定义房间'), items }
+    .slice(0, 80)
+  const background = input.background && typeof input.background === 'object' ? { ...input.background } : undefined
+  if (!items.length && !background) return base
+  return { version: 2, name: String(input.name || '自定义房间'), items, background }
 }
 
 export function loadRoomLayout(person, storage = globalThis.localStorage) {

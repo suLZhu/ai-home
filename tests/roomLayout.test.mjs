@@ -42,3 +42,26 @@ test('buildRoomItem 生成百分比位置', () => {
   assert.deepEqual(item.style, { left: '5%', top: '10%', width: '20%', height: '30%' })
   assert.equal(normalizeRoomLayout({ items: [item] }).items.length, 1)
 })
+
+test('自由场景：背景 + 任意图形/文字/动作都保留', () => {
+  const free = {
+    name: '星空',
+    background: { css: 'radial-gradient(circle at 30% 20%,#1b2340,#070a17 70%)' },
+    items: [
+      { id: 'moon', kind: 'visual', x: 70, y: 8, w: 18, h: 18, style: { borderRadius: '50%', background: '#f7e7b2' }, text: '' },
+      { id: 'star', kind: 'hotspot', action: 'chat', x: 20, y: 40, w: 24, h: 12, text: '✦ 聊天', style: { color: '#fff', fontSize: '14px' } },
+    ],
+  }
+  const layout = normalizeRoomLayout(free)
+  assert.equal(layout.name, '星空')
+  assert.equal(layout.background.css.includes('radial-gradient'), true)
+  assert.equal(layout.items.length, 2)
+  assert.equal(layout.items[1].action, 'chat')
+  assert.equal(layout.items[1].text, '✦ 聊天')
+})
+
+test('自由项支持 emoji 与无动作装饰', () => {
+  const layout = normalizeRoomLayout({ items: [{ id: 'tree', kind: 'visual', x: 10, y: 60, w: 20, h: 30, emoji: '🌳', style: { fontSize: '48px' } }] })
+  assert.equal(layout.items[0].emoji, '🌳')
+  assert.equal('action' in layout.items[0], false)
+})

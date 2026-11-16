@@ -2278,15 +2278,34 @@ function Room(props: {
 
 
 function RoomScene({layout,counts,onAction}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void}) {
-  return <div className="room-illustration">
+  const bg=layout.background as Record<string,string>|undefined
+  const bgStyle:React.CSSProperties|undefined=bg?(bg.image?{backgroundImage:`url(${bg.image})`,backgroundSize:'cover',backgroundPosition:'center'}:bg.css?{background:bg.css}:bg.color?{background:bg.color}:undefined):undefined
+  return <div className={'room-illustration'+(bgStyle?' free-bg':'')} style={bgStyle}>
     {layout.items.map((item:RoomItem)=>{
-      const style=item.style as React.CSSProperties|undefined
-      if(item.kind==='decor'){
+      const legacy=item.kind==='decor'&&item.type
+      if(legacy){
         const cls='ri-'+String(item.type||'')+(item.cls?' '+item.cls:'')
         const kids=item.type==='window'?<><i/><i/><i/></>:item.type==='shelf'?<><i/><i/><i/><i/></>:item.type==='desk'?<><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></>:item.text?item.text:null
-        return <div key={item.id} className={cls} style={style} aria-hidden="true">{kids}</div>
+        return <div key={item.id} className={cls} style={item.style as React.CSSProperties|undefined} aria-hidden="true">{kids}</div>
       }
-      return <button key={item.id} type="button" className={'ri-hit '+(item.hit||'')} style={style} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
+      // 模板热点：沿用房间 CSS 的位置
+      if(item.kind==='hotspot'&&item.hit){
+        return <button key={item.id} type="button" className={'ri-hit '+item.hit} style={item.style as React.CSSProperties|undefined} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
+      }
+      // 自由物件：任意位置/尺寸/样式/文字，AI 可以画公园、星空、太空……
+      const pos:React.CSSProperties={
+        position:'absolute',
+        left:item.x!=null?`${item.x}%`:(item.style?.left as string|undefined),
+        top:item.y!=null?`${item.y}%`:(item.style?.top as string|undefined),
+        width:item.w!=null?`${item.w}%`:(item.style?.width as string|undefined),
+        height:item.h!=null?`${item.h}%`:(item.style?.height as string|undefined),
+        ...(item.style as React.CSSProperties|undefined),
+      }
+      const content=item.emoji||item.text||null
+      if(item.action){
+        return <button key={item.id} type="button" className="free-hotspot" style={pos} aria-label={item.label||item.action} onClick={()=>onAction(item.action as string)}>{content}{item.label&&<span className="ri-tag">{item.label}</span>}</button>
+      }
+      return <div key={item.id} className="free-item" style={pos} aria-hidden="true">{content}</div>
     })}
   </div>
 }

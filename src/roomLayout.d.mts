@@ -1,13 +1,18 @@
 export type RoomItem = {
   id: string
-  kind: 'decor' | 'hotspot'
+  kind: 'decor' | 'hotspot' | 'visual'
   type?: string
   cls?: string
   text?: string
+  emoji?: string
   label?: string
   action?: string
   countKey?: string
   hit?: string
+  x?: number
+  y?: number
+  w?: number
+  h?: number
   style?: Record<string, string>
 }
 
@@ -15,6 +20,7 @@ export type RoomLayout = {
   version: number
   name: string
   items: RoomItem[]
+  background?: { css?: string; color?: string; image?: string }
 }
 
 export const ROOM_LAYOUT_KEY: (person: string) => string
