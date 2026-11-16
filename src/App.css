@@ -2556,3 +2556,75 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .settings-detail .settings-shortcut-group button{height:28px!important;font-size:11px!important}
 .theme-settings h3{font-size:13px;margin:0 0 4px}
 .theme-settings .theme-tab-panel{gap:8px!important}
+
+/* 开关统一：关=灰、开=强调色（设置页此前只有聊天内生效） */
+.tray-switch{background:#d8d5cf!important}
+.tray-switch:checked{background:var(--accent,#8a79aa)!important}
+.tray-switch:checked::after{transform:translateX(16px)!important}
+
+/* 设置页头与返回更紧凑 */
+.shell .settings-heading{padding:0 2px 2px!important}
+.shell .settings-heading>span{font-size:9px!important;letter-spacing:.28em}
+.shell .settings-heading h2{font-size:26px!important;margin:2px 0 6px!important}
+.shell .settings-back{height:32px!important;min-height:32px!important;padding:0 14px!important;font-size:11.5px!important}
+.shell .settings-detail{padding-top:8px!important}
+.shell .settings-detail .settings-tabs-title{font-size:10.5px!important}
+.shell .settings-detail .settings-tab{height:28px!important;padding:0 12px!important;font-size:11.5px!important}
+
+/* 世界书/MCP 页：去掉与 tab 重复的说明，卡片更紧凑 */
+.shell .settings-detail .resource-hint{display:none!important}
+.shell .settings-detail .worldbook-panel{padding:10px!important}
+.shell .settings-detail .worldbook-panel .worldbook-title-row h3{font-size:13px!important}
+.shell .settings-detail .worldbook-panel .worldbook-toolbar button{height:28px!important;min-height:28px!important;font-size:11px!important;padding:0 9px!important}
+.shell .settings-detail .worldbook-panel .memory-search{height:32px!important;margin:6px 0!important}
+.shell .settings-detail .world-entry{padding:8px 10px!important;margin:4px 0!important}
+.shell .settings-detail .world-entry-toggle{padding:8px 10px!important;font-size:12.5px!important}
+.shell .settings-detail .world-entry>small,.shell .settings-detail .world-entry>p{font-size:11px!important}
+
+/* 系统能力 / 应用锁列表行更紧凑，左右布局 */
+.shell .settings-detail .setting-card{padding:10px 12px!important}
+.shell .settings-detail .setting-card>p.muted{font-size:10.5px!important;line-height:1.5!important;margin-top:2px!important}
+.shell .settings-detail .settings-row{padding:7px 9px!important}
+
+/* 高优先级覆盖：资源库里的开关必须保持 38×22，且开/关颜色分明 */
+.shell .settings-screen .resource-world input.tray-switch,
+.shell .settings-detail input.tray-switch{width:38px!important;min-width:38px!important;max-width:38px!important;height:22px!important;padding:0!important;border:0!important;border-radius:20px!important;background:#d8d5cf!important;box-shadow:none!important}
+.shell .settings-screen .resource-world input.tray-switch:checked,
+.shell .settings-detail input.tray-switch:checked{background:var(--accent,#8a79aa)!important}
+.shell .settings-screen .resource-world input.tray-switch::after,
+.shell .settings-detail input.tray-switch::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(30,24,18,.2)}
+.shell .settings-screen .resource-world input.tray-switch:checked::after,
+.shell .settings-detail input.tray-switch:checked::after{transform:translateX(16px)!important}
+
+/* 设置详情页：去掉大标题，tab 直接当页头；行更矮、卡片更紧 */
+.shell .settings-detail .settings-tabs{margin:0 0 6px!important}
+.shell .settings-detail .settings-tabs-title{display:none!important}
+.shell .settings-detail .settings-back{margin:0 0 6px!important;height:28px!important;min-height:28px!important;padding:0 10px!important;font-size:11px!important;border-radius:8px!important}
+.shell .settings-detail .world-entry{margin:3px 0!important;border-radius:10px!important}
+.shell .settings-detail .world-entry-toggle{min-height:40px!important;padding:5px 10px!important}
+.shell .settings-detail .world-entry-caret{font-size:11px!important}
+.shell .settings-detail .worldbook-footnote{font-size:10px!important;line-height:1.45;margin-top:4px!important}
+.shell .settings-detail .worldbook-title-row{margin-bottom:2px!important}
+.shell .settings-detail .worldbook-title-row h3{font-size:12.5px!important;margin:0!important}
+.shell .settings-detail .worldbook-title-row p{font-size:10px!important}
+.shell .settings-detail .worldbook-toolbar button{height:26px!important;min-height:26px!important;font-size:10.5px!important}
+.shell .settings-detail .worldbook-panel .memory-search{height:30px!important;font-size:11px!important}
+.shell .settings-detail .world-entry+*{margin-top:0!important}
+.shell .settings-detail .setting-card{padding:9px 11px!important}
+
+/* 去掉与世界书 tab 重复的卡片标题，行更紧 */
+.shell .settings-detail .resource-world .worldbook-title-row h3{display:none!important}
+.shell .settings-detail .resource-world .worldbook-title-row{gap:6px!important}
+.shell .settings-detail .worldbook-footnote{font-size:9.5px!important;line-height:1.4!important}
+
+/* 应用锁：列表行压成窄条，勾选框变小 */
+.shell .app-lock-row{padding:4px 8px!important;min-height:38px!important;gap:8px!important}
+.shell .app-lock-row input{width:16px!important;height:16px!important;accent-color:var(--accent,#8a79aa)}
+.shell .app-lock-name b{font-size:11.5px!important;line-height:1.25}
+.shell .app-lock-name small{font-size:8.5px!important;line-height:1.2}
+.shell .app-lock-list{gap:2px!important;max-height:56vh!important}
+.shell .app-lock-pin{gap:6px!important;margin-bottom:6px!important}
+.shell .app-lock-pin input{height:30px!important}
+.shell .app-lock-pin button{height:30px!important;font-size:11px!important}
+.shell .app-lock-state{padding:7px 9px!important;margin:4px 0 8px!important;font-size:11px!important}
+.shell .app-lock .memory-search{height:30px!important;margin:2px 0 6px!important}
