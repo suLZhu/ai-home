@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import StartupErrorBoundary from './StartupErrorBoundary'
 import { API_BASE_STORAGE_KEY, resolveApiBase, setApiBase } from './apiBase.mjs'
 import { warmupLocalAttachments } from './localBackend.mjs'
 
@@ -23,7 +24,7 @@ try {
 // is busy or large; previously that prevented the entire app from rendering.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <StartupErrorBoundary><App /></StartupErrorBoundary>
   </StrictMode>,
 )
 // Rehydrate attachment preview object URLs asynchronously. A delayed/failed
