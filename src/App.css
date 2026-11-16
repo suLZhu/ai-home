@@ -2524,3 +2524,9 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .room-person-toggle{width:auto!important;min-width:44px;height:34px!important;padding:0 12px!important;border-radius:999px!important;display:inline-flex!important;align-items:center;gap:4px}
 .shell .room-person-toggle svg{display:none!important}
 .shell .room-person-toggle small{display:inline!important;font-size:11px!important;color:inherit!important}
+
+/* 侧边栏占 2/3 屏；设置固定在底部 */
+.shell .app-sidebar{width:66.67vw!important;max-width:360px}
+.shell .sidebar-settings{flex:0 0 auto;margin:6px 2px 8px!important}
+.shell .app-sidebar{display:flex;flex-direction:column}
+.shell .app-sidebar .sidebar-scroll{flex:1 1 auto;min-height:0}

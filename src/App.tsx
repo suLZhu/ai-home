@@ -1926,7 +1926,7 @@ export default function App() {
   const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
   return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(nativeTextZoomAvailable()?{'--font-scale':'1'}:{}),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as React.CSSProperties}>
     {/* 全面屏：百宝箱与历史聊天都收进左侧抽屉，默认只露一条贴边细把手，点一下才滑出。 */}
-    <button type="button" className="mobile-menu-toggle" aria-label={sidebarOpen?'收起百宝箱':'打开百宝箱'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">☰</span><b>百宝箱</b></button>
+    <button type="button" className="mobile-menu-toggle" aria-label={sidebarOpen?'收起菜单':'打开菜单'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">☰</span><b>菜单</b></button>
     {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
       <div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}>×</button></div>
@@ -1955,8 +1955,8 @@ export default function App() {
           </div>
         </section>
         {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
-        <button type="button" className="sidebar-settings" onClick={()=>{setSidebarOpen(false);navigate('settings')}}><IconSettings size={16}/><b>设置</b></button>
       </div>
+        <button type="button" className="sidebar-settings" onClick={()=>{setSidebarOpen(false);navigate('settings')}}><IconSettings size={16}/><b>设置</b></button>
       <div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 侧边栏{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div>
     </aside>
     {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {displayName(toast.person)} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
