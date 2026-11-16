@@ -2530,3 +2530,10 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .shell .sidebar-settings{flex:0 0 auto;margin:6px 2px 8px!important}
 .shell .app-sidebar{display:flex;flex-direction:column}
 .shell .app-sidebar .sidebar-scroll{flex:1 1 auto;min-height:0}
+
+/* 设置二级横向 pills */
+.settings-tabs{display:flex;flex-direction:column;gap:6px;margin:2px 0 12px}
+.settings-tabs-title{font-size:11px;color:var(--muted,#8a7d6d);font-weight:500;letter-spacing:.02em}
+.settings-tabs-row{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:thin}
+.settings-tab{flex:0 0 auto;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--line,#e2d9cc);background:var(--card,#fffdf9);font-size:12px;color:var(--ink,#302c37)}
+.settings-tab.active{background:var(--accent,#8a79aa);border-color:transparent;color:#fff}
