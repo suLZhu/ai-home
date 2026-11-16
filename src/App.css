@@ -2899,3 +2899,11 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .shell .fullscreen-chat .cp-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .shell .fullscreen-chat .cp-item small{white-space:normal;overflow-wrap:anywhere;min-height:2.5em}
 @media(max-width:360px){.shell .fullscreen-chat .cw-row{gap:3px}.shell .fullscreen-chat .cw-row .cw-circle{width:30px;flex-basis:30px}.shell .fullscreen-chat .compose-model-select{padding:0 7px}}
+
+/* Settings landing page: one uninterrupted list, compact two-line cards. */
+.settings-screen .settings-flat-list{display:block;padding:12px 0 24px}
+.settings-screen .settings-flat-list .settings-row-list{display:flex;flex-direction:column;gap:12px}
+.settings-screen .settings-flat-list .settings-row{width:100%;min-height:78px;padding:14px 18px;display:flex;align-items:center;gap:14px;text-align:left}
+.settings-screen .settings-flat-list .settings-row-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.settings-screen .settings-flat-list .settings-row-text small{font-size:12px;line-height:1.45;white-space:normal}
+.settings-screen .settings-flat-list .settings-row-chev{margin-left:auto}
