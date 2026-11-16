@@ -3902,6 +3902,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [vendorQuery,setVendorQuery]=useState('')
   const [providerGroupOpen,setProviderGroupOpen]=useState<Record<string,boolean>>({})
   const [sortMode,setSortMode]=useState(false)
+  const [selectMode,setSelectMode]=useState(false)
+  const [selectedVendors,setSelectedVendors]=useState<string[]>([])
+  const [groupPrompt,setGroupPrompt]=useState(false)
+  const [groupDraft,setGroupDraft]=useState('')
   const [avatarOpen,setAvatarOpen]=useState(false)
   const [testState,setTestState]=useState<{busy:boolean;ok?:boolean;text:string}>({busy:false,text:''})
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
@@ -3911,6 +3915,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [keyDraft,setKeyDraft]=useState({label:'',value:''})
   const [showKey,setShowKey]=useState(false)
   const [showBackupKeys,setShowBackupKeys]=useState(false)
+  const [addTab,setAddTab]=useState<'openai'|'google'|'claude'|'account'>('openai')
+  const [newEnabled,setNewEnabled]=useState(true)
+  const [newResponseApi,setNewResponseApi]=useState(false)
   const [newName,setNewName]=useState('')
   const [newKey,setNewKey]=useState('')
   const [newMultiKey,setNewMultiKey]=useState(false)
@@ -3944,7 +3951,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
     setKeyDraft({label:'',value:''})
   }
-  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setAvatarOpen(false);setSortMode(false);setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setAvatarOpen(false);setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const openVendorPage=(id:string)=>{setTab('config');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
@@ -3954,9 +3961,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     if(!name)return
     const id='custom-'+Math.random().toString(36).slice(2,10)
     const keys=[...(newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]),...(newMultiKey?newExtraKeys.filter(k=>k.value.trim()).map((k,i)=>({id:k.id,label:k.label.trim()||('备用 '+(i+1)),value:k.value.trim(),role:'backup' as const})):[])]
-    commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,keys,models:[]}] as Vendor[])
+    commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,enabled:newEnabled,group:'',avatar:'',providerType:addTab==='account'?'openai':addTab,responseApi:newResponseApi,promptCacheKey:false,keys,models:[],modelOverrides:{}}] as Vendor[])
     setTab('config');resetEditUI();setShowBackupKeys(true)
-    setNewName('');setNewKey('');setNewMultiKey(false);setNewExtraKeys([]);setNewEndpoint('');setNewApiPath('')
+    setNewName('');setNewKey('');setNewMultiKey(false);setNewExtraKeys([]);setNewEndpoint('');setNewApiPath('');setNewEnabled(true);setNewResponseApi(false)
     onSection('vendor:'+id)
   }
   // 只向「当前这一家」的接口拉模型，用备用优先的第一把有效 Key。
@@ -4038,8 +4045,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <b>供应商</b>
         <div className="vendor-kelivo-head-actions">
           <button type="button" aria-label="模型目录" title="模型目录" onClick={()=>onSection('vendor:catalog')}>📖</button>
+          <button type="button" aria-label="多选供应商" title="多选供应商" className={selectMode?'on':''} onClick={()=>{setSelectMode(v=>!v);setSelectedVendors([]);setGroupPrompt(false)}}>☑</button>
           <button type="button" aria-label="导入供应商" title="从 Kelivo 配置导入" onClick={()=>{setImportOpen(true);setImportText('');setImportMsg('')}}>☁</button>
-          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();onSection('vendor:add')}}>＋</button>
+          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}>＋</button>
         </div>
       </div>
       <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
@@ -4054,6 +4062,16 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             const off=v.enabled===false
             const hasKey=v.keys.some(k=>!!k.value)
             const status=off?['禁用','off']:hasKey?['启用','on']:['未配置','warn']
+            if(selectMode){
+              const picked=selectedVendors.includes(v.id)
+              return <div className={'vendor-kelivo-provider-row sortrow'+' pickrow'+(off?' off':'')+(picked?' picked':'')} key={v.id} role="button" tabIndex={0}
+                onClick={()=>setSelectedVendors(ids=>picked?ids.filter(x=>x!==v.id):[...ids,v.id])}
+                onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();setSelectedVendors(ids=>picked?ids.filter(x=>x!==v.id):[...ids,v.id])}}}>
+                <span className="vendor-pick" aria-hidden="true">{picked?'✓':''}</span>
+                <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
+                <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
+              </div>
+            }
             if(sortMode) return <div className={'vendor-kelivo-provider-row sortrow'+(off?' off':'')} key={v.id}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
               <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
@@ -4080,6 +4098,28 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         })()}
       </div>
       {!vendors.some(v=>{const q=vendorQuery.trim().toLowerCase();return !q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)})&&<p className="muted vendor-kelivo-empty-hint">没有匹配的供应商</p>}
+      {selectMode&&<div className="vendor-kelivo-batchbar vendor-select-bar">
+        <button type="button" onClick={()=>setSelectedVendors(selectedVendors.length===vendors.length?[]:vendors.map(v=>v.id))}>{selectedVendors.length===vendors.length?'全不选':'全选'}</button>
+        <button type="button" disabled={!selectedVendors.length} onClick={()=>{setGroupPrompt(true);setGroupDraft('')}}>分组</button>
+        <button type="button" className="danger" disabled={!selectedVendors.length} onClick={()=>{
+          const customs=selectedVendors.filter(id=>!vendors.find(v=>v.id===id)?.builtin)
+          if(!customs.length){void confirmDialog({title:'无法删除',message:'内置供应商不能删除；可以在详情页把它停用或清空 Key。',confirmLabel:'知道了'}).then(()=>{});return}
+          void confirmDialog({title:'删除供应商',message:'删除选中的 '+customs.length+' 家自建供应商及其 Key 与模型？',confirmLabel:'删除',danger:true}).then(ok=>{
+            if(!ok) return
+            commit(vendors.filter(v=>!customs.includes(v.id)))
+            setSelectedVendors([]);setSelectMode(false)
+          })
+        }}>删除</button>
+      </div>}
+      {groupPrompt&&<div className="vendor-group-prompt">
+        <input aria-label="新分组名称" value={groupDraft} placeholder="分组名称，留空表示未分组" onChange={e=>setGroupDraft(e.target.value)}/>
+        <button type="button" onClick={()=>{
+          const name=groupDraft.trim()
+          commit(vendors.map(v=>selectedVendors.includes(v.id)?{...v,group:name}:v))
+          setGroupPrompt(false);setGroupDraft('');setSelectedVendors([]);setSelectMode(false)
+        }}>确定</button>
+        <button type="button" onClick={()=>setGroupPrompt(false)}>取消</button>
+      </div>}
       <div className="vendor-kelivo-extra">
         <button type="button" onClick={()=>onSection('vendor:default')}><span aria-hidden="true">★</span><b>默认模型</b><em>{(()=>{const p=modelProfiles.find(x=>x.id===defaultModelId);return p?(p.name||p.model):'未设置'})()}</em><i aria-hidden="true">›</i></button>
         <button type="button" onClick={()=>onSection('vendor:account')}><span aria-hidden="true">☁</span><b>订阅账号</b><i aria-hidden="true">›</i></button>
@@ -4113,21 +4153,36 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       </section>
     </div>}
 
-    {showNew&&<section className="vendor-page">
-      <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
-      <form className="vendor-new" onSubmit={addVendor}>
-      <b>添加自定义供应商</b>
-      <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="名称，如我的中转站"/></label>
-      <label className="vendor-field">API Key<div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="sk-…"/><PasteButton onPaste={setNewKey}/></div></label>
-      <label className="vendor-multi-toggle"><input type="checkbox" checked={newMultiKey} onChange={e=>{setNewMultiKey(e.target.checked);if(e.target.checked&&newExtraKeys.length===0)setNewExtraKeys([{id:crypto.randomUUID(),label:'',value:'',visible:false}])}}/> 启用多 Key 模式</label>
-      {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type="text" style={{WebkitTextSecurity:k.visible?'none':'disc'} as any} autoComplete="off" value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))}>{k.visible?'🙈':'👁'}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}>×</button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}>＋</button></div>}
-      <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
-      <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
-      <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
-      <button type="submit" className="vendor-submit">＋ 添加</button>
-      <small>Key 与地址都填好后，到「模型」里点 ⟳ 就能只选这个网址自己的模型；拉取失败也可手动输入模型名。</small>
-      </form>
-    </section>}
+    {showNew&&<div className="vendor-kelivo-sheet-overlay vendor-add-overlay" role="presentation" onClick={backToList}>
+      <section className="vendor-kelivo-sheet vendor-add-sheet" role="dialog" aria-modal="true" aria-label="添加供应商" onClick={e=>e.stopPropagation()}>
+        <div className="vendor-kelivo-sheet-grip"/>
+        <header className="vendor-add-head"><button type="button" aria-label="关闭" onClick={backToList}>×</button><b>添加供应商</b><span aria-hidden="true"/></header>
+        <div className="vendor-add-tabs" role="tablist" aria-label="供应商类型">
+          {([['openai','OpenAI'],['google','Google'],['claude','Claude'],['account','账号登录']] as const).map(([id,label])=>(
+            <button type="button" key={id} role="tab" aria-selected={addTab===id} className={addTab===id?'active':''} onClick={()=>{
+              setAddTab(id)
+              if(id==='openai'){setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1')}
+              if(id==='google'){setNewName('Gemini');setNewEndpoint('https://generativelanguage.googleapis.com/v1beta/openai')}
+              if(id==='claude'){setNewName('Claude');setNewEndpoint('https://api.anthropic.com/v1')}
+            }}>{label}</button>))}
+        </div>
+        {addTab==='account'?<div className="vendor-add-account">
+          <p>订阅账号用网页登录，不需要填 API Key。</p>
+          <button type="button" className="vendor-submit" onClick={()=>onSection('vendor:account')}>去登录订阅账号</button>
+        </div>:<form className="vendor-add-form" onSubmit={addVendor}>
+          <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={newEnabled} onChange={e=>setNewEnabled(e.target.checked)}/></label>
+          {addTab==='openai'&&<label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={newResponseApi} onChange={e=>setNewResponseApi(e.target.checked)}/></label>}
+          <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="例如 OpenAI"/></label>
+          <label className="vendor-field">API Key <div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="例如 sk-…"/><PasteButton onPaste={setNewKey}/></div></label>
+          <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
+          <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
+          <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
+          <label className="vendor-multi-toggle"><input type="checkbox" checked={newMultiKey} onChange={e=>{setNewMultiKey(e.target.checked);if(e.target.checked&&newExtraKeys.length===0)setNewExtraKeys([{id:crypto.randomUUID(),label:'',value:'',visible:false}])}}/> 启用多 Key 模式</label>
+          {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type="text" style={{WebkitTextSecurity:k.visible?'none':'disc'} as any} autoComplete="off" value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))}>{k.visible?'🙈':'👁'}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}>×</button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}>＋</button></div>}
+          <button type="submit" className="vendor-submit">＋ 添加</button>
+        </form>}
+      </section>
+    </div>}
 
     {active&&<section className="vendor-page">
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
