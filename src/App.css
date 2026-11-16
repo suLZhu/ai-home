@@ -2907,3 +2907,18 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .settings-screen .settings-flat-list .settings-row-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .settings-screen .settings-flat-list .settings-row-text small{font-size:12px;line-height:1.45;white-space:normal}
 .settings-screen .settings-flat-list .settings-row-chev{margin-left:auto}
+
+/* Independent, theme-aware thinking and tool timeline cards */
+.chat-thinking-settings{display:grid;gap:12px;margin:18px 0;padding:16px;border:1px solid var(--line,#ddd4e8);border-radius:18px;background:var(--field,#f8f4fc)}
+.chat-thinking-settings h3{margin:8px 0 0;font-size:16px}
+.chat-tool-limit{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px}
+.chat-tool-limit select{border:1px solid var(--line);border-radius:12px;padding:8px 12px;background:var(--card,#fff);color:var(--ink)}
+.bubble.assistant .reasoning{margin:0 0 10px;padding:10px 12px;border:1px solid var(--line,#ded4e9);border-radius:14px;background:var(--field,#f7f3fa)}
+.bubble.assistant .reasoning summary{cursor:pointer;color:var(--muted);font-weight:600}
+.bubble.assistant .reasoning-body{padding-top:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.bubble.assistant .msg-tool-calls{margin:10px 0 2px;border-radius:14px;background:var(--field,#f7f3fa)}
+.msg-tool-calls-head small{font-size:11px;font-weight:400;color:var(--muted);margin-left:auto}
+.msg-tool-call{border-left:2px solid var(--line,#cdbde2);padding-left:10px;margin:8px 0}
+.msg-tool-call.status-succeeded{border-left-color:#719b8d}
+.msg-tool-call.status-failed,.msg-tool-call.status-timed_out{border-left-color:#c97070}
+.msg-tool-call-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto}
