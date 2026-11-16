@@ -40,7 +40,7 @@ jobs:
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"; fi
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
       - name: Install JavaScript dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Type-check and build web assets
         run: npm run build
       - name: Run vision attachment regression tests
