@@ -49,7 +49,7 @@ export function mergeAvailableModels(fetched = [], channelId = '') {
 }
 
 // 生成供应商的 models 清单。
-// picked === null/undefined 表示「用户还没选过」→ 默认全选（登录后模型面板立刻有得选）；
+// picked === null/undefined 表示「用户还没选过」→ 默认不勾选，用户自主启用；
 // picked 是数组时严格按勾选决定，空数组 = 一个都不放进模型池。
 export function buildSubscriptionModels(existing, available, picked) {
   const ids = normalizeModelIds(available)
@@ -58,7 +58,7 @@ export function buildSubscriptionModels(existing, available, picked) {
     .map((m) => ({ id: m.id, name: str(m.name) || m.id, selected: !!m.selected, source: '' }))
 
   const chosen = picked === null || picked === undefined
-    ? ids.slice()
+    ? []
     : normalizeModelIds(picked)
   const injected = ids.map((id) => ({
     id,
