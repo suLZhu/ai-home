@@ -18,12 +18,18 @@ try {
   setApiBase('')
 }
 
-// 本地模式预热：把 IndexedDB 里的图片附件换成本会话有效的 objectURL，
-// 让聊天记录里的 /api/attachments/<id> 引用在首帧就能显示（失败不阻塞启动）。
-void warmupLocalAttachments().finally(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  )
+// The UI must not depend on an IndexedDB transaction completing.
+// Some Android WebViews can leave getAll() pending when the attachment store
+// is busy or large; previously that prevented the entire app from rendering.
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+// Rehydrate attachment preview object URLs asynchronously. A delayed/failed
+// attachment database must never block navigation or the Android back button.
+void warmupLocalAttachments().then(() => {
+  window.dispatchEvent(new Event('aihome:attachments-warm'))
+}).catch(error => {
+  console.warn('[startup] attachment previews unavailable', error)
 })
