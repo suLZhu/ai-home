@@ -2847,3 +2847,14 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
   background-image:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMjAgMTIwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj48cG9seWxpbmUgcG9pbnRzPSIxMCAwIDMxMCAwIDMxMCAxMCAzMjAgMTAgMzIwIDExMCAzMTAgMTEwIDMxMCAxMjAgMTAgMTIwIDEwIDExMCAwIDExMCAwIDEwIDEwIDEwIDEwIDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2ZmYjAwMCIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBzdHJva2UtbGluZWNhcD0ic3F1YXJlIi8+PC9zdmc+")!important;
 }
 
+
+/* 前情摘要小按钮与弹层 */
+.chat-summary-chip{align-self:flex-start;margin:6px 10px 2px;padding:3px 10px;border:1px solid var(--line,#e6ded2);border-radius:999px;background:var(--card,#fffdf9);color:var(--muted,#8a7d6d);font-size:10.5px}
+.chat-summary-modal{position:fixed;inset:0;z-index:80;background:rgba(30,22,16,.45);display:flex;align-items:center;justify-content:center;padding:18px}
+.chat-summary-card{width:100%;max-width:520px;max-height:70vh;overflow:auto;background:var(--surface,#fffdf9);border-radius:16px;padding:14px 16px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.chat-summary-card header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.chat-summary-card header b{font-size:13px}
+.chat-summary-card header button{border:0;background:transparent;font-size:18px;color:var(--muted,#8a7d6d)}
+.chat-summary-text{font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--ink,#403b35)}
+.chat-summary-card small{display:block;margin-top:8px;font-size:10px;color:var(--muted,#8a7d6d)}
+.update-auto{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted,#8a7d6d);margin:4px 0}

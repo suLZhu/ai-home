@@ -17,7 +17,7 @@ import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
 import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
-import { applyWebUpdate, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
+import { applyWebUpdate, currentBundle, liveUpdateSupported, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
 import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
@@ -545,6 +545,26 @@ export default function App() {
   const [drawerRenameDraft,setDrawerRenameDraft]=useState('')
   useEffect(()=>{ (window as any).AiHomeGuide=GUIDE_MARKDOWN; return ()=>{ delete (window as any).AiHomeGuide } },[])
   useEffect(()=>{ void notifyAppReady() },[])
+  useEffect(()=>{
+    if(!liveUpdateSupported())return
+    let target=''
+    try{ target=localStorage.getItem('ai-home.updateUrl')||'' }catch{}
+    if(!target)return
+    try{ if(localStorage.getItem('ai-home.autoUpdate')==='0')return }catch{}
+    const timer=window.setTimeout(()=>{ void (async()=>{
+      try{
+        const res=await fetch(target,{cache:'no-store',credentials:'omit'})
+        const data=await res.json()
+        const version=String(data.webVersion||'')
+        const bundleUrl=String(data.webUrl||'')
+        if(!version||!bundleUrl)return
+        const cur=await currentBundle()
+        if(cur?.bundle?.version===version)return
+        await applyWebUpdate(bundleUrl,version,String(data.webChecksum||'')||undefined)
+      }catch{ /* 自动检查失败不打扰用户 */ }
+    })() },5000)
+    return ()=>window.clearTimeout(timer)
+  },[])
   const [activePack,setActivePack]=useState<ThemePack|null>(()=>{const id=getActivePackId();return loadThemePacks().find(p=>p.id===id)||null})
   useEffect(()=>{ applyPackVars(activePack) },[activePack])
   useEffect(()=>{ const on=()=>{const id=getActivePackId();setActivePack(loadThemePacks().find(p=>p.id===id)||null)}; window.addEventListener('aihome:theme-pack',on); return ()=>window.removeEventListener('aihome:theme-pack',on) },[])
@@ -1438,7 +1458,8 @@ export default function App() {
         // 清洗后的增量才写进 answer / thinking（持久化与通知因此天然都是干净的）。
         const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
-        while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+        let toolPayloadChars=0
+      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         // 本轮流结束：冲刷清洗器缓冲，把暂缓的尾部补回；未闭合的抑制块由 flush 丢弃，
         // 绝不把半截系统注入写进聊天记录或下一轮工具请求。
         const contentTail=contentCleanup.flush()
@@ -1637,7 +1658,26 @@ export default function App() {
             resultContent=JSON.stringify({error:message})
             if(callKey)reportToolCallEnd(callKey,{status:'failed',errorMessage:message,errorCode:classifyToolError(message)})
           }
-          requestMessages.push({role:'tool',tool_call_id:call.id,content:resultContent.slice(0,30000)})
+          {
+            const perToolCap = call.function.name === 'workspace_read' ? 12000 : 6000
+            let payload = resultContent
+            if (payload.length > perToolCap) {
+              payload = payload.slice(0, perToolCap) + '\n[结果已截断：原始 ' + resultContent.length + ' 字符]'
+            }
+            toolPayloadChars += payload.length
+            if (toolPayloadChars > 30000) {
+              payload = payload.slice(0, 1500) + '\n[本轮工具结果总量超限，已截断；需要细节请重新按关键词查询]'
+            }
+            requestMessages.push({role:'tool',tool_call_id:call.id,content:payload})
+          }
+        }
+        {
+          const toolMsgs = requestMessages.filter((m:any) => m.role === 'tool')
+          toolMsgs.slice(0, -3).forEach((m:any) => {
+            if (typeof m.content === 'string' && m.content.length > 800) {
+              m.content = m.content.slice(0, 800) + '\n[较早的工具结果已压缩，需要时重新查询]'
+            }
+          })
         }
         if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
       }
@@ -2807,6 +2847,7 @@ function Chat(p: any) {
   const chatBodyRef=useRef<HTMLDivElement>(null)
   const scrollPinned=useRef(true)
   const [atBottom,setAtBottom]=useState(true)
+  const [summaryOpen,setSummaryOpen]=useState(false)
   const scrollIndicatorRef=useRef<HTMLDivElement|null>(null)
   const indicatorTimerRef=useRef<number|undefined>(undefined)
   useEffect(()=>{
@@ -3273,14 +3314,17 @@ function Chat(p: any) {
     {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>
-      {summaryConversation?.summary&&<details className="chat-summary">
-        <summary>前情提要 · 更早的 {summaryConversation.summaryThrough||''} 条对话已压缩</summary>
-        <div className="chat-summary-body">{summaryConversation.summary}</div>
-        <small>原文仍完整保留；需要细节时助手可以自己用 conversation_search 回顾。</small>
-      </details>}
+      {summaryConversation?.summary&&<button type="button" className="chat-summary-chip" onClick={()=>setSummaryOpen(true)}>前情 · 已压缩 {summaryConversation.summaryThrough||''} 条</button>}
       {p.messages[p.person].length ? p.messages[p.person].map((m:ChatMessage,i:number)=>renderMessageRow(m,i,p.messages[p.person])) : <div className="empty-chat">这里是 {p.displayName(p.person)} 的独立房间。<br/>配置模型后，就可以在这里聊天啦。</div>}
     </div>
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
+    {summaryOpen&&summaryConversation?.summary&&<div className="chat-summary-modal" role="presentation" onClick={()=>setSummaryOpen(false)}>
+      <div className="chat-summary-card" role="dialog" aria-modal="true" aria-label="前情提要" onClick={e=>e.stopPropagation()}>
+        <header><b>前情提要</b><button type="button" onClick={()=>setSummaryOpen(false)} aria-label="关闭">×</button></header>
+        <div className="chat-summary-text">{summaryConversation.summary}</div>
+        <small>原文仍完整保留；需要细节时助手可以用 conversation_search 回顾。</small>
+      </div>
+    </div>}
     {!atBottom&&<button type="button" className="chat-jump-bottom" onClick={pinToLatest} aria-label="回到最新消息" title="回到最新">↓</button>}
     {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，可以上传图片，或粘贴图床直链。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{void confirmDialog({ title:'清空图片表情包', message:'清空全部图片表情包？', confirmLabel:'清空', danger:true }).then(ok=>{if(ok){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}})}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><div className="sticker-link-add"><input value={stickerLink} onChange={e=>{setStickerLink(e.target.value);setStickerLinkError('')}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addImageStickerLink()}}} placeholder="粘贴图床直链，如 https://.../cat.png" aria-label="图片表情链接"/><button type="button" disabled={!stickerLink.trim()} onClick={addImageStickerLink}>添加链接</button></div>{stickerLinkError&&<p className="emoji-empty">{stickerLinkError}</p>}<h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
@@ -3459,6 +3503,7 @@ function SettingsTabBar({title,items,value,onChange}:{title:string;items:Array<[
 function AppUpdateCard() {
   const [url, setUrl] = useState(() => { try { return localStorage.getItem('ai-home.updateUrl') || '' } catch { return '' } })
   const [msg, setMsg] = useState('')
+  const [auto, setAuto] = useState(() => { try { return localStorage.getItem('ai-home.autoUpdate') !== '0' } catch { return true } })
   const save = () => { try { localStorage.setItem('ai-home.updateUrl', url.trim()) } catch {} setMsg('更新地址已保存') }
   const check = () => {
     const bridge = (window as any).AiHomeSystem
@@ -3494,6 +3539,7 @@ function AppUpdateCard() {
     <b>应用更新</b>
     <p className="muted">清单 JSON：versionCode / versionName / apkUrl / notes，以及可选的 webVersion / webUrl。「检查 APK 更新」走系统安装；「检查界面更新」走 Live Update，只替换网页资源、立即生效，不用装 APK。</p>
     <input className="memory-search" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://your-server/qijian/latest.json" aria-label="更新清单地址"/>
+    <label className="update-auto"><input type="checkbox" checked={auto} onChange={e => { setAuto(e.target.checked); try { localStorage.setItem('ai-home.autoUpdate', e.target.checked ? '1' : '0') } catch {} }}/> 启动时自动检查界面更新</label>
     <div className="settings-shortcuts">
       <div className="settings-shortcut-group"><div>
         <button type="button" onClick={save}>保存地址</button>
