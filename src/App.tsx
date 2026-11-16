@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useRef, Fragment, type FormEvent, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef, type FormEvent, type ChangeEvent } from 'react'
 import './App.css'
 import { Ledger } from './Ledger'
 import { Diary } from './Diary'
@@ -45,7 +45,6 @@ import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSea
 // 云端恢复决策（数据安全）：启动动作判定、覆盖前本地备份、快照→视图提取。
 import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
 // 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
-import { MAX_DIAG_LOGS, buildDiagSnapshot, appendDiagLog, loadDiagLogs, saveDiagLogs, formatDiagSummary } from './requestDiag.mjs'
 // 资源库绑定层：设置区一次性添加模型/MCP/世界书，聊天窗口按助手选择由哪个使用。
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
@@ -662,19 +661,6 @@ export default function App() {
   // 记录「最早未保存变更」的时间，超过 CLOUD_FLUSH_MAX_MS 就强制保存。
   const CLOUD_FLUSH_MAX_MS = 5000
   const firstDirtyAtRef = useRef(0)
-
-  // ── 模型请求诊断（黑匣子）──
-  // 只在请求链旁路记录「最终交给 fetch 的 requestBody」，绝不修改请求、
-  // 绝不阻断聊天（recordDiagLog 全程 try/catch）。诊断数据只存本地
-  // localStorage（DIAG_STORAGE_KEY），不进 /api/state、不上传云端。
-  const [diagLogs, setDiagLogs] = useState(() => { try { return loadDiagLogs(localStorage) } catch { return [] } })
-  const persistDiagLogs = (next: any[]) => { try { saveDiagLogs(localStorage, next) } catch { /* 诊断失败不影响聊天 */ } }
-  const recordDiagLog = (snapshot: any) => {
-    try {
-      setDiagLogs(prev => { const next = appendDiagLog(prev, snapshot); persistDiagLogs(next); return next })
-    } catch { /* 诊断是旁路观察器，任何异常都不得影响正常发送 */ }
-  }
-  const clearDiagLogs = () => { try { setDiagLogs([]); persistDiagLogs([]) } catch { /* 诊断失败不影响聊天 */ } }
 
   const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool])
   // Keep the latest snapshot available without making the one-time cloud-load callback
@@ -1423,19 +1409,6 @@ export default function App() {
       for(let round=0;round<5&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
-        // 黑匣子旁路：此刻 requestBody 就是即将被序列化发给 /api/chat 的最终 payload
-        // （服务端仅再注入一条时间 system 消息）。recordDiagLog 全程 try/catch，异常不影响发送。
-        recordDiagLog(buildDiagSnapshot({
-          requestBody, assistantId: target, conversationId: sendConversationId,
-          trigger: regen ? 'regenerate' : round > 0 ? 'follow-up' : (options.queuedIds ? 'follow-up' : 'normal'),
-          round: round + 1, provider: 'openai-compatible', endpoint: activeModel.endpoint.trim(),
-          historyTrimmed: priorHistory.length > previous.length || history.length > previous.length,
-          historyBefore: history.length, historyAfter: previous.length,
-          // memory/context 与角色设定共同拼进首条 system，无法拆成独立块——如实标注而非猜测。
-          memoryNote: '角色设定+补充提示+长期记忆+记忆库召回+世界书 均拼进首条 system（无法区分独立 memory 块）',
-          // 真实序列化大小（≈交给 /api/chat 的 body 字符数，不含 endpoint/apiKey 包裹层）。
-          requestChars: (() => { try { return JSON.stringify(requestBody).length } catch { return 0 } })(),
-        }))
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
         let response=await chatProxy()
         if(!response.ok){
@@ -2075,7 +2048,7 @@ export default function App() {
         userSettings={userSettings} setUserSettings={setUserSettings}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>{pageBeforeSettings.current='room';navigate('settings')}} packIcons={activePack?.icons} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
-      {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
+      {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
     </section>
     {fallbackNotice ? <div className="cloud-status error fallback-notice" role="status"><span>⚠ {fallbackNotice}</span><button onClick={()=>{setFallbackNotice('');navigate('settings')}}>去设置重新连接</button><button onClick={()=>setFallbackNotice('')}>知道了</button></div> : ((!isLocalMode()||cloudStatus==='error')&&cloudStatus!=='saved' && <div className={'cloud-status '+cloudStatus} role="status"><span>{cloudStatus==='saving'?(isLocalMode()?'本地保存中…':'云端保存中…'):cloudStatus==='error'?(isLocalMode()?'本地保存失败，请检查浏览器存储空间':'云端暂不可用，本地数据已保留'):'连接云端…'}</span>{cloudStatus==='error'&&<button onClick={retryCloudConnection}>{isLocalMode()?'重试保存':'重连云端'}</button>}</div>)}
     <UiDialogHost/>
@@ -3482,7 +3455,7 @@ function Fun({shortcut,onShortcutUsed,displayName}:{shortcut:string;onShortcutUs
   const selected=rooms.find(x=>x.key===active)
   return <div className="fun-screen"><header className="fun-heading"><div><span className="fun-eyebrow">OUR SHARED SPACE</span><h2>娱乐房</h2><p>把想用的功能做成独立小模块，点开就能进入。</p></div></header>{!active?<div className="fun-module-grid">{rooms.map((room,i)=><button type="button" className="fun-module-card" key={room.key} onClick={()=>setActive(room.key)}><span className={'fun-module-icon module-icon-'+i}>{room.icon}</span><b>{room.name}</b><small>{room.desc}</small><span className="fun-module-arrow">进入 <span aria-hidden="true">↗</span></span></button>)}</div>:<section className="fun-module-detail"><button className="fun-back" onClick={()=>setActive('')}>← 全部模块</button>{active==='记账单'?<Ledger/>:active==='日记本'?<Diary personLabel={displayName}/>:active==='客厅'?<section className="lounge-panel"><h3>公共客厅</h3><p className="muted">这里是大家一起讨论的地方。当前先搭好共享留言结构；AI 自动参与、实时推送与跨设备同步待后续接入。</p><div className="lounge-messages">{messages.length?messages.map(m=><article key={m.id}><b>{m.author}</b><small>{new Date(m.at).toLocaleString('zh-CN')}</small><p>{m.content}</p></article>):<p className="muted">客厅还很安静，留下一条消息试试。</p>}</div><form onSubmit={post} className="lounge-compose"><textarea rows={2} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="给客厅留句话……"/><button disabled={!draft.trim()}>发送留言</button></form></section>:<section className="lounge-panel"><h3>{selected?.name||active}</h3><p className="muted">{selected?.desc}</p><div className="module-placeholder"><span>{selected?.icon||'＋'}</span><b>{selected?.name||active}工作区</b><small>模块入口已建立 · 实际功能待接入</small></div></section>}</section>}</div>
 }
-function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,diagLogs,clearDiagLogs,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;diagLogs:any[];clearDiagLogs:()=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void}) {
+function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void}) {
   const [section,setSection]=useState('')
   const sectionScrollRef=useRef<Record<string,number>>({})
   // 进入二级页前先记下当前滚动位置：等 React 换掉内容后页面高度变短，
@@ -3537,7 +3510,7 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
 <div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>
 
 {!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}
-<div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置已按「聊天与外观 / 模型与助手 / 工作区与工具 / 数据与系统」分类；主题美化、供应商各有两个二级页。版本 v{appVersion()}。</p></div><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/><RequestDiagnostics logs={diagLogs} onClear={clearDiagLogs}/></details>
+<div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置已按「聊天与外观 / 模型与助手 / 工作区与工具 / 数据与系统」分类；主题美化、供应商各有两个二级页。版本 v{appVersion()}。</p></div><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/></details>
 </div>}{section==='about'&&<><AppUpdateCard/><div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div></>}</div>}</div>
 }
 
@@ -4141,88 +4114,3 @@ function ApiBaseSettings({ onApplied }: { onApplied?: () => void } = {}) {
   return <div className="setting-card settings-inner-card"><b>云同步服务器地址（可选）</b><p className="muted">默认是本地模式：聊天与设置只保存在这台设备，开箱即用。填写后端地址（如 https://你的域名）并保存 = 开启云同步（登录后快照与 API Key 同步到该服务器）；清空并保存 = 切回本地模式。</p><input className="memory-search" value={draft} onChange={e=>{setDraft(e.target.value);setNote('')}} placeholder="https://example.com" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false}/><div className="settings-shortcuts"><button type="button" onClick={apply}>保存地址</button><button type="button" onClick={reset}>切回本地模式</button></div>{note&&<p className="muted" role="status">{note}</p>}</div>
 }
 
-// ── 模型请求诊断（黑匣子）详情页 ──
-// 只读展示本地环形日志：概览 / 提示词消息（可折叠）/ 记忆与上下文 / 参数 / 原始请求（可折叠）。
-// 复制功能走剪贴板，内容均已脱敏（凭证已滤、图片 Base64 已替换为占位）。
-function RequestDiagnostics({ logs, onClear }: { logs: any[], onClear: () => void }) {
-  const [selectedId, setSelectedId] = useState<string>('')
-  const [showMessages, setShowMessages] = useState(false)
-  const [showRaw, setShowRaw] = useState(false)
-  const [copyNote, setCopyNote] = useState('')
-  const selected: any = logs.find(l => l && l.id === selectedId) || logs[0] || null
-  const flash = (msg: string) => { setCopyNote(msg); window.setTimeout(() => setCopyNote(''), 2400) }
-  const copy = async (text: string, label: string) => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); flash(label + '已复制'); return }
-      throw new Error('no clipboard')
-    } catch {
-      // file:// 或非安全上下文下 clipboard API 不可用：降级到临时 textarea。
-      try {
-        const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-        document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove()
-        flash(ok ? label + '已复制' : '复制失败：浏览器拒绝了剪贴板访问')
-      } catch { flash('复制失败：浏览器拒绝了剪贴板访问') }
-    }
-  }
-  const fmtTime = (iso: string) => { try { const d = new Date(iso); return d.toLocaleString('zh-CN', { hour12: false }) } catch { return iso || '' } }
-  const PARAM_DISPLAY = ['model', 'stream', 'temperature', 'top_p', 'max_tokens', 'max_completion_tokens', 'frequency_penalty', 'presence_penalty', 'seed', 'stop', 'reasoning_effort', 'thinking', 'response_format', 'tool_choice']
-  const roleText = selected && selected.roles ? Object.entries(selected.roles as Record<string, number>).map(([k, v]) => k + '×' + v).join(' · ') : '—'
-  // 单条消息 content 的可读化：字符串直出；多模态数组逐段拼（图片段已在脱敏时换成占位）。
-  const contentText = (content: any): string => {
-    if (typeof content === 'string') return content
-    if (Array.isArray(content)) return content.map((p: any) => {
-      if (typeof p === 'string') return p
-      if (p && p.type === 'image_url') { const u = p.image_url && typeof p.image_url === 'object' ? p.image_url.url : p.image_url; return '[image] ' + (u || '') }
-      if (p && p.type === 'text') return String(p.text || '')
-      return JSON.stringify(p)
-    }).join('\n')
-    return JSON.stringify(content)
-  }
-  return <div className="tool-panel diag-panel">
-    <h3>模型请求诊断（黑匣子）</h3>
-    <p className="muted">记录每次发给模型的「最终请求」快照，用于排查换前端后人设/语气变化的原因。只读、仅本机、不上传云端，不含 API Key；最多保留 {MAX_DIAG_LOGS} 条。</p>
-    {copyNote && <p className="mcp-notice">{copyNote}</p>}
-    {logs.length === 0 ? <p className="muted" style={{marginTop:16}}>还没有记录。正常发一条消息后，这里会出现对应请求的快照。</p> : <>
-      <div className="diag-list-head"><b>最近记录（{logs.length} / {MAX_DIAG_LOGS}）</b><button type="button" className="mcp-remove" onClick={()=>{ void confirmDialog({ title:'清空诊断记录', message:'清空全部诊断记录？只清诊断快照，不影响聊天数据。', confirmLabel:'清空', danger:true }).then(ok=>{ if (ok) { onClear(); setSelectedId(''); flash('已清空') } }) }}>清空记录</button></div>
-      <div className="diag-list">{logs.map((l: any, i: number) => <button type="button" key={l.id} className={'diag-item' + (selected && l.id === selected.id ? ' active' : '')} onClick={() => { setSelectedId(l.id); setShowMessages(false); setShowRaw(false) }}>
-        <b>#{logs.length - i} · {fmtTime(l.at)}</b>
-        <span>{l.assistantId || '—'} · 会话 {(l.conversationId || '').slice(0, 8)} · {l.trigger}{(l.round || 1) > 1 ? '（第 ' + l.round + ' 轮）' : ''}</span>
-        <span>{l.model || '（模型未设置）'} · {l.messagesTotal} 条消息 · 约 {Math.round((l.requestChars || 0) / 1024)} KB</span>
-      </button>)}</div>
-    </>}
-    {selected && <div className="diag-detail">
-      <h4>概览</h4>
-      <div className="diag-kv">
-        <b>时间</b><span>{fmtTime(selected.at)}</span>
-        <b>助手 / 会话</b><span>{selected.assistantId} · {selected.conversationId}</span>
-        <b>触发方式</b><span>{selected.trigger}{(selected.round || 1) > 1 ? '（工具续轮 第 ' + selected.round + ' 轮）' : ''}</span>
-        <b>Provider / 模型</b><span>{selected.provider} / {selected.model || '（未设置）'}</span>
-        <b>Endpoint</b><span>{selected.endpoint || '（未设置）'}</span>
-        <b>消息结构</b><span>共 {selected.messagesTotal} 条：{roleText}</span>
-        <b>请求体大小</b><span>约 {selected.requestChars} 字符（{Math.round((selected.requestChars || 0) / 1024)} KB）</span>
-        <b>历史裁剪</b><span>{selected.historyTrimmed ? '发生（' + selected.historyBefore + ' → ' + selected.historyAfter + ' 条）' : '未发生 / 未知'}</span>
-        <b>服务端注入</b><span>时间上下文 system 消息（服务端实时生成，插在 messages 最前）</span>
-      </div>
-      <h4>提示词消息（真实顺序）</h4>
-      <button type="button" className="diag-toggle" onClick={() => setShowMessages(v => !v)}>{showMessages ? '收起 ▲' : '展开 ▼'}（{selected.messagesTotal} 条）</button>
-      {showMessages && <div className="diag-messages">{(selected.messages || []).map((m: any, i: number) => <div className="diag-message" key={i}>
-        <b>{m.role || 'unknown'}{m.tool_calls ? ' · 含 tool_calls' : ''}{m.tool_call_id ? ' · 回 tool ' + m.tool_call_id : ''}</b>
-        <pre>{contentText(m.content)}</pre>
-        {Array.isArray(m.tool_calls) && m.tool_calls.map((tc: any, j: number) => <pre key={j} className="diag-toolcall">🔧 {tc.function && tc.function.name}({tc.function && tc.function.arguments})</pre>)}
-      </div>)}</div>}
-      <h4>记忆与上下文</h4>
-      <p className="muted">{selected.memoryNote || '角色设定+补充提示+长期记忆+记忆库召回+世界书 均拼进首条 system（无法区分独立 memory 块）'}</p>
-      <h4>参数（只显示实际发送的键）</h4>
-      <div className="diag-kv">{PARAM_DISPLAY.map(k => <Fragment key={k}><b>{k}</b><span>{selected.params && selected.params[k] !== undefined ? (typeof selected.params[k] === 'object' ? JSON.stringify(selected.params[k]) : String(selected.params[k])) : <i className="diag-unset">未设置</i>}</span></Fragment>)}
-        <b>tools</b><span>{selected.tools && selected.tools.count ? selected.tools.count + ' 个（' + (selected.tools.names || []).join(', ') + '）· tool_choice=' + String(selected.tools.toolChoice !== undefined ? selected.tools.toolChoice : '未设置') : '无'}</span>
-      </div>
-      <h4>原始请求（已脱敏）</h4>
-      <button type="button" className="diag-toggle" onClick={() => setShowRaw(v => !v)}>{showRaw ? '收起 ▲' : '展开 ▼'}</button>
-      {showRaw && <pre className="diag-raw">{JSON.stringify(selected.raw, null, 2)}</pre>}
-      <div className="diag-actions">
-        <button type="button" onClick={() => copy(formatDiagSummary(selected), '诊断摘要')}>复制诊断摘要（文本）</button>
-        <button type="button" onClick={() => copy(JSON.stringify(selected.raw, null, 2), '脱敏 Raw JSON')}>复制脱敏 Raw JSON</button>
-      </div>
-    </div>}
-  </div>
-}
