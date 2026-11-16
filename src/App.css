@@ -3025,3 +3025,47 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .kelivo-batch-check{display:grid;place-items:center;border:1px solid var(--accent);width:25px;height:25px;flex-shrink:0;border-radius:50%}
 .vendor-center .kelivo-batch-check.checked{background:var(--accent);color:#fff}
 @media(max-width:440px){.vendor-center .kelivo-model-row{min-height:84px;padding:12px 5px;gap:9px}.vendor-center .kelivo-model-info>b{font-size:14px}.vendor-center .kelivo-model-logo{width:37px;height:37px}}
+
+/* 4.6 navigation polish: room/chat header belongs immediately below Android status bar.
+   Keep the already approved large composer and its + menu untouched. */
+.shell.shell-chat-lock .fullscreen-chat{padding-top:0!important}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple{
+  display:flex;align-items:center;justify-content:flex-end;gap:6px;
+  min-height:54px;box-sizing:border-box;
+  padding:calc(var(--app-safe-top,0px) + 6px) 10px 8px 112px;
+  border-bottom:1px solid var(--line,#e4deea);
+}
+.shell.shell-chat-lock .chat-header-simple .chat-header-title{
+  display:flex;align-items:center;justify-content:flex-start;gap:8px;
+  min-width:0;flex:1;max-width:none;overflow:hidden;
+}
+.shell.shell-chat-lock .chat-header-simple .chat-header-title b{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:15px;flex:1;min-width:0;
+}
+.shell.shell-chat-lock .chat-header-simple .chat-avatar{
+  width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;
+  flex:0 0 38px!important;padding:0!important;border-radius:50%!important;overflow:hidden;
+  display:grid;place-items:center;aspect-ratio:1/1;
+}
+.shell.shell-chat-lock .chat-header-simple .chat-avatar img,
+.shell .room-screen .room-name-avatar img{
+  display:block;width:100%;height:100%;max-width:100%;max-height:100%;
+  object-fit:cover!important;object-position:center;border-radius:50%;
+}
+.shell.shell-chat-lock .chat-header-simple .chat-header-actions{
+  display:flex!important;align-items:center;gap:0;flex:0 0 auto;
+}
+.shell.shell-chat-lock .chat-header-simple .chat-header-actions .btn-icon{
+  display:grid;place-items:center;width:34px;height:34px;min-width:34px;
+  padding:0;border:0;background:transparent;
+}
+.shell .room-screen:not(.room-tool-screen){padding-top:calc(var(--app-safe-top,0px) + 46px)}
+.shell .room-screen .room-name-avatar{
+  box-sizing:border-box;aspect-ratio:1/1;flex:0 0 40px!important;
+  width:40px!important;height:40px!important;min-height:40px!important;
+}
+@media(max-width:365px){
+ .shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple{padding-left:102px;padding-right:4px}
+ .shell.shell-chat-lock .chat-header-simple .chat-header-actions .btn-icon{width:30px;min-width:30px}
+}
