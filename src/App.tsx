@@ -1256,6 +1256,25 @@ export default function App() {
     const abortController = new AbortController()
     const sendScope = pendingScopeKey(target,sendConversationId)
     sendAbortRef.current[sendScope] = { id: assistantMessageId, controller: abortController }
+    // Batch high-frequency stream deltas so React does not rerender the whole app per token.
+    let lastStreamPaint = 0
+    let streamPaintTimer: ReturnType<typeof setTimeout> | undefined
+    let latestStreamContent = ''
+    let latestStreamReasoning = ''
+    const flushStreamPaint = () => {
+      if (streamPaintTimer !== undefined) { clearTimeout(streamPaintTimer); streamPaintTimer = undefined }
+      lastStreamPaint = Date.now()
+      const content = latestStreamContent
+      const reasoning = latestStreamReasoning
+      updateActiveConversationMessages(target, prev => prev.map(m => m.id === assistantMessageId ? {...m, content, reasoning} : m), sendConversationId)
+    }
+    const queueStreamPaint = (content: string, reasoning: string) => {
+      latestStreamContent = content
+      latestStreamReasoning = reasoning
+      if (streamPaintTimer !== undefined) return
+      const delay = Math.max(0, 90 - (Date.now() - lastStreamPaint))
+      streamPaintTimer = setTimeout(flushStreamPaint, delay)
+    }
     // 重新生成失败/空白时恢复原有有效回复；消息若已被用户删除，map 匹配不到、天然无副作用。
     const restoreRegenerate = () => {
       if (!regen) return
@@ -1455,7 +1474,7 @@ export default function App() {
         const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
         let toolPayloadChars=0
-      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);queueStreamPaint(answer,thinking)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}queueStreamPaint(answer,thinking)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         // 本轮流结束：冲刷清洗器缓冲，把暂缓的尾部补回；未闭合的抑制块由 flush 丢弃，
         // 绝不把半截系统注入写进聊天记录或下一轮工具请求。
         const contentTail=contentCleanup.flush()
@@ -1714,6 +1733,7 @@ export default function App() {
       genOutcome='fail'
       return 'fail'
     } finally {
+      if (streamPaintTimer !== undefined) flushStreamPaint()
       if(sendAbortRef.current[sendScope]?.id===assistantMessageId)delete sendAbortRef.current[sendScope]
       delete sendingRef.current[sendScope]
       setSendingScopes(prev=>({...prev,[sendScope]:false}))
