@@ -3805,7 +3805,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setListState({loading:false,error:''});setCollapsed({});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
-  const openVendorPage=(id:string)=>{setTab('model');resetEditUI();onSection('vendor:'+id)}
+  const openVendorPage=(id:string)=>{setTab('model');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
   const addVendor=(e:FormEvent)=>{
     e.preventDefault()
     const name=newName.trim(),endpoint=newEndpoint.trim()
@@ -3813,7 +3813,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     const id='custom-'+Math.random().toString(36).slice(2,10)
     const keys=[...(newKey.trim()?[{id:crypto.randomUUID(),label:'主号',value:newKey.trim(),role:'primary' as const}]:[]),...(newMultiKey?newExtraKeys.filter(k=>k.value.trim()).map((k,i)=>({id:k.id,label:k.label.trim()||('备用 '+(i+1)),value:k.value.trim(),role:'backup' as const})):[])]
     commit([...vendors,{id,name,endpoint,apiPath:newApiPath.trim(),modelsPath:'',builtin:false,keys,models:[]}] as Vendor[])
-    setTab('model');resetEditUI()
+    setTab('model');resetEditUI();setShowBackupKeys(true)
     setNewName('');setNewKey('');setNewMultiKey(false);setNewExtraKeys([]);setNewEndpoint('');setNewApiPath('')
     onSection('vendor:'+id)
   }
@@ -3885,7 +3885,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <div className="vendor-config-menu">
           <div className="vendor-config-info"><span>供应商类型</span><span>OpenAI 兼容接口</span></div>
           <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
-          <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>多把密钥自动轮换，主号兜底</small></span><input type="checkbox" checked={showBackupKeys||backupKeys.length>0} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>多把密钥自动轮换，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           <div className="vendor-config-info"><span>获取模型</span><button type="button" onClick={()=>{setTab('model');void fetchRemote(active)}}>从当前供应商刷新　›</button></div>
         </div>
         <div className="vendor-config-section-title">连接设置</div>
@@ -3898,7 +3898,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
           <label className="vendor-field">模型列表路径 <small>可选；留空自动推导</small><input aria-label="模型列表路径" type="text" autoCapitalize="off" spellCheck={false} value={active.modelsPath||''} onChange={e=>patch(active.id,x=>({...x,modelsPath:e.target.value}))} placeholder="/models"/></label>
           <p className="vendor-url-hint">模型列表地址 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
         </div>
-        {(showBackupKeys||backupKeys.length>0)&&<div className="vendor-config-keys">
+        {showBackupKeys&&<div className="vendor-config-keys">
           <div className="vendor-config-section-title">多 Key 管理 <small>备用优先 · 主号兜底</small></div>
           {backupKeys.map((k,j)=><div className="vendor-key-row" key={k.id}><span className="vendor-key-no">{poolLabel(j)}</span><SoftSelect className="vendor-key-role" ariaLabel="Key 角色" value={k.role||'backup'} onChange={v=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,role:v as 'primary'|'backup'}:(v==='primary'&&y.role==='primary'?{...y,role:'backup' as const}:y))}))} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/><input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,label:e.target.value}:y)}))} placeholder="备注名"/><input aria-label="备用 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,x=>({...x,keys:x.keys.map(y=>y.id===k.id?{...y,value:e.target.value}:y)}))} placeholder="API Key"/><button type="button" aria-label="删除备用 Key" onClick={()=>patch(active.id,x=>({...x,keys:x.keys.filter(y=>y.id!==k.id)}))}>×</button></div>)}
           <div className="vendor-add-row"><input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(d=>({...d,label:e.target.value}))} placeholder="备注名"/><input aria-label="新 Key 值" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(d=>({...d,value:e.target.value}))} placeholder="添加备用 Key"/><button type="button" onClick={addBackupKey}>添加</button></div>
