@@ -3569,7 +3569,7 @@ function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePref
     // 供应商详情 / 手动新增是列表下的二级页：先回「供应商列表」，其余仍回设置首页。
     const unregister=pushBackHandler(()=>{if(section.startsWith('vendor:keys:')){setSection('vendor:'+section.slice('vendor:keys:'.length));return true}if(section.startsWith('vendor:')){setSection('vendor');return true}if(section){setSection('');return true}onBack();return true})
     return unregister
-  },[section])
+  },[section,onBack])
   // 输入框是「编辑缓冲」：null 表示未在编辑，直接显示当前生效时区；
   // 云端快照回填 timeZone 后无需任何同步逻辑，派生值自动跟随。
   const [tzDraft,setTzDraft]=useState<string|null>(null)
