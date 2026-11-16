@@ -129,7 +129,7 @@ type ProjectRecord={id:string;title:string;description:string;status:'进行中'
 type MemoryEntry = { id:string; title:string; content:string; keywords:string; category:'人物关系'|'经历事件'|'偏好习惯'|'项目进度'|'其他'; pinned:boolean; updatedAt:string }
 function readMessages(): Record<Person,ChatMessage[]> {
   const old = read<any>('ai-home.messages', {})
-  const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x=>({...x,attachments:(x.attachments||[]).map((a:any)=>({name:a.name,type:a.type,size:a.size}))}))
+  const migrate = (xs:any[]):ChatMessage[] => xs.map(x => typeof x === 'string' ? {role:'user',content:x} : x).filter(x => x && (x.role === 'user' || x.role === 'assistant') && typeof x.content === 'string').map(x=>({...x,attachments:(x.attachments||[]).map((a:any)=>({name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent}))}))
   return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,migrate(Array.isArray(old?.[id])?old[id]:[])])) as Record<Person,ChatMessage[]>
 }
 
@@ -1018,7 +1018,7 @@ export default function App() {
   useEffect(() => { localStorage.setItem('ai-home.assistants', JSON.stringify(assistants)) }, [assistants])
   useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
   useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
-  useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
+  useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   // 消息 id 补齐（一次性迁移，幂等）：老版本的用户消息没有 id，而编辑/删除/重新生成都按 id 定位。
   // 视图（messages）与持久化（conversations）按「同会话、同位置、同角色同内容」对齐，
   // 保证两边拿到同一个 id——修改才能同时写进两边、刷新后仍生效。
