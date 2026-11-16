@@ -80,7 +80,8 @@ import { loadCustomAssets, saveCustomAssets } from './assetStore.mjs'
 import { AndroidSystemSettings } from './AndroidSystemSettings'
 import { channelPlan, notificationPayload, decideNotification, loadNotified, markNotified, routeFromNotificationOpen } from './notificationDispatch.mjs'
 import { buildAlarmPlan } from './taskAlarms.mjs'
-import { registerSystemHandlers, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom, nativeHttpStreamAvailable, openNativeWebView, readClipboardText, appVersion } from './nativeSystem.mjs'
+import { readNotificationPrefs } from './notificationPreferences.mjs'
+import { registerSystemHandlers, clearConversationNotifications, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom, nativeHttpStreamAvailable, openNativeWebView, readClipboardText, appVersion } from './nativeSystem.mjs'
 import { friendlyHttpError, routeInfoFromError } from './chatHttpError.mjs'
 import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
@@ -366,8 +367,17 @@ export default function App() {
   // 原生闹钟触发时，若 WebView 进程还活着就立刻补跑一次本地任务结算。
   const localTaskTickRef = useRef<()=>void>(()=>{})
   const [alarmSyncTick, setAlarmSyncTick] = useState(0)
+  // Read receipts dismiss only the visible conversation's message notifications.
+  // This does not stop or dismiss the foreground generation service.
+  useEffect(() => {
+    if (page !== 'room' || !chatOpen || document.hidden || !readNotificationPrefs().autoClear) return
+    clearConversationNotifications(person, activeConversationIds[person] || '')
+  }, [page, chatOpen, person, activeConversationIds])
+
   // 「成功写入聊天」是唯一允许发通知的入口；重复调用也不会发第二条。
   const notifyAfterWrite = useCallback((input: Record<string, unknown>) => {
+    const prefs = readNotificationPrefs()
+    if (!prefs.enabled || (!prefs.proactive && ['task','task_result','task_notice'].includes(String(input.kind || '')))) return false
     const who = String(input.person || '')
     const payload = notificationPayload({
       ...input,
@@ -387,7 +397,7 @@ export default function App() {
     })
     genDebug('notification_requested',{key:payload.key,kind:payload.kind,person:payload.assistantId,conversationId:payload.conversationId,notify:decision.notify,reason:decision.reason||'?'})
     if (!decision.notify) return false
-    const sent = showSystemNotification(payload)
+    const sent = showSystemNotification({ ...payload, silent: !prefs.sound })
     // 去重集合记的是「通知发出的时间」，不是消息产生的时间：补跑几天前的任务
     // 不会因为这个时间戳过期而在后续轮询里重复弹。
     if (sent) markNotified(localStorage, payload.key, Date.now())
