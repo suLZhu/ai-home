@@ -2882,3 +2882,20 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .shell .settings-screen .vendor-icon-grid .vit-text{display:flex!important;flex:1!important;min-width:0!important;flex-direction:column!important;align-items:flex-start!important;gap:3px!important;overflow:hidden!important}
 .shell .settings-screen .vendor-icon-grid .vit-text b{display:block!important;max-width:100%!important;font-size:15px!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere!important;text-decoration:none!important}
 .shell .settings-screen .vendor-icon-grid .vit-text small{font-size:12px!important;line-height:1.3!important}
+
+/* Chat composer: full-width writing surface, separate action row, no nested mini input. */
+.shell .fullscreen-chat .compose.compose-box.compose-wechat{display:flex!important;flex-direction:column!important;gap:8px!important;margin:0!important;padding:12px 14px calc(12px + env(safe-area-inset-bottom))!important;border-radius:24px 24px 0 0!important;width:100%!important;box-sizing:border-box!important;background:var(--card,#f9f6fc)!important}
+.shell .fullscreen-chat .compose-editor{position:relative;display:block;width:100%;min-width:0}
+.shell .fullscreen-chat .compose-editor .cw-input{display:block;box-sizing:border-box;width:100%;height:clamp(108px,18vh,190px);min-height:108px;max-height:28vh;resize:none;border:0!important;border-radius:0!important;box-shadow:none!important;outline:none!important;background:transparent!important;padding:10px 42px 10px 8px!important;font-size:16px;line-height:1.6;color:var(--ink)}
+.shell .fullscreen-chat .composer-expanded .compose-editor .cw-input{height:clamp(220px,40vh,440px);max-height:45vh}
+.shell .fullscreen-chat .compose-expand{position:absolute;right:6px;top:5px;width:36px;height:36px;border:0!important;background:transparent!important;color:var(--muted);font-size:25px}
+.shell .fullscreen-chat .compose-wechat .cw-row{display:flex!important;align-items:center;gap:7px;min-width:0}
+.shell .fullscreen-chat .compose-model-select{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;max-width:none;height:39px;padding:0 12px;border:1px solid var(--line);border-radius:22px;background:var(--field);color:var(--ink);font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.shell .fullscreen-chat .compose-model-select span{margin-left:auto}
+.shell .fullscreen-chat .cw-row .cw-circle{width:34px;height:36px;flex:0 0 34px;border:0!important;font-size:21px}
+.shell .fullscreen-chat .cw-row .cw-circle.send{background:var(--accent)!important;color:white!important;border-radius:50%}
+.shell .fullscreen-chat .cw-row .cw-circle.send:disabled{opacity:.5}
+.shell .fullscreen-chat .compose-plus-panel{border:0!important;border-radius:18px;background:var(--field);padding:16px 8px}
+.shell .fullscreen-chat .cp-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.shell .fullscreen-chat .cp-item small{white-space:normal;overflow-wrap:anywhere;min-height:2.5em}
+@media(max-width:360px){.shell .fullscreen-chat .cw-row{gap:3px}.shell .fullscreen-chat .cw-row .cw-circle{width:30px;flex-basis:30px}.shell .fullscreen-chat .compose-model-select{padding:0 7px}}
