@@ -28,12 +28,15 @@ const storage = fakeStorage({
   'ai-home.activeConversationIds': '{}',
   'ai-home.local.memoryRecords': '[]',
   'ai-home.worldEntries': '[]',
+  'ai-home.worldbook': '{}',
+  'ai-home.mcpConnections': '{}',
+  'ai-home.local.mcp': '{}',
   'ai-home.sessionToken': 'secret',
   'other.key': 'x',
 })
 
-test('四种备份类型齐全', () => {
-  assert.deepEqual(BACKUP_KINDS.map(k => k.id), ['models', 'memory', 'chat', 'full'])
+test('六种备份类型齐全', () => {
+  assert.deepEqual(BACKUP_KINDS.map(k => k.id), ['models', 'memory', 'chat', 'world', 'mcp', 'full'])
 })
 
 test('分类收集只拿自己的键，整体收集拿全部 ai-home.* 但排除会话令牌', () => {
@@ -78,4 +81,26 @@ test('摘要统计本地键、记忆条数、API Key 数量', () => {
   })
   assert.deepEqual(summarizeBackup(payload), { localKeys: 2, memoryPeople: 2, memoryCount: 3, apiKeys: 2 })
   assert.deepEqual(summarizeBackup({ data: {} }), { localKeys: 0, memoryPeople: 0, memoryCount: 0, apiKeys: 0 })
+})
+
+test('世界书、MCP 单独备份，互不覆盖聊天和模型配置', () => {
+  const world = collectBackupLocal(storage, 'world')
+  const mcp = collectBackupLocal(storage, 'mcp')
+  assert.deepEqual(Object.keys(world).sort(), ['ai-home.worldEntries', 'ai-home.worldbook'])
+  assert.deepEqual(Object.keys(mcp).sort(), ['ai-home.local.mcp', 'ai-home.mcpConnections'])
+  assert.equal(backupFileName('world', new Date(2026, 10, 16)).startsWith('栖间-世界书-'), true)
+  assert.equal(kindFromFileName('栖间-MCP-2026-11-16-211900.json'), 'mcp')
+  const full = makeBackupEnvelope('full', {...world,...mcp,'ai-home.messages':'{}'})
+  assert.deepEqual(localKeysForRestore(full,'world'), world)
+  assert.deepEqual(localKeysForRestore(full,'mcp'), mcp)
+})
+
+test('分类恢复拒绝备份文件中夹带的其它类别设置', () => {
+  const malicious = makeBackupEnvelope('mcp', {
+    'ai-home.mcpConnections': '{"p":[]}',
+    'ai-home.vendors': '[{"name":"overwritten"}]',
+    'ai-home.sessionToken':'do-not-restore',
+  })
+  assert.deepEqual(localKeysForRestore(malicious,'mcp'), {'ai-home.mcpConnections':'{"p":[]}'})
+  assert.throws(() => localKeysForRestore(malicious,'world'), /类型不匹配/)
 })
