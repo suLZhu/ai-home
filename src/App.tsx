@@ -173,7 +173,15 @@ function useKeyboardViewport(){
       delete root.dataset.keyboard
       delete root.dataset.keyboardNative
     }
+    let blurTimer: ReturnType<typeof setTimeout>|undefined
+    const isEditing=()=>{
+      const active=document.activeElement as HTMLElement|null
+      return !!active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.isContentEditable)
+    }
     const apply=()=>{
+      // Android may dispatch an old IME inset after the send button blurs the editor.
+      // Do not re-open keyboard spacing while no editable element has focus.
+      if(!isEditing()){clear();return}
       const innerHeight=window.innerHeight
       const vvHeight=vv?vv.height:innerHeight
       const vvOffsetTop=vv?vv.offsetTop:0
@@ -206,18 +214,21 @@ function useKeyboardViewport(){
     // 发送/点按钮后输入框失焦、键盘收起：若没有可编辑元素，主动清掉键盘占位，
     // 避免「发送后输入栏停在半屏、下面一大片空白」。
     const onFocusOut=()=>{
-      window.setTimeout(()=>{
-        const active=document.activeElement as HTMLElement|null
-        const editing=!!active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.isContentEditable)
-        if(!editing) clear()
-      },140)
+      if(blurTimer)window.clearTimeout(blurTimer)
+      // Clear immediately, then recheck after Android's IME close animation.
+      window.requestAnimationFrame(()=>{if(!isEditing())clear()})
+      blurTimer=window.setTimeout(()=>{if(!isEditing())clear();else apply()},300)
     }
+    const onFocusIn=()=>{if(blurTimer)window.clearTimeout(blurTimer);apply()}
     document.addEventListener('focusout',onFocusOut,true)
+    document.addEventListener('focusin',onFocusIn,true)
     return ()=>{
       if(vv){vv.removeEventListener('resize',apply);vv.removeEventListener('scroll',apply)}
       window.removeEventListener('resize',apply)
       window.removeEventListener('aihome:insets',apply)
       document.removeEventListener('focusout',onFocusOut,true)
+      document.removeEventListener('focusin',onFocusIn,true)
+      if(blurTimer)window.clearTimeout(blurTimer)
       clear()
     }
   },[])
