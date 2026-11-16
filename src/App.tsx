@@ -15,12 +15,11 @@ import { RichText } from './RichText.tsx'
 import { UiDialogHost } from './UiDialogHost'
 import { SystemSetupSheet } from './SystemSetupSheet'
 import { BackupCenter } from './BackupCenter'
-import { RoomWidgets } from './RoomWidgets'
 import { WebBrowser, type WebPage } from './WebBrowser'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconCoffee, IconPhoto, IconMusic, IconLedger, IconBook, IconPlus, IconSun, type IconComponent } from './icons'
+import { IconSettings, IconClock, IconMemory, IconCalendar, IconSun } from './icons'
 import { BeautifySettings } from './BeautifySettings'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { PersonAppearance } from './PersonAppearance'
@@ -229,7 +228,7 @@ export default function App() {
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
-  const [page, setPage] = useState<Page>('home')
+  const [page, setPage] = useState<Page>('room')
   // 鉴权状态提前声明：通知点击路由 / 闹钟同步的 effect 依赖数组会立即求值。
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
   // 冷启动点击通知时会话还没装载：先暂存，等鉴权 / 快照就绪再路由。
@@ -1955,11 +1954,8 @@ export default function App() {
             </div>
           </div>
         </section>
-        <section className="sidebar-section sidebar-treasure">
-          <div className="sidebar-section-head"><b>百宝箱</b><small>TREASURE BOX</small></div>
-          <nav className="sidebar-links">{([{key:'客厅',Icon:IconCoffee,label:'公共客厅'},{key:'相册',Icon:IconPhoto,label:'相册'},{key:'播放器',Icon:IconMusic,label:'播放器'},{key:'记账单',Icon:IconLedger,label:'记账本'},{key:'日记本',Icon:IconBook,label:'日记本'},{key:'待定',Icon:IconPlus,label:'更多工具'}] as {key:string;Icon:IconComponent;label:string}[]).map(item=><button key={item.key} className={"sidebar-link"+(page==='fun'&&funShortcut===item.key?' active':'')} onClick={()=>openFunShortcut(item.key)}><span className="sidebar-link-icon"><item.Icon size={16}/></span><span><b>{item.label}</b><small>{item.key==='主动任务'||item.key==='自主行动'?'助手模块':'娱乐房模块'}</small></span></button>)}</nav>
-        </section>
         {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
+        <button type="button" className="sidebar-settings" onClick={()=>{setSidebarOpen(false);navigate('settings')}}><IconSettings size={16}/><b>设置</b></button>
       </div>
       <div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 侧边栏{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div>
     </aside>
@@ -1981,7 +1977,7 @@ export default function App() {
         editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} resendUserMessage={resendUserMessage} translateReasoning={translateReasoningText}
         tasks={tasks} addTask={addTask}
         userSettings={userSettings} setUserSettings={setUserSettings}
-        profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} />}
+        profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>navigate('settings')} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} beautifyPack={beautifyPack} setBeautifyPack={setBeautifyPack} customAssets={customAssets} setCustomAssets={setCustomAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} diagLogs={diagLogs} clearDiagLogs={clearDiagLogs} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} />}
     </section>
@@ -1989,12 +1985,6 @@ export default function App() {
     <UiDialogHost/>
     <WebBrowser page={webPage} onClose={() => setWebPage(null)}/>
     <SystemSetupSheet active={authStatus === 'signedIn'}/>
-    {!chatOpen && <nav className="dock-nav" aria-label="主导航">
-      <button type="button" className={page === 'home' ? 'on' : ''} onClick={() => { setSidebarOpen(false); navigate('home') }} aria-current={page === 'home' ? 'page' : undefined}><IconHome size={17}/><b>主页</b></button>
-      <button type="button" className={page === 'room' && activeTool !== '记忆面板' ? 'on' : ''} onClick={() => { setPage('room'); setChatOpen(false); setActiveTool(''); setSidebarOpen(false) }}><IconChat size={17}/><b>房间</b></button>
-      <button type="button" className={page === 'room' && activeTool === '记忆面板' ? 'on' : ''} onClick={() => { setSidebarOpen(false); openToolFor(person, '记忆面板') }}><IconMemory size={17}/><b>记忆</b></button>
-      <button type="button" className={page === 'settings' ? 'on' : ''} onClick={() => { setSidebarOpen(false); navigate('settings') }} aria-current={page === 'settings' ? 'page' : undefined}><IconSettings size={17}/><b>设置</b></button>
-    </nav>}
   </main>
 }
 
@@ -2214,7 +2204,7 @@ function Room(props: {
   deleteMessages: (ids:string[])=>void,
   regenerateMessage: (messageId:string)=>Promise<'ok'|'fail'|'noop'>,
   resendUserMessage: (messageId:string,newText:string)=>Promise<'ok'|'fail'|'noop'>,
-  translateReasoning: (text:string)=>Promise<string>
+  translateReasoning: (text:string)=>Promise<string>, onOpenSettings?: ()=>void
 }) {
   // 历史会话与工作区都默认展开：进来直接看到对话框名称与小程序。折叠偏好存本机，
   // 用 ref 设置 details.open，避免在下面的条件 return 之后引入 Hook（会打乱 Hook 顺序）。
@@ -2249,33 +2239,36 @@ function Room(props: {
   const convs=props.conversations[person]||[]
   const activeId=props.activeConversationIds[person]||''
   const lastText=(()=>{const list=props.messages[person]||[];for(let i=list.length-1;i>=0;i--){const c=list[i]?.content?.trim?.();if(c)return c.slice(0,36)}return '还没有消息，说点什么吧'})()
+  const worldCount=(props.worldEntries||[]).length
+  const mcpCount=Object.values(props.mcpConnections||{}).reduce((n,list)=>n+(list||[]).length,0)
+  const skillCount=loadSkills(person).length
+  const memoryCount=(props.memoryEntries?.[person]||[]).length
   function saveActiveMessages(){props.setConversations((old:Record<Person,Conversation[]>)=>({...old,[person]:(old[person]||[]).map(c=>c.id===activeId?{...c,messages:props.messages[person],updatedAt:new Date().toISOString()}:c)}))}
   function openConversation(id:string){if(id!==activeId){saveActiveMessages();const target=convs.find(c=>c.id===id);props.setActiveConversationIds((old:Record<Person,string>)=>({...old,[person]:id}));props.setMessages((old:Record<Person,ChatMessage[]>)=>({...old,[person]:target?.messages||[]}));props.setChatError('')}props.setChatOpen(true)}
   return <div className="room-screen">
     {roomHeader}
-    <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">→</span></button>
-    {/* 历史会话默认展开：对话框名称直接可见，不用再点一下。 */}
-    <details className="room-tools" ref={toolsRef} onToggle={e=>{try{localStorage.setItem('ai-home.roomToolsExpanded', e.currentTarget.open?'1':'0')}catch{}}}>
-      <summary><b>工作区</b><small>小组件 · 助手可以继续创建</small><span className="room-tools-chevron" aria-hidden="true">⌄</span></summary>
-      <WorkspaceApplets person={person} onOpen={t=>props.setActiveTool(t)}/>
-    </details>
+    <div className="room-illustration">
+      <div className="ri-sun" aria-hidden="true"/>
+      <div className="ri-window" aria-hidden="true"><i/><i/><i/></div>
+      <div className="ri-curtain l" aria-hidden="true"/><div className="ri-curtain r" aria-hidden="true"/>
+      <div className="ri-shelf" aria-hidden="true"><i/><i/><i/><i/></div>
+      <div className="ri-frame" aria-hidden="true"/>
+      <div className="ri-desk" aria-hidden="true"><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></div>
+      <div className="ri-rug" aria-hidden="true"/>
+      <div className="ri-plant" aria-hidden="true">🪴</div>
+      <div className="ri-lamp" aria-hidden="true">💡</div>
+      <div className="ri-cat" aria-hidden="true">🐈</div>
+      <button type="button" className="ri-spot chat" onClick={()=>openConversation(activeId)}><b>聊天</b><small>继续对话</small></button>
+      <button type="button" className="ri-spot shelf" onClick={()=>props.setActiveTool('世界书')}><b>世界书</b><small>{worldCount} 条</small></button>
+      <button type="button" className="ri-spot mcp" onClick={()=>props.setActiveTool('MCP')}><b>MCP</b><small>{mcpCount} 个服务</small></button>
+      <button type="button" className="ri-spot skill" onClick={()=>props.setActiveTool('SKILL 技能库')}><b>技能</b><small>{skillCount} 个</small></button>
+      <button type="button" className="ri-spot memory" onClick={()=>props.setActiveTool('记忆面板')}><b>记忆</b><small>最近 {memoryCount} 条</small></button>
+      <button type="button" className="ri-spot settings" onClick={()=>props.onOpenSettings?.()}><b>设置</b></button>
+    </div>
+    <button type="button" className="room-chat-entry" onClick={()=>openConversation(activeId)}><span className="room-chat-entry-mark" aria-hidden="true">💬</span><span className="room-chat-entry-text"><b>继续和{props.displayName(person)}聊天</b><small>{lastText}</small></span><span className="room-chat-entry-go" aria-hidden="true">›</span></button>
   </div>
 }
 
-// 工作区只放小程序：助手头像不再陈列在这里（房间顶部头像仍可打开助手档案）。
-// 后续做了小程序 / 单独的可视化网页，只要往 WORKSPACE_APPLETS 加一项（tool 或 shortcut）。
-const WORKSPACE_APPLETS: { id:Tool; icon:string; label:string; desc:string }[] = []
-
-function WorkspaceApplets({person,onOpen}:{ person:Person; onOpen:(t:Tool)=>void }) {
-  return <div className="workspace-applets">
-    {WORKSPACE_APPLETS.map(a=><button type="button" className="workspace-applet" key={a.id} onClick={()=>onOpen(a.id)}>
-      <span className="wa-icon" aria-hidden="true">{a.icon}</span>
-      <span className="wa-text"><b>{a.label}</b><small>{a.desc}</small></span>
-      <span className="wa-go" aria-hidden="true">›</span>
-    </button>)}
-    <div className="workspace-widgets"><RoomWidgets person={person}/></div>
-  </div>
-}
 
 // 助手档案：房间里 / 聊天里点助手头像后共用的设置面板。名称直接在这里改，
 // 人物设定、用户设定两段；长期/短期记忆已并入独立的记忆面板，不再在这里重复。
