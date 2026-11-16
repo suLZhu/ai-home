@@ -37,10 +37,10 @@ test('mergeAvailableModels：真实拉取优先，候选补齐且不重复', () 
   assert.deepEqual(mergeAvailableModels([], 'gemini'), [])
 })
 
-test('buildSubscriptionModels：没选过时默认全选，按勾选后严格按清单', () => {
+test('buildSubscriptionModels：没选过时默认不勾选，按勾选后严格按清单', () => {
   const all = buildSubscriptionModels([], ['gpt-5', 'o3'], null)
   assert.deepEqual(all.map(m => m.id), ['gpt-5', 'o3'])
-  assert.ok(all.every(m => m.selected && m.source === 'subscription'))
+  assert.ok(all.every(m => !m.selected && m.source === 'subscription'))
 
   const some = buildSubscriptionModels([], ['gpt-5', 'o3'], ['o3'])
   assert.deepEqual(some.map(m => [m.id, m.selected]), [['gpt-5', false], ['o3', true]])
