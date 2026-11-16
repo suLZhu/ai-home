@@ -2537,3 +2537,22 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 .settings-tabs-row{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:thin}
 .settings-tab{flex:0 0 auto;height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--line,#e2d9cc);background:var(--card,#fffdf9);font-size:12px;color:var(--ink,#302c37)}
 .settings-tab.active{background:var(--accent,#8a79aa);border-color:transparent;color:#fff}
+
+/* 统一设置卡片 + 紧凑间距 */
+.settings-groups{gap:10px!important}
+.settings-group{gap:4px!important}
+.settings-group-head{margin:0 0 2px!important}
+.settings-row{padding:8px 10px!important;border-radius:12px!important}
+.settings-detail{padding:0 0 18px!important}
+.settings-detail>.settings-back{margin:0 0 8px!important}
+.settings-tabs{margin:0 0 8px!important}
+.settings-tab{height:28px!important;padding:0 12px!important;font-size:11.5px!important}
+.settings-detail .setting-card,.settings-detail .settings-inner-card,.settings-detail .theme-page,.settings-detail .worldbook-panel,.settings-detail .usage-stats,.settings-detail .app-lock,.settings-detail .workspace-settings{border:1px solid var(--line,#e8dfd3)!important;border-radius:14px!important;background:var(--card,#fffdf8)!important;padding:12px 13px!important;margin:0 0 8px!important;box-shadow:none!important}
+.settings-detail .setting-card>b,.settings-detail .settings-inner-card>b{display:block;font-size:13px;margin-bottom:4px}
+.settings-detail .muted{font-size:11px!important;line-height:1.55}
+.settings-detail .settings-inner-card p{margin:2px 0 0!important}
+.settings-detail .settings-shortcuts{margin-top:6px!important}
+.settings-detail .settings-shortcut-group{gap:2px!important}
+.settings-detail .settings-shortcut-group button{height:28px!important;font-size:11px!important}
+.theme-settings h3{font-size:13px;margin:0 0 4px}
+.theme-settings .theme-tab-panel{gap:8px!important}
