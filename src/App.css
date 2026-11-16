@@ -2987,3 +2987,41 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .vendor-config-keys .vendor-add-row{display:flex;flex-wrap:wrap;gap:8px}
 .vendor-center .vendor-config-keys .vendor-add-row input{min-width:0;flex:1 1 130px}
 @media(max-width:520px){.vendor-center .vendor-config-kelivo{padding-top:8px}.vendor-center .vendor-config-menu,.vendor-center .vendor-config-fields{padding-left:12px;padding-right:12px}}
+
+/* Vendor model manager: Kelivo-inspired group rows, loose spacing, fixed actions. */
+.vendor-center .kelivo-model-screen{position:relative;display:flex;flex-direction:column;gap:12px;min-height:min(72dvh,720px);padding:10px 6px 92px!important;background:var(--card,#fff)}
+.vendor-center .kelivo-model-searchbar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--field,#f5f1f6);border:1px solid var(--line,#e2dbe5);border-radius:18px;min-height:58px}
+.vendor-center .kelivo-model-searchbar .kelivo-search-icon{font-size:30px;font-weight:300;color:var(--muted)}
+.vendor-center .kelivo-model-searchbar input{border:0!important;outline:0;box-shadow:none!important;background:transparent!important;flex:1;min-width:0;padding:6px;font-size:15px}
+.vendor-center .kelivo-model-searchbar button{border:0;background:transparent;padding:5px;color:var(--muted);font-size:24px;flex:0 0 auto}
+.vendor-center .kelivo-model-searchbar button.is-active{color:var(--accent,#8a71b2)}
+.vendor-center .kelivo-model-results{display:flex;flex-direction:column;gap:20px;padding:4px 0}
+.vendor-center .kelivo-model-group{background:transparent;border:0}
+.vendor-center .kelivo-model-group-toggle{display:flex;gap:15px;align-items:center;width:100%;min-height:68px;background:var(--field,#f6f3f7);border:0;border-radius:18px;padding:12px 17px;text-align:left;color:var(--ink,#3f3844)}
+.vendor-center .kelivo-model-group-toggle>span:first-child{font-size:23px;color:var(--muted);width:22px;text-align:center}
+.vendor-center .kelivo-model-group-toggle b{flex:1;font-size:16px;font-weight:500}
+.vendor-center .kelivo-model-group-toggle small{font-size:12px;color:var(--muted)}
+.vendor-center .kelivo-model-group-action{font-size:26px;font-weight:300;display:grid;place-items:center;min-width:40px;min-height:40px}
+.vendor-center .kelivo-model-row{display:flex;align-items:center;gap:13px;width:100%;min-height:96px;padding:16px 10px;border:0;border-bottom:1px solid var(--line,#eee8ee);background:transparent;text-align:left;color:var(--ink)}
+.vendor-center .kelivo-model-row:last-child{border-bottom:0}
+.vendor-center .kelivo-model-logo{width:42px;height:42px;border-radius:50%;background:var(--field,#f1edf5);display:grid;place-items:center;flex:0 0 auto;font-size:25px;color:var(--accent,#8a71b2)}
+.vendor-center .kelivo-model-info{display:flex;flex-direction:column;align-items:flex-start;gap:10px;flex:1;min-width:0}
+.vendor-center .kelivo-model-info>b{font-size:15px;font-weight:450;overflow-wrap:anywhere}
+.vendor-center .kelivo-model-badges{display:flex;flex-wrap:wrap;gap:5px}
+.vendor-center .kelivo-model-badges small{border:1px solid var(--line,#ddd5e1);border-radius:999px;padding:3px 9px;font-size:11px;color:var(--muted);background:var(--field,#f8f5f8)}
+.vendor-center .kelivo-model-add{font-size:30px;line-height:1;color:var(--muted);width:35px;text-align:center}
+.vendor-center .kelivo-model-add.selected{color:var(--accent,#8a71b2)}
+.vendor-center .kelivo-model-empty{display:flex;flex:1;flex-direction:column;justify-content:center;align-items:center;gap:10px;min-height:200px;text-align:center}
+.vendor-center .kelivo-model-empty b{font-weight:400;font-size:18px}
+.vendor-center .kelivo-model-empty span{font-size:13px;color:var(--muted);max-width:270px}
+.vendor-center .kelivo-model-nomatch{text-align:center;padding:35px 12px}
+.vendor-center .kelivo-model-bottom{position:sticky;bottom:6px;z-index:5;align-self:center;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 12px;background:var(--field,#f4f0f5);border:1px solid var(--line,#e2dbe5);border-radius:999px;box-shadow:0 4px 20px #2f20300c}
+.vendor-center .kelivo-model-bottom button{min-height:48px;min-width:48px;padding:8px 14px;border:1px solid var(--line,#e1d9e3);background:var(--card,#fff);border-radius:999px;color:var(--ink);font-size:15px}
+.vendor-center .kelivo-model-bottom button:disabled{opacity:.4}
+.vendor-center .kelivo-model-bottom button.kelivo-model-bottom-primary{background:var(--accent,#8d79ad);color:#fff;font-size:28px}
+.vendor-center .kelivo-custom-model{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--field)}
+.vendor-center .kelivo-custom-model input{min-width:0;flex:1 1 180px}
+.vendor-center .kelivo-custom-model button{border:1px solid var(--line);border-radius:12px;padding:8px}
+.vendor-center .kelivo-batch-check{display:grid;place-items:center;border:1px solid var(--accent);width:25px;height:25px;flex-shrink:0;border-radius:50%}
+.vendor-center .kelivo-batch-check.checked{background:var(--accent);color:#fff}
+@media(max-width:440px){.vendor-center .kelivo-model-row{min-height:84px;padding:12px 5px;gap:9px}.vendor-center .kelivo-model-info>b{font-size:14px}.vendor-center .kelivo-model-logo{width:37px;height:37px}}
