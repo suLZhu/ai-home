@@ -1,3 +1,5 @@
+import type { ModelSpec } from './modelSpecs.d.mts'
+
 export type VendorKey = { id: string; label: string; value: string; role: 'primary' | 'backup' }
 export type VendorModel = { id: string; name: string; selected: boolean; source?: string }
 export type Vendor = {
@@ -7,11 +9,13 @@ export type Vendor = {
   apiPath?: string
   modelsPath?: string
   builtin: boolean
+  enabled?: boolean
   subscription?: boolean
   subscriptionChannel?: string
   subscriptionAccountId?: string
   keys: VendorKey[]
   models: VendorModel[]
+  modelOverrides?: Record<string, ModelSpec>
 }
 
 export type VendorKeyOption = VendorKey & { vendorId: string; vendorName: string }

@@ -4,6 +4,7 @@ import type { ModelProfile, PersonBinding } from './resourceBindings.mjs'
 import type { Vendor } from './vendors.mjs'
 import { buildModelCatalog, filterCatalog, profileIdForCatalogEntry } from './unifiedModels.mjs'
 import { routesForModel } from './modelRoutes.mjs'
+import { specForModel, specBadges } from './modelSpecs.mjs'
 import {
   addRoute, updateRoute, removeRoute, primaryRoute, setFixedRoute,
   selectLogicalModel, fixedRouteId, type RouteState,
@@ -157,37 +158,52 @@ export function ModelPickerSheet({
               }
             }
           }
-          const groups = new Map<string,{name:string;items:Choice[]}>()
+          const badgesOf=(choice:Choice)=>{
+            const vendor=vendors.find(v=>v.id===choice.vendorId)
+            if(!vendor) return [] as {id:string;label:string;tone:string}[]
+            return specBadges(specForModel(vendor,choice.model))
+          }
+          const renderRow=(choice:Choice)=>{
+            const selected=choice.routeId?fixed===choice.routeId:activeId===choice.profileId&&!fixed
+            const badges=badgesOf(choice)
+            return <div className={'model-sheet-row'+(selected?' selected':'')} key={choice.id}>
+              <button type="button" className="model-sheet-pick" aria-pressed={selected} onClick={()=>{
+                onPatchBinding({...binding,modelProfileId:choice.profileId})
+                onPick(choice.profileId)
+                setRouteState(s=>{
+                  const next=selectLogicalModel(s,person,choice.logicalId)
+                  return setFixedRoute(next,person,choice.routeId)
+                })
+              }}>
+                <span className="model-sheet-avatar">{vendorInitial(choice.name)}</span>
+                <span className="model-sheet-main"><b>{choice.name}</b><small>{choice.model}</small>{badges.length>0&&<span className="model-sheet-specs">{badges.map(b=><em key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</em>)}</span>}</span>
+                {choice.subscription&&<span className="model-sheet-badge">订阅</span>}
+                {selected&&<span className="model-sheet-check">✓</span>}
+              </button>
+              {choice.routeId&&<button type="button" className="model-sheet-route-toggle" aria-label={'编辑线路 · '+choice.vendorName} onClick={()=>setRoutesOpen(routesOpen===choice.routeId?'':choice.routeId)}>⚙</button>}
+              <button type="button" className={'model-sheet-fav'+(favorites.includes(choice.logicalId)?' on':'')} onClick={()=>toggleFav(choice.logicalId)} aria-label="收藏模型">{favorites.includes(choice.logicalId)?'♥':'♡'}</button>
+              {choice.routeId&&routesOpen===choice.routeId&&<ModelRoutesPanel logicalId={choice.logicalId} defaultModel={choice.model} routes={routesForModel(routeState.routes,choice.logicalId)} vendors={vendors} fixedRouteId={fixed} onAdd={patch=>update(s=>addRoute(s,choice.logicalId,patch,crypto.randomUUID()))} onUpdate={(id,patch)=>update(s=>updateRoute(s,id,patch))} onRemove={id=>update(s=>removeRoute(s,id))} onPrimary={id=>update(s=>primaryRoute(s,choice.logicalId,id))} onFixed={id=>update(s=>setFixedRoute(s,person,id))}/>}
+            </div>
+          }
+          const favItems=choices.filter(c=>favorites.includes(c.logicalId))
+          const groups=new Map<string,{name:string;items:Choice[]}>()
           for(const choice of choices){
-            const group = groups.get(choice.vendorId) || {name:choice.vendorName,items:[]}
+            if(favorites.includes(choice.logicalId)) continue
+            const group=groups.get(choice.vendorId)||{name:choice.vendorName,items:[]}
             group.items.push(choice);groups.set(choice.vendorId,group)
           }
-          return [...groups.entries()].map(([vendorId,group])=><section className="model-sheet-group" key={vendorId}>
-            <button type="button" className="model-vendor-heading" aria-expanded={!collapsedVendors.includes(vendorId)} onClick={()=>setCollapsedVendors(old=>old.includes(vendorId)?old.filter(id=>id!==vendorId):[...old,vendorId])}>
-              <b>{group.name}</b><small>{group.items.length} 个模型</small><span>{collapsedVendors.includes(vendorId)?'⌄':'⌃'}</span>
-            </button>
-            {!collapsedVendors.includes(vendorId)&&group.items.map(choice=>{
-              const selected=choice.routeId?fixed===choice.routeId:activeId===choice.profileId&&!fixed
-              return <div className={'model-sheet-row'+(selected?' selected':'')} key={choice.id}>
-                <button type="button" className="model-sheet-pick" aria-pressed={selected} onClick={()=>{
-                  onPatchBinding({...binding,modelProfileId:choice.profileId})
-                  onPick(choice.profileId)
-                  setRouteState(s=>{
-                    const next=selectLogicalModel(s,person,choice.logicalId)
-                    return setFixedRoute(next,person,choice.routeId)
-                  })
-                }}>
-                  <span className="model-sheet-avatar">{vendorInitial(choice.name)}</span>
-                  <span className="model-sheet-main"><b>{choice.name}</b><small>{choice.model}</small></span>
-                  {choice.subscription&&<span className="model-sheet-badge">订阅</span>}
-                  {selected&&<span className="model-sheet-check">✓</span>}
-                </button>
-                {choice.routeId&&<button type="button" className="model-sheet-route-toggle" aria-label={'编辑线路 · '+choice.vendorName} onClick={()=>setRoutesOpen(routesOpen===choice.routeId?'':choice.routeId)}>⚙</button>}
-                <button type="button" className={'model-sheet-fav'+(favorites.includes(choice.logicalId)?' on':'')} onClick={()=>toggleFav(choice.logicalId)} aria-label="收藏模型">{favorites.includes(choice.logicalId)?'♥':'♡'}</button>
-                {choice.routeId&&routesOpen===choice.routeId&&<ModelRoutesPanel logicalId={choice.logicalId} defaultModel={choice.model} routes={routesForModel(routeState.routes,choice.logicalId)} vendors={vendors} fixedRouteId={fixed} onAdd={patch=>update(s=>addRoute(s,choice.logicalId,patch,crypto.randomUUID()))} onUpdate={(id,patch)=>update(s=>updateRoute(s,id,patch))} onRemove={id=>update(s=>removeRoute(s,id))} onPrimary={id=>update(s=>primaryRoute(s,choice.logicalId,id))} onFixed={id=>update(s=>setFixedRoute(s,person,id))}/>}
-              </div>
-            })}
-          </section>)
+          return <>
+            {favItems.length>0&&<section className="model-sheet-group model-sheet-favgroup">
+              <div className="model-vendor-heading static"><b>收藏</b><small>{favItems.length} 个模型</small><span aria-hidden="true">♥</span></div>
+              {favItems.map(renderRow)}
+            </section>}
+            {[...groups.entries()].map(([vendorId,group])=><section className="model-sheet-group" key={vendorId}>
+              <button type="button" className="model-vendor-heading" aria-expanded={!collapsedVendors.includes(vendorId)} onClick={()=>setCollapsedVendors(old=>old.includes(vendorId)?old.filter(id=>id!==vendorId):[...old,vendorId])}>
+                <b>{group.name}</b><small>{group.items.length} 个模型</small><span>{collapsedVendors.includes(vendorId)?'⌄':'⌃'}</span>
+              </button>
+              {!collapsedVendors.includes(vendorId)&&group.items.map(renderRow)}
+            </section>)}
+          </>
         })()}
       </div>
       <div className="model-sheet-filter" aria-label="按来源筛选">

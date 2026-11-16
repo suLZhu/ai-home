@@ -3127,3 +3127,37 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .vendor-tabs{position:sticky;bottom:0;z-index:6;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;background:var(--card,#fff);padding:9px 12px max(12px,env(safe-area-inset-bottom));border:1px solid var(--line,#e8e0eb);border-radius:18px}
 .vendor-center .vendor-tabs button{min-height:45px;border:none;border-radius:13px;background:transparent;color:var(--muted)}
 .vendor-center .vendor-tabs button.active{background:var(--field,#f2ebf6);color:var(--accent,#9179b0)}
+
+/* ── 模型规格：分组列表 + 能力徽标（Kelivo 风格） ───────────────────────── */
+.vendor-center .vendor-kelivo-added-group{display:flex;flex-direction:column;min-width:0}
+.vendor-center .vendor-kelivo-added-group-head{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:10px 8px 4px;border:0!important;background:transparent!important;box-shadow:none!important;color:var(--muted);text-align:left}
+.vendor-center .vendor-kelivo-added-group-head span{font-size:15px;width:14px}
+.vendor-center .vendor-kelivo-added-group-head b{font-size:12px;letter-spacing:.08em;font-weight:600}
+.vendor-center .vendor-kelivo-added-group-head small{margin-left:auto;font-size:11px;opacity:.75}
+.vendor-center button.vendor-kelivo-model-label{align-items:flex-start;gap:5px!important;padding:2px 2px;border:0!important;background:transparent!important;box-shadow:none!important;font:inherit;color:inherit;text-align:left}
+.vendor-center button.vendor-kelivo-model-label b{font-size:15px;font-weight:500;line-height:1.3}
+.vendor-center .vendor-kelivo-badges small.m-spec-badge{border-color:transparent;padding:2px 8px;font-size:10.5px;font-weight:500}
+.m-spec-badge.vision{background:rgba(47,125,107,.14);color:#2f7d6b}
+.m-spec-badge.tool{background:rgba(54,96,173,.14);color:#3660ad}
+.m-spec-badge.reasoning{background:rgba(146,86,163,.16);color:#8a4f9c}
+.m-spec-badge.muted{background:var(--field,#f4f1f4);color:var(--muted)}
+.vendor-center .vendor-kelivo-spec-line{font-style:normal;font-size:11px;line-height:1.4;color:var(--muted);opacity:.9}
+.vendor-center .vendor-kelivo-spec-gear{flex:0 0 36px;width:36px;height:36px;border:1px solid var(--line,#e2dcea)!important;border-radius:11px!important;background:var(--field,#f7f4fa)!important;color:var(--muted)!important;font-size:15px!important;box-shadow:none!important}
+.vendor-center .vendor-kelivo-added-row{align-items:center}
+.vendor-center .vendor-kelivo-added-row .vendor-kelivo-model-mark{flex:0 0 38px;width:38px;height:38px;font-size:22px}
+.vendor-center .vendor-kelivo-added-row{padding:10px 4px;min-height:76px}
+
+/* 供应商列表：状态胶囊 / 停用态 / 搜索空结果 */
+.vendor-center .vendor-kelivo-provider-status{flex:0 0 auto;margin-left:auto;padding:3px 9px;border-radius:999px;font-size:10.5px;line-height:1.5;letter-spacing:.02em}
+.vendor-kelivo-provider-status.on{background:rgba(47,125,107,.15);color:#2f7d6b}
+.vendor-kelivo-provider-status.off{background:var(--field,#f1eef3);color:var(--muted)}
+.vendor-kelivo-provider-status.warn{background:rgba(181,120,24,.16);color:#9a6414}
+.vendor-center .vendor-kelivo-provider-row.off{opacity:.62}
+.vendor-center .vendor-kelivo-provider-row.off .vendor-kelivo-provider-icon{filter:grayscale(1)}
+.vendor-center .vendor-kelivo-empty-hint{text-align:center;padding:18px 0;font-size:12px}
+
+/* 聊天模型面板：行内能力徽标与收藏分组 */
+.model-sheet-specs{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.m-spec-badge{display:inline-flex;align-items:center;font-style:normal;font-size:10px;line-height:1.5;padding:1px 7px;border-radius:999px;border:1px solid transparent;background:var(--field,#f4f1f4);color:var(--muted)}
+.model-vendor-heading.static{cursor:default}
+.model-sheet-favgroup .model-vendor-heading span{margin-left:auto;color:#b8567a}

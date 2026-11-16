@@ -61,6 +61,8 @@ import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
 import { ModelPickerSheet } from './ModelPickerSheet'
+import { ModelSpecSheet } from './ModelSpecSheet'
+import { specForModel, withModelSpec, clearModelSpec, specBadges, specSummary, inferModelSpec } from './modelSpecs.mjs'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
@@ -3766,6 +3768,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
 
   const [batchMode,setBatchMode]=useState(false)
   const [batchIds,setBatchIds]=useState<string[]>([])
+  const [specTarget,setSpecTarget]=useState('')
+  const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
+  const [vendorQuery,setVendorQuery]=useState('')
+  const [testState,setTestState]=useState<{busy:boolean;ok?:boolean;text:string}>({busy:false,text:''})
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
   const [customModelOpen,setCustomModelOpen]=useState(false)
@@ -3807,7 +3813,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
     patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
     setKeyDraft({label:'',value:''})
   }
-  const resetEditUI=()=>{setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchMode(false);setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchMode(false);setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const openVendorPage=(id:string)=>{setTab('config');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
@@ -3838,6 +3844,22 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
       setListState({loading:false,error:''})
     }catch(e){setListState({loading:false,error:e instanceof Error?e.message:'获取模型失败'})}
   }
+  // 测试连接：复用 /api/models 代理拉一次列表，能拉通就说明地址与 Key 都对。
+  const testVendor=async(v:Vendor)=>{
+    const key=orderedKeys(v.keys).find(k=>k.value)?.value||''
+    if(!v.endpoint.trim()){setTestState({busy:false,ok:false,text:'请先填写 API Base URL'});return}
+    if(!key){setTestState({busy:false,ok:false,text:'请先填写 API Key'});return}
+    setTestState({busy:true,text:'正在连接 '+v.name+'…'})
+    const started=typeof performance!=='undefined'?performance.now():Date.now()
+    try{
+      const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:v.endpoint.trim(),apiKey:key,modelsUrl:modelListUrl(v)})})
+      const d=await r.json().catch(()=>({}))
+      const cost=Math.round((typeof performance!=='undefined'?performance.now():Date.now())-started)
+      if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
+      const count=Array.isArray(d?.models)?d.models.length:0
+      setTestState({busy:false,ok:true,text:'连接成功 · '+cost+' ms · '+count+' 个模型'})
+    }catch(e){setTestState({busy:false,ok:false,text:'连接失败：'+(e instanceof Error?e.message:'未知错误')})}
+  }
   const remoteIds=active?(remoteModels[active.id]||[]):[]
   const pickedModels=active?active.models.filter(m=>m.selected):[]
   const query=modelQuery.trim().toLowerCase()
@@ -3848,14 +3870,22 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
   return <div className="vendor-center">
     {isList&&<>
       <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
-      <p className="resource-hint">点一家供应商进入它自己的配置页：先在「配置」填 API Key 和网址，再到「模型」点 ⟳ 只拉这一家网址有的模型，＋ 点选后才进聊天可选。不预置任何别的默认模型。</p>
+      <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
-        {vendors.map(v=><button type="button" className="vendor-kelivo-provider-row" key={v.id} onClick={()=>openVendorPage(v.id)}>
-          <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
-          <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.models.filter(m=>m.selected).length} 个模型 · {v.keys.filter(k=>!!k.value).length} 把 Key</small></span><span className="vendor-kelivo-provider-caret">›</span>
-        </button>)}
+        {vendors.filter(v=>!vendorQuery.trim()||v.name.toLowerCase().includes(vendorQuery.trim().toLowerCase())).map(v=>{
+          const picked=v.models.filter(m=>m.selected).length
+          const keys=v.keys.filter(k=>!!k.value).length
+          const off=v.enabled===false
+          const status=off?['已停用','off']:keys?['已启用','on']:['未配置 Key','warn']
+          return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
+            <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
+            <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{picked} 个模型 · {keys} 把 Key</small></span>
+            <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
+            <span className="vendor-kelivo-provider-caret">›</span>
+          </button>})}
         <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b><small>OpenAI 兼容接口 / 自定义中转站</small></span><span className="vendor-kelivo-provider-caret">›</span></button>
       </div>
+      {!vendors.some(v=>!vendorQuery.trim()||v.name.toLowerCase().includes(vendorQuery.trim().toLowerCase()))&&<p className="muted vendor-kelivo-empty-hint">没有匹配的供应商</p>}
     </>}
 
     {showNew&&<section className="vendor-page">
@@ -3883,8 +3913,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
         <div className="vendor-config-section-title">管理</div>
         <div className="vendor-config-menu">
           <div className="vendor-config-info"><span>供应商类型</span><span>OpenAI 兼容接口</span></div>
+          <label className="vendor-config-info vendor-config-switch"><span>启用这家供应商 <small>停用后它的模型与 Key 不再出现在聊天里</small></span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
           <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 管理 <small>展开或收起备用密钥，不修改轮换配置</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
+          <div className="vendor-config-info"><span>测试连接 <small>{testState.text||'用当前 Base URL 与 Key 拉一次模型列表'}</small></span><button type="button" disabled={testState.busy} onClick={()=>void testVendor(active)}>{testState.busy?'测试中…':testState.ok===false?'重试':'开始测试'}</button></div>
           <div className="vendor-config-info"><span>获取模型</span><button type="button" onClick={()=>{setTab('model');void fetchRemote(active)}}>从当前供应商刷新　›</button></div>
         </div>
         <div className="vendor-config-section-title">连接设置</div>
@@ -3909,11 +3941,26 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
       {tab==='model'&&<div className="vendor-card-body vendor-kelivo-model-page">
         <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索已添加模型" placeholder="搜索已添加模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)}/><button type="button" title="批量管理" aria-label="批量管理" onClick={()=>{setBatchMode(v=>!v);setBatchIds([])}}>{batchMode?'✕':'☑'}</button></div>
         <div className="vendor-kelivo-added">
-          {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:pickedModels.filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=><div className="vendor-kelivo-added-row" key={m.id}>
-            {batchMode&&<input aria-label={'选中 '+m.id} type="checkbox" checked={batchIds.includes(m.id)} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,m.id]:ids.filter(id=>id!==m.id))}/>}
-            <span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(m.id)}</span><div className="vendor-kelivo-model-label"><b>{m.name||m.id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>模型 ID</small></div></div>
-            {!batchMode&&<button type="button" className="vendor-kelivo-remove-one" title={'移除 '+m.id} aria-label={'移除 '+m.id} onClick={()=>unpickModel(active.id,m.id)}>−</button>}
-          </div>)}
+          {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
+            groupModels(pickedModels.filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=>m.id)).map(g=><div className="vendor-kelivo-added-group" key={g.id}>
+              <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen[g.id]!==false} onClick={()=>setAddedGroupOpen(v=>({...v,[g.id]:v[g.id]!==false?false:true}))}>
+                <span>{addedGroupOpen[g.id]!==false?'⌄':'›'}</span><b>{g.label}</b><small>{g.models.length}</small>
+              </button>
+              {addedGroupOpen[g.id]!==false&&g.models.map(id=>{
+                const m=pickedModels.find(x=>x.id===id); if(!m) return null
+                const spec=specForModel(active,id); const badges=specBadges(spec); const meta=specSummary(spec)
+                return <div className="vendor-kelivo-added-row" key={id}>
+                  {batchMode&&<input aria-label={'选中 '+id} type="checkbox" checked={batchIds.includes(id)} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}/>}
+                  <span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span>
+                  <button type="button" className="vendor-kelivo-model-label" aria-label={'编辑 '+id+' 的模型规格'} onClick={()=>setSpecTarget(id)}>
+                    <b>{spec.displayName||m.name||id}</b>
+                    <span className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>未设置能力</small>}</span>
+                    {!!meta&&<em className="vendor-kelivo-spec-line">{meta}</em>}
+                  </button>
+                  <button type="button" className="vendor-kelivo-spec-gear" title="模型规格" aria-label={'模型规格 '+id} onClick={()=>setSpecTarget(id)}>⚙</button>
+                  {!batchMode&&<button type="button" className="vendor-kelivo-remove-one" title={'移除 '+id} aria-label={'移除 '+id} onClick={()=>unpickModel(active.id,id)}>−</button>}
+                </div>})}
+            </div>)}
           {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
         </div>
         <div className="vendor-kelivo-floating-actions">
@@ -3937,13 +3984,14 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection}:{
             <div className="vendor-kelivo-sheet-items">
               {groupModels([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
                 <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span>{sheetGroupOpen[g.id]?'›':'⌄'}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}>＋</span></button>
-                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);return <div className="vendor-kelivo-sheet-model" key={id}><span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span><div className="vendor-kelivo-model-label"><b>{id}</b><div className="vendor-kelivo-badges"><small>聊天</small><small>模型 ID</small></div></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
+                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const badges=specBadges(inferModelSpec(id));return <div className="vendor-kelivo-sheet-model" key={id}><span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span><div className="vendor-kelivo-model-label"><b>{id}</b><div className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>未识别</small>}</div></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
               </div>)}
               {!listState.loading&&!remoteIds.length&&<div className="vendor-kelivo-empty"><b>尚未获取模型</b><small>点击右上角刷新，或关闭弹层后手动添加模型</small></div>}
             </div>
             <button type="button" className="vendor-kelivo-sheet-done" onClick={()=>setModelSheetOpen(false)}>完成 · 已添加 {pickedModels.length} 个</button>
           </section>
         </div>}
+        {!!specTarget&&<ModelSpecSheet vendorName={active.name} modelId={specTarget} spec={specForModel(active,specTarget)} onClose={()=>setSpecTarget('')} onReset={()=>{patch(active.id,v=>clearModelSpec(v,specTarget) as Vendor);setSpecTarget('')}} onSave={spec=>{patch(active.id,v=>withModelSpec(v,specTarget,spec) as Vendor);setSpecTarget('')}}/>}
       </div>}
       <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
         <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>

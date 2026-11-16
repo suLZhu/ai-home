@@ -67,6 +67,8 @@ export function modelListUrl(vendor) {
 // 大系列识别：只看名字里有没有品牌标记（CLAUDE / GPT / GEMINI…），
 // 前面粘的「反重力」「按次」这类前缀一律不参与判断；中文品牌名也认。
 // 太短、容易误伤的别名（yi / phi / o1-o9）单独加边界保护。
+import { normalizeModelSpec } from './modelSpecs.mjs'
+
 const familyRule = (id, label, words) => ({ id, label, re: new RegExp(words) })
 const MODEL_FAMILIES = [
   familyRule('gpt', 'GPT', 'gpt|chatgpt|codex|davinci|(?:^|[^a-z0-9])o[1-9](?![0-9])'),
@@ -150,6 +152,18 @@ function normalizeKeys(raw) {
     }))
 }
 
+// 模型规格覆盖表：{ [modelId]: ModelSpec }，只存用户改过的字段；坏数据直接丢掉。
+function normalizeOverrides(raw) {
+  const out = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [id, spec] of Object.entries(raw)) {
+    const key = str(id)
+    if (!key || !spec || typeof spec !== 'object') continue
+    out[key] = normalizeModelSpec(spec)
+  }
+  return out
+}
+
 function normalizeModels(raw, fallback) {
   const saved = new Map(
     (Array.isArray(raw) ? raw : [])
@@ -185,9 +199,11 @@ export function normalizeVendors(raw) {
       apiPath: s ? str(s.apiPath) : '',
       modelsPath: s ? str(s.modelsPath) : '',
       builtin: true,
+      enabled: s ? s.enabled !== false : true,
       subscription: s ? !!s.subscription : false,
       keys: s ? normalizeKeys(s.keys) : [],
       models: s ? normalizeModels(s.models, v.models) : [],
+      modelOverrides: s ? normalizeOverrides(s.modelOverrides) : {},
     }
   })
   const custom = (Array.isArray(raw) ? raw : [])
@@ -199,9 +215,11 @@ export function normalizeVendors(raw) {
       apiPath: str(v.apiPath),
       modelsPath: str(v.modelsPath),
       builtin: false,
+      enabled: v.enabled !== false,
       subscription: !!v.subscription,
       keys: normalizeKeys(v.keys),
       models: normalizeModels(v.models, []),
+      modelOverrides: normalizeOverrides(v.modelOverrides),
     }))
   return [...builtins, ...custom]
 }
@@ -216,6 +234,7 @@ export function syncVendorProfiles(vendors, profiles) {
   const manual = (Array.isArray(profiles) ? profiles : []).filter((p) => p && typeof p.id === 'string' && !p.id.startsWith('vendor:'))
   const picked = []
   for (const v of Array.isArray(vendors) ? vendors : []) {
+    if (!v || v.enabled === false) continue
     for (const m of Array.isArray(v.models) ? v.models : []) {
       if (!m || !m.selected) continue
       picked.push({
@@ -237,6 +256,7 @@ export function syncVendorProfiles(vendors, profiles) {
 export function allVendorKeys(vendors) {
   const out = []
   for (const v of Array.isArray(vendors) ? vendors : []) {
+    if (!v || v.enabled === false) continue
     for (const k of orderedKeys(normalizeKeys(v.keys))) {
       if (!k || !k.value) continue
       out.push({ id: k.id, label: k.label, role: k.role, vendorId: v.id, vendorName: v.name, value: k.value })
@@ -290,5 +310,5 @@ export function readKeyCandidates(body) {
 
 // 自定义供应商 / 自定义模型的空白模板。
 export function blankVendor(name = '', endpoint = '') {
-  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, keys: [], models: [] }
+  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, enabled: true, keys: [], models: [], modelOverrides: {} }
 }
