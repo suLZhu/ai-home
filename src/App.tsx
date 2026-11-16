@@ -61,8 +61,9 @@ import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
 import { ModelPickerSheet } from './ModelPickerSheet'
-import { ModelSpecSheet } from './ModelSpecSheet'
-import { specForModel, withModelSpec, clearModelSpec, specBadges, specSummary, inferModelSpec } from './modelSpecs.mjs'
+import { ModelSpecPage } from './ModelSpecPage'
+import { ModelChips } from './ModelChips'
+import { specForModel, withModelSpec, clearModelSpec, specBadges, inferModelSpec } from './modelSpecs.mjs'
 // 用户设置：每位助手单独记「怎么称呼用户 / 用户是谁 / 偏好」，聊天时注入 system 提示。
 import { USER_SETTINGS_KEY, blankUserSettings, normalizeUserSettings, buildUserContext, type UserSettings } from './userSettings.mjs'
 // 头像：本机选图裁方压缩，两位助手各存一份，互不影响。
@@ -2115,7 +2116,7 @@ export default function App() {
       {page === 'home' && <Home onPerson={openPerson} onOpenMemory={(target) => openToolFor(target, '记忆面板')} onOpenCalendar={() => openToolFor(person, '工作流')} time={time} today={todayLabel} displayName={displayName} characters={characters} conversations={conversations} inbox={inbox} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen} assistants={assistants} setAssistants={setAssistants}
         draft={draft} setDraft={setDraft} messages={messages} send={send} conversations={conversations} activeConversationIds={activeConversationIds} setConversations={setConversations} setActiveConversationIds={setActiveConversationIds} setMessages={setMessages}
-         modelProfiles={modelProfiles} bindings={bindings} setBindings={setBindings}
+         modelProfiles={modelProfiles} defaultModelId={defaultModelId} bindings={bindings} setBindings={setBindings}
          vendors={vendors} chatPool={chatPool} setChatPool={setChatPool}
          routeState={routeState} setRouteState={setRouteState} lastRouteInfo={lastRouteInfo}
          activeTool={activeTool} setActiveTool={(v)=>{ if(v===''&&toolReturnToSettings){ setToolReturnToSettings(false); setActiveTool(''); setPage('settings') } else setActiveTool(v) }} memory={memory} setMemory={setMemory}
@@ -2324,7 +2325,7 @@ function Room(props: {
   assistants: AssistantRecord[], setAssistants: React.Dispatch<React.SetStateAction<AssistantRecord[]>>,
   draft: string, setDraft: (v: string) => void, messages: Record<Person,ChatMessage[]>, send: (textInput: string, attachments?: MessageAttachment[]) => void,
   conversations:Record<Person,Conversation[]>, activeConversationIds:Record<Person,string>, setConversations:React.Dispatch<React.SetStateAction<Record<Person,Conversation[]>>>, setActiveConversationIds:React.Dispatch<React.SetStateAction<Record<Person,string>>>, setMessages:React.Dispatch<React.SetStateAction<Record<Person,ChatMessage[]>>>,
-  modelProfiles:ModelProfile[], bindings:Record<Person,PersonBinding>, setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>,
+  modelProfiles:ModelProfile[], defaultModelId:string, bindings:Record<Person,PersonBinding>, setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>,
   vendors:Vendor[], chatPool:ChatPool, setChatPool:React.Dispatch<React.SetStateAction<ChatPool>>,
   routeState:RouteState, setRouteState:React.Dispatch<React.SetStateAction<RouteState>>, lastRouteInfo:string,
   activeTool: Tool | '', setActiveTool: (v: Tool | '') => void,
@@ -3495,7 +3496,7 @@ function Chat(p: any) {
         <button type="button" className="compose-expand" aria-label="展开输入框" title="展开或收起大输入框" onClick={e=>e.currentTarget.closest('.compose-box')?.classList.toggle('composer-expanded')}>⛶</button>
       </div>
       <div className="cw-row">
-        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型">✧ {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span>⌄</span></button>
+        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型">✧ {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span>⌄</span></button>
         <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}>☺</button>
         <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}>＋</button>
         <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
@@ -3582,7 +3583,6 @@ function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePref
   // 旧链接 resources:xxx 仍兼容（显示完整三 tab 的资源库）。
   const SETTINGS_GROUPS:Record<string,{title:string;tabs:Array<[string,string]>}>={
     theme:{title:'主题',tabs:[['theme','主题'],['chatdisplay','聊天展示']]},
-    vendor:{title:'供应商',tabs:[['vendor','供应商']]},
     usage:{title:'模型用量',tabs:[['usage','用量统计']]},
     extensions:{title:'智能扩展',tabs:[['world','世界书'],['mcp','MCP'],['skill','技能']]},
     workspace:{title:'工作区',tabs:[['workspace','助手工具'],['files','本机文件']]},
@@ -3602,7 +3602,7 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
     {id:'system',icon:'◉',title:'系统与权限',desc:'权限管理 / 账号与安全 / 数据',section:'system'},
     {id:'about',icon:'ⓘ',title:'关于栖间',desc:'版本信息 / 关于与说明 / 更新日志',section:'about'},
   ]
-  return <div className="settings-screen">{!section&&<header className="settings-heading"><button type="button" className="settings-back settings-back-room" onClick={onBack}>← 主页</button><h2>栖间 · 设置</h2></header>}{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon"><PackIcon value={packIcons?.[card.id]||card.icon}/></span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true">›</span></button>)}</div></div>:<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>openSection('')}>← 全部设置</button>}{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:')||section==='vendor'||section==='vendor:default'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} modelProfiles={modelProfiles} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
+  return <div className="settings-screen">{!section&&<header className="settings-heading"><button type="button" className="settings-back settings-back-room" onClick={onBack}>← 主页</button><h2>栖间 · 设置</h2></header>}{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon"><PackIcon value={packIcons?.[card.id]||card.icon}/></span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true">›</span></button>)}</div></div>:<div className="settings-detail">{!(section.startsWith('vendor:')&&section!=='vendor:account')&&<button className="settings-back" onClick={()=>openSection('')}>← 全部设置</button>}{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} modelProfiles={modelProfiles} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
 <div className="setting-card settings-inner-card"><b>备份与恢复</b><BackupCenter people={systemPeople||[]} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/></div>
 <div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div>
 <div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>
@@ -3752,6 +3752,21 @@ function useMcpLibrary() {
 
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
+function brandOf(modelId:string){
+  const s=modelId.toLowerCase()
+  if(/gpt|openai|(?:^|[^a-z0-9])o[1-9]/.test(s)) return {glyph:'✳',cls:'brand-gpt'}
+  if(/claude|sonnet|opus|haiku/.test(s)) return {glyph:'✳',cls:'brand-claude'}
+  if(/gemini|gemma/.test(s)) return {glyph:'✦',cls:'brand-gemini'}
+  if(/glm|zhipu/.test(s)) return {glyph:'◈',cls:'brand-glm'}
+  if(/deepseek/.test(s)) return {glyph:'🐳',cls:'brand-ds'}
+  if(/qwen|qwq/.test(s)) return {glyph:'❖',cls:'brand-qwen'}
+  if(/kimi|moonshot/.test(s)) return {glyph:'☾',cls:'brand-kimi'}
+  if(/grok/.test(s)) return {glyph:'𝕏',cls:'brand-grok'}
+  return {glyph:'◇',cls:'brand-other'}
+}
+
+const VENDOR_AVATARS=['🤖','🧠','⚡','🌙','☁️','🔮','🐳','🌊','🍀','🦊','🐱','🕊️','✦','◈','⬡','❋']
+
 // ── 供应商中心：一排两个小图标，点一家进入它自己的页面（配置 / 模型两个 tab） ─────────
 // 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
 // 搜索 + 折叠分组 + 逐条 ＋ 点选；Key 只留本机，不进云端快照。
@@ -3822,12 +3837,15 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [modelSheetQuery,setModelSheetQuery]=useState('')
   const [sheetGroupOpen,setSheetGroupOpen]=useState<Record<string,boolean>>({})
 
-  const [batchMode,setBatchMode]=useState(false)
   const [batchIds,setBatchIds]=useState<string[]>([])
   const [specTarget,setSpecTarget]=useState('')
   const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
+  const [probe,setProbe]=useState<Record<string,boolean>>({})
+  const [probeNote,setProbeNote]=useState('')
   const [vendorQuery,setVendorQuery]=useState('')
   const [providerGroupOpen,setProviderGroupOpen]=useState<Record<string,boolean>>({})
+  const [sortMode,setSortMode]=useState(false)
+  const [avatarOpen,setAvatarOpen]=useState(false)
   const [testState,setTestState]=useState<{busy:boolean;ok?:boolean;text:string}>({busy:false,text:''})
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
@@ -3845,7 +3863,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   // 每次改动都基于当前 vendors 算出新数组，再同步模型池；不在 setState updater 里嵌套 setState。
   const commit=(next:Vendor[])=>{setVendors(next);setModelProfiles(old=>syncVendorProfiles(next,old))}
   const patch=(id:string,fn:(v:Vendor)=>Vendor)=>commit(vendors.map(v=>v.id===id?fn(v):v))
-  const keyCount=vendors.reduce((n,v)=>n+v.keys.filter(k=>k.value).length,0)
   const active=activeId?vendors.find(v=>v.id===activeId):undefined
   const primary=active?(active.keys.find(k=>k.role==='primary')||active.keys[0]):undefined
   const backupKeys=active?active.keys.filter(k=>k!==primary):[]
@@ -3870,7 +3887,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     patch(active.id,v=>({...v,keys:[...v.keys,{id:crypto.randomUUID(),label:keyDraft.label.trim()||('备用 '+(v.keys.length+1)),value,role:'backup'}]}))
     setKeyDraft({label:'',value:''})
   }
-  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchMode(false);setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setAvatarOpen(false);setSortMode(false);setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''})}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const openVendorPage=(id:string)=>{setTab('config');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
@@ -3886,10 +3903,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     onSection('vendor:'+id)
   }
   // 只向「当前这一家」的接口拉模型，用备用优先的第一把有效 Key。
-  const fetchRemote=async(v:Vendor)=>{
+  const fetchRemote=async(v:Vendor):Promise<string[]>=>{
     const key=orderedKeys(v.keys).find(k=>k.value)?.value||''
-    if(!v.endpoint.trim()){setListState({loading:false,error:'请先填写 API Base URL。'});return}
-    if(!key){setListState({loading:false,error:'请先在「配置」里填写 API Key。'});return}
+    if(!v.endpoint.trim()){setListState({loading:false,error:'请先填写 API Base URL。'});return []}
+    if(!key){setListState({loading:false,error:'请先在「配置」里填写 API Key。'});return []}
     setListState({loading:true,error:''})
     try{
       const r=await apiFetch('/api/models',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:v.endpoint.trim(),apiKey:key,modelsUrl:modelListUrl(v)})})
@@ -3897,9 +3914,24 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       if(!r.ok)throw new Error(d?.error||('HTTP '+r.status))
       const ids=Array.isArray(d?.models)?d.models.filter((x:unknown)=>typeof x==='string'&&x.trim()).map((x:string)=>x.trim()):[]
       if(!ids.length)throw new Error('该网址没有返回可用模型，可手动输入模型名。')
-      setRemoteModels(m=>({...m,[v.id]:[...new Set<string>(ids)]}))
+      const unique=[...new Set<string>(ids)]
+      setRemoteModels(m=>({...m,[v.id]:unique}))
       setListState({loading:false,error:''})
-    }catch(e){setListState({loading:false,error:e instanceof Error?e.message:'获取模型失败'})}
+      return unique
+    }catch(e){setListState({loading:false,error:e instanceof Error?e.message:'获取模型失败'});return []}
+  }
+  // 排序：只在自己所属的分组里和相邻项交换，跨组不会因为点一下就把供应商挪组。
+  const moveVendor=(id:string,dir:-1|1)=>{
+    const target=vendors.find(v=>v.id===id); if(!target) return
+    const group=target.group||''
+    const same=vendors.filter(v=>(v.group||'')===group)
+    const from=same.findIndex(v=>v.id===id), to=from+dir
+    if(from<0||to<0||to>=same.length) return
+    const a=same[from], b=same[to]
+    const next=[...vendors]
+    const ia=next.findIndex(v=>v.id===a.id), ib=next.findIndex(v=>v.id===b.id)
+    next[ia]=b; next[ib]=a
+    commit(next)
   }
   // 测试连接：复用 /api/models 代理拉一次列表，能拉通就说明地址与 Key 都对。
   const testVendor=async(v:Vendor)=>{
@@ -3917,17 +3949,44 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       setTestState({busy:false,ok:true,text:'连接成功 · '+cost+' ms · '+count+' 个模型'})
     }catch(e){setTestState({busy:false,ok:false,text:'连接失败：'+(e instanceof Error?e.message:'未知错误')})}
   }
+  // 检测：拿「这一家 /models 现在返回的清单」比对已添加模型，标出哪些上游已经没有了。
+  const probeModels=async(v:Vendor)=>{
+    const ids=v.models.filter(m=>m.selected).map(m=>m.id)
+    if(!ids.length){setProbeNote('还没有模型可检测');return}
+    setProbeNote('正在检测…')
+    const remote=(remoteModels[v.id]||[]).length?remoteModels[v.id]:await fetchRemote(v)
+    if(!remote.length){setProbeNote('检测失败：没有拿到上游模型列表，检查地址与 Key');return}
+    const next:Record<string,boolean>={}
+    for(const id of ids) next[id]=remote.includes(id)
+    setProbe(next)
+    const bad=ids.filter(id=>!remote.includes(id)).length
+    setProbeNote(bad?`检测完成：${ids.length-bad} 个可用，${bad} 个未在上游返回（可能已下线）`:`检测完成：全部 ${ids.length} 个都在上游列表里`)
+  }
+  const removeSelected=async(v:Vendor)=>{
+    if(!batchIds.length) return
+    const ok=await confirmDialog({title:'删除模型',message:'从「'+v.name+'」移除 '+batchIds.length+' 个模型？之后可以重新获取再添加。',confirmLabel:'删除',danger:true})
+    if(!ok) return
+    patch(v.id,x=>({...x,models:x.models.filter(m=>!batchIds.includes(m.id))}))
+    setBatchIds([]);setProbeNote('');setProbe({})
+  }
   const remoteIds=active?(remoteModels[active.id]||[]):[]
   const pickedModels=active?active.models.filter(m=>m.selected):[]
   const query=modelQuery.trim().toLowerCase()
-  const iconForModel=(id:string)=>/gemini/i.test(id)?'✦':/claude/i.test(id)?'✳':/deepseek/i.test(id)?'◈':/gpt|o[1-9]/i.test(id)?'❋':/glm/i.test(id)?'⬡':'◇'
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
   const isList=!showNew&&!showDefault&&!active
   return <div className="vendor-center">
     {isList&&<>
-      <div className="vendor-summary"><span>{vendors.length} 家供应商</span><span>{keyCount} 把 Key</span></div>
-      <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
+      <div className="vendor-kelivo-list-head">
+        <b>供应商</b>
+        <div className="vendor-kelivo-head-actions">
+          <button type="button" aria-label="默认模型" title="默认模型" onClick={()=>onSection('vendor:default')}>★</button>
+          <button type="button" aria-label="订阅账号" title="订阅账号" onClick={()=>onSection('vendor:account')}>☁</button>
+          <button type="button" aria-label="排序" title={'排序'+(sortMode?'（进行中）':'')} className={sortMode?'on':''} onClick={()=>setSortMode(v=>!v)}>⇅</button>
+          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();onSection('vendor:add')}}>＋</button>
+        </div>
+      </div>
+      <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
         {(()=>{
           const q=vendorQuery.trim().toLowerCase()
@@ -3936,13 +3995,16 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           for(const v of vendors.filter(match)){const key=v.group||'';if(!map.has(key))map.set(key,[]);map.get(key)!.push(v)}
           const entries=[...map.entries()].sort((a,b)=>!a[0]?1:!b[0]?-1:0)
           const row=(v:Vendor)=>{
-            const picked=v.models.filter(m=>m.selected).length
-            const keys=v.keys.filter(k=>!!k.value).length
             const off=v.enabled===false
-            const status=off?['已停用','off']:keys?['已启用','on']:['未配置 Key','warn']
+            const status=off?['禁用','off']:['启用','on']
+            if(sortMode) return <div className={'vendor-kelivo-provider-row sortrow'+(off?' off':'')} key={v.id}>
+              <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
+              <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
+              <span className="vendor-sort-btns"><button type="button" aria-label={'上移 '+v.name} onClick={()=>moveVendor(v.id,-1)}>↑</button><button type="button" aria-label={'下移 '+v.name} onClick={()=>moveVendor(v.id,1)}>↓</button></span>
+            </div>
             return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
-              <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.name.slice(0,1)}</span>
-              <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{picked} 个模型 · {keys} 把 Key</small></span>
+              <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
+              <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
               <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
               <span className="vendor-kelivo-provider-caret">›</span>
             </button>
@@ -3956,7 +4018,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 {!collapsed&&list.map(row)}
               </div>
             })}
-            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b><small>OpenAI 兼容接口 / 自定义中转站</small></span><span className="vendor-kelivo-provider-caret">›</span></button>
+            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b></span><span className="vendor-kelivo-provider-caret">›</span></button>
           </>
         })()}
       </div>
@@ -3984,22 +4046,35 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {active&&<section className="vendor-page">
       <button type="button" className="settings-back" onClick={backToList}>← 供应商</button>
       <div className="vendor-card open" key={active.id}>
-      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon">{active.name.slice(0,1)}</span><b>{active.name}</b><span className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</span></div>
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span><b>{active.name}</b><span className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</span></div>
 
       {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
         <div className="vendor-config-section-title">管理</div>
         <div className="vendor-config-menu">
-          <div className="vendor-config-info"><span>供应商类型</span><span>OpenAI 兼容接口</span></div>
-          <label className="vendor-config-info vendor-config-switch"><span>启用这家供应商 <small>停用后它的模型与 Key 不再出现在聊天里</small></span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+          <div className="vendor-config-info"><span>供应商类型</span><SoftSelect className="vendor-config-select" ariaLabel="供应商类型" value={active.providerType||'openai'} onChange={v=>patch(active.id,x=>({...x,providerType:v as 'openai'|'google'|'claude'}))} options={[{value:'openai',label:'OpenAI 兼容'},{value:'google',label:'Google'},{value:'claude',label:'Claude'}]}/></div>
+          <label className="vendor-config-info vendor-config-inline"><span>分组</span><input className="vendor-config-input" aria-label="供应商分组" list="vendor-group-options" value={active.group||''} onChange={e=>patch(active.id,x=>({...x,group:e.target.value}))} placeholder="其他"/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={!!active.responseApi} onChange={e=>patch(active.id,x=>({...x,responseApi:e.target.checked}))}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>发送会话缓存键 <small>OpenAI prompt_cache_key</small></span><input type="checkbox" checked={!!active.promptCacheKey} onChange={e=>patch(active.id,x=>({...x,promptCacheKey:e.target.checked}))}/></label>
+          <div className="vendor-config-info"><span>测试连接 <small>{testState.text||'用当前地址与 Key 拉一次模型列表'}</small></span><button type="button" disabled={testState.busy} onClick={()=>void testVendor(active)}>{testState.busy?'测试中…':testState.ok===false?'重试':'开始测试'}</button></div>
           <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
-          <label className="vendor-config-info vendor-config-switch"><span>多 Key 管理 <small>展开或收起备用密钥，不修改轮换配置</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
-          <div className="vendor-config-info"><span>测试连接 <small>{testState.text||'用当前 Base URL 与 Key 拉一次模型列表'}</small></span><button type="button" disabled={testState.busy} onClick={()=>void testVendor(active)}>{testState.busy?'测试中…':testState.ok===false?'重试':'开始测试'}</button></div>
-          <div className="vendor-config-info"><span>获取模型</span><button type="button" onClick={()=>{setTab('model');void fetchRemote(active)}}>从当前供应商刷新　›</button></div>
+          <div className="vendor-config-info"><span>获取账户余额</span><span className="vendor-soon">未接入</span></div>
+          <div className="vendor-config-info"><span>图片与请求预算</span><span className="vendor-soon">继承默认</span></div>
+          <div className="vendor-config-info"><span>网络代理</span><span className="vendor-soon">未接入</span></div>
+          <div className="vendor-config-info"><span>自定义请求</span><span className="vendor-soon">未接入</span></div>
         </div>
         <div className="vendor-config-section-title">连接设置</div>
         <div className="vendor-config-fields">
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
-          <label className="vendor-field">分组 <small>可选，列表中按分组折叠；留空为未分组</small><input aria-label="供应商分组" list="vendor-group-options" value={active.group||''} onChange={e=>patch(active.id,x=>({...x,group:e.target.value}))} placeholder="例如：中转站"/><datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist></label>
+          <datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist>
+          <div className="vendor-field">图标
+            <div className="vendor-avatar-row"><button type="button" className="vendor-avatar-current" aria-label="选择供应商图标" onClick={()=>setAvatarOpen(o=>!o)}>{active.avatar||active.name.slice(0,1)}</button><small>点一下换图标，列表和详情都会用</small></div>
+            {avatarOpen&&<div className="vendor-avatar-grid">
+              {VENDOR_AVATARS.map(e=><button type="button" key={e} className={active.avatar===e?'on':''} onClick={()=>{patch(active.id,x=>({...x,avatar:e}));setAvatarOpen(false)}}>{e}</button>)}
+              <button type="button" className={!active.avatar?'on':''} onClick={()=>{patch(active.id,x=>({...x,avatar:''}));setAvatarOpen(false)}}>首字</button>
+            </div>}
+          </div>
           <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="粘贴 API Key"/><PasteButton onPaste={setPrimary}/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
@@ -4017,7 +4092,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       </div>}
 
       {tab==='model'&&<div className="vendor-card-body vendor-kelivo-model-page">
-        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索已添加模型" placeholder="搜索已添加模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)}/><button type="button" title="批量管理" aria-label="批量管理" onClick={()=>{setBatchMode(v=>!v);setBatchIds([])}}>{batchMode?'✕':'☑'}</button></div>
+        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索已添加模型" placeholder="搜索已添加模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)}/>{!!modelQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setModelQuery('')}>×</button>}</div>
         <div className="vendor-kelivo-added">
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
             groupModels(pickedModels.filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=>m.id)).map(g=><div className="vendor-kelivo-added-group" key={g.id}>
@@ -4026,27 +4101,32 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               </button>
               {addedGroupOpen[g.id]!==false&&g.models.map(id=>{
                 const m=pickedModels.find(x=>x.id===id); if(!m) return null
-                const spec=specForModel(active,id); const badges=specBadges(spec); const meta=specSummary(spec)
-                return <div className="vendor-kelivo-added-row" key={id}>
-                  {batchMode&&<input aria-label={'选中 '+id} type="checkbox" checked={batchIds.includes(id)} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}/>}
-                  <span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span>
-                  <button type="button" className="vendor-kelivo-model-label" aria-label={'编辑 '+id+' 的模型规格'} onClick={()=>setSpecTarget(id)}>
+                const spec=specForModel(active,id); const brand=brandOf(id)
+                const checked=batchIds.includes(id)
+                return <div className={'vendor-kelivo-added-row'+(checked?' picked':'')} key={id}>
+                  <label className="vendor-model-check" aria-label={'选择 '+id}><input type="checkbox" checked={checked} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}/><span aria-hidden="true"/></label>
+                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                  <button type="button" className="vendor-kelivo-model-label" aria-label={'编辑模型 '+id} onClick={()=>setSpecTarget(id)}>
                     <b>{spec.displayName||m.name||id}</b>
-                    <span className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>未设置能力</small>}</span>
-                    {!!meta&&<em className="vendor-kelivo-spec-line">{meta}</em>}
+                    <ModelChips spec={spec}/>
                   </button>
-                  <button type="button" className="vendor-kelivo-spec-gear" title="模型规格" aria-label={'模型规格 '+id} onClick={()=>setSpecTarget(id)}>⚙</button>
-                  {!batchMode&&<button type="button" className="vendor-kelivo-remove-one" title={'移除 '+id} aria-label={'移除 '+id} onClick={()=>unpickModel(active.id,id)}>−</button>}
+                  {probe[id]===true&&<span className="vendor-model-probe ok" title="上次拉取时在列表里">✓</span>}
+                  {probe[id]===false&&<span className="vendor-model-probe bad" title="上次拉取时不在列表里">×</span>}
                 </div>})}
             </div>)}
           {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
+          {!!probeNote&&<p className="vendor-probe-note" role="status">{probeNote}</p>}
         </div>
-        <div className="vendor-kelivo-floating-actions">
-          {batchMode?<><button type="button" onClick={()=>setBatchIds(batchIds.length===pickedModels.length?[]:pickedModels.map(m=>m.id))}>{batchIds.length===pickedModels.length?'取消全选':'全选'}</button><button type="button" disabled={!batchIds.length} onClick={()=>{patch(active.id,v=>({...v,models:v.models.filter(m=>!batchIds.includes(m.id))}));setBatchMode(false);setBatchIds([])}}>移除 {batchIds.length} 个</button></>:<>
+        <div className="vendor-kelivo-bottomdock">
+          {batchIds.length>0?<div className="vendor-kelivo-batchbar">
+            <button type="button" onClick={()=>setBatchIds([])}>全不选</button>
+            <button type="button" aria-label="反选" onClick={()=>setBatchIds(pickedModels.filter(m=>!batchIds.includes(m.id)).map(m=>m.id))}>⇄</button>
+            <button type="button" className="probe" onClick={()=>void probeModels(active)}>检测</button>
+            <button type="button" className="danger" onClick={()=>void removeSelected(active)}>🗑</button>
+          </div>:<div className="vendor-kelivo-floating-actions">
             <button type="button" aria-label="获取模型列表" title="获取模型列表" onClick={()=>{setModelSheetQuery('');setModelSheetOpen(true);if(!remoteIds.length)void fetchRemote(active)}}>▧</button>
             <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}>＋</button>
-            <button type="button" aria-label="清空已添加模型" title="清空已添加模型" disabled={!pickedModels.length} onClick={()=>void confirmDialog({title:'清空已添加模型',message:'仅移除「'+active.name+'」已添加的模型，不删除供应商和密钥。',confirmLabel:'移除',danger:true}).then(ok=>{if(ok)patch(active.id,v=>({...v,models:[]}))})}>♜</button>
-          </>}
+          </div>}
         </div>
         {customModelOpen&&<div className="vendor-kelivo-custom"><input aria-label="手动添加模型 ID" value={modelDraft} placeholder="输入模型 ID" onChange={e=>setModelDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
         {modelSheetOpen&&<div className="vendor-kelivo-sheet-overlay" role="presentation" onClick={()=>setModelSheetOpen(false)}>
@@ -4054,22 +4134,22 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             <div className="vendor-kelivo-sheet-grip"/>
             <div className="vendor-kelivo-sheet-search">
               <span aria-hidden="true">⌕</span><input aria-label="在可用模型中搜索" autoFocus value={modelSheetQuery} onChange={e=>setModelSheetQuery(e.target.value)} placeholder="输入模型名称筛选"/>
+              <button type="button" aria-label="全选" title="全选" onClick={()=>pickModels(active.id,[...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase())))}>☑</button>
               <button type="button" aria-label="刷新当前供应商模型" disabled={listState.loading} onClick={()=>void fetchRemote(active)}>{listState.loading?'…':'⟳'}</button>
-              <button type="button" aria-label="关闭模型选择" onClick={()=>setModelSheetOpen(false)}>×</button>
             </div>
             {listState.error&&<p className="mcp-error" role="alert">{listState.error}</p>}
             {listState.loading&&<p className="muted">正在读取「{active.name}」的模型…</p>}
             <div className="vendor-kelivo-sheet-items">
               {groupModels([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
                 <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span>{sheetGroupOpen[g.id]?'›':'⌄'}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}>＋</span></button>
-                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const badges=specBadges(inferModelSpec(id));return <div className="vendor-kelivo-sheet-model" key={id}><span className="vendor-kelivo-model-mark" aria-hidden="true">{iconForModel(id)}</span><div className="vendor-kelivo-model-label"><b>{id}</b><div className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>未识别</small>}</div></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
+                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
               </div>)}
               {!listState.loading&&!remoteIds.length&&<div className="vendor-kelivo-empty"><b>尚未获取模型</b><small>点击右上角刷新，或关闭弹层后手动添加模型</small></div>}
             </div>
             <button type="button" className="vendor-kelivo-sheet-done" onClick={()=>setModelSheetOpen(false)}>完成 · 已添加 {pickedModels.length} 个</button>
           </section>
         </div>}
-        {!!specTarget&&<ModelSpecSheet vendorName={active.name} modelId={specTarget} spec={specForModel(active,specTarget)} onClose={()=>setSpecTarget('')} onReset={()=>{patch(active.id,v=>clearModelSpec(v,specTarget) as Vendor);setSpecTarget('')}} onSave={spec=>{patch(active.id,v=>withModelSpec(v,specTarget,spec) as Vendor);setSpecTarget('')}}/>}
+        {!!specTarget&&<ModelSpecPage vendorName={active.name} modelId={specTarget} spec={specForModel(active,specTarget)} onClose={()=>setSpecTarget('')} onReset={()=>{patch(active.id,v=>clearModelSpec(v,specTarget) as Vendor);setSpecTarget('')}} onSave={spec=>{patch(active.id,v=>withModelSpec(v,specTarget,spec) as Vendor);setSpecTarget('')}}/>}
       </div>}
       <div className="vendor-tabs" role="tablist" aria-label="供应商设置">
         <button type="button" role="tab" aria-selected={tab==='config'} className={tab==='config'?'active':''} onClick={()=>setTab('config')}>配置</button>

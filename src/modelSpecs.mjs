@@ -46,6 +46,21 @@ export const REASONING_DIALECTS = [
   { id: 'generic', label: '通用 thinking 开关' },
 ]
 
+// 思考档位：Kelivo 的「支持的级别 / 默认级别」用的就是这套。
+export const REASONING_LEVELS = [
+  { id: 'minimal', label: '最低' },
+  { id: 'low', label: '低' },
+  { id: 'medium', label: '中' },
+  { id: 'high', label: '高' },
+  { id: 'xhigh', label: '极高' },
+  { id: 'max', label: '最大' },
+]
+
+export const REPLAY_MODES = [
+  { id: 'all', label: '全部' },
+  { id: 'off', label: '不回放' },
+]
+
 export const PRICING_CURRENCIES = [
   { id: 'USD', label: '美元 / 百万 tokens' },
   { id: 'CNY', label: '人民币 / 百万 tokens' },
@@ -62,7 +77,13 @@ export function emptyModelSpec() {
     contextWindow: 0,
     maxOutput: 0,
     pricing: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' },
-    reasoning: { dialect: '', canDisable: true, defaultLevel: 'auto' },
+    reasoning: {
+      dialect: '', levels: ['low', 'medium', 'high'], canDisable: true,
+      defaultLevel: 'auto', sampling: true, replay: 'all', replayField: 'reasoning_content',
+    },
+    builtinTools: { codeInterpreter: false, imageGeneration: false },
+    headers: [],
+    body: [],
   }
 }
 
@@ -78,7 +99,7 @@ const VISION_RE = new RegExp([
 ].join('|'), 'i')
 const AUDIO_RE = /(audio|realtime|omni|voice)/i
 const TOOL_RE = /(gpt|claude|gemini|deepseek|qwen|glm|kimi|moonshot|grok|mistral|llama|doubao|ernie|hunyuan|command|nova|jamba|(?:^|[^a-z])yi(?:[^a-z]|$)|phi|(?:^|[^a-z0-9])o[1-9](?![0-9])|minimax|step-|spark)/i
-const REASONING_RE = /((?:^|[^a-z0-9])o[1-9](?![0-9])|reason|thinking|(?:^|[^a-z])r1(?:[^0-9]|$)|qwq|deepseek-r|glm-z|magistral|gpt-5|claude-(?:4|opus)|gemini-(?:2\.5|3))/i
+const REASONING_RE = /((?:^|[^a-z0-9])o[1-9](?![0-9])|reason|thinking|(?:^|[^a-z])r1(?:[^0-9]|$)|qwq|deepseek-r|glm-?z|glm-?[45]|magistral|gpt-5|claude-(?:4|opus)|gemini-(?:2\.5|3)|qwen3)/i
 
 const CONTEXT_BY_FAMILY = [
   [/gemini/i, 1000000],
@@ -134,8 +155,12 @@ export function inferModelSpec(modelId) {
   spec.contextWindow = contextDefault(id)
   spec.reasoning = {
     dialect: abilities.includes('reasoning') ? dialectOf(id) : '',
+    levels: abilities.includes('reasoning') ? ['low', 'medium', 'high'] : [],
     canDisable: true,
     defaultLevel: 'auto',
+    sampling: true,
+    replay: abilities.includes('reasoning') ? 'all' : 'off',
+    replayField: 'reasoning_content',
   }
   return spec
 }
@@ -151,6 +176,13 @@ function dialectOf(id) {
 }
 
 // ── 归一化与合并 ────────────────────────────────────────────────────────────
+// 自定义 Headers / Body：只留 key 非空的键值对，避免把空行写进请求。
+function normalizePairs(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .filter((x) => x && typeof x === 'object' && str(x.key))
+    .map((x) => ({ key: str(x.key).slice(0, 80), value: str(x.value).slice(0, 2000) }))
+}
+
 function normalizeList(raw, allowed) {
   const set = new Set(allowed)
   const list = (Array.isArray(raw) ? raw : []).map((x) => str(x)).filter((x) => set.has(x))
@@ -182,9 +214,17 @@ export function normalizeModelSpec(raw) {
   const r = raw.reasoning && typeof raw.reasoning === 'object' ? raw.reasoning : {}
   base.reasoning = {
     dialect: REASONING_DIALECTS.some((d) => d.id === str(r.dialect)) ? str(r.dialect) : '',
+    levels: normalizeList(r.levels, REASONING_LEVELS.map((l) => l.id)),
     canDisable: r.canDisable !== false,
-    defaultLevel: str(r.defaultLevel) || 'auto',
+    defaultLevel: REASONING_LEVELS.some((l) => l.id === str(r.defaultLevel)) ? str(r.defaultLevel) : 'auto',
+    sampling: r.sampling !== false,
+    replay: r.replay === 'off' ? 'off' : 'all',
+    replayField: str(r.replayField) || 'reasoning_content',
   }
+  const bt = raw.builtinTools && typeof raw.builtinTools === 'object' ? raw.builtinTools : {}
+  base.builtinTools = { codeInterpreter: bt.codeInterpreter === true, imageGeneration: bt.imageGeneration === true }
+  base.headers = normalizePairs(raw.headers)
+  base.body = normalizePairs(raw.body)
   return base
 }
 
@@ -202,6 +242,9 @@ export function resolveModelSpec(modelId, overrides) {
   for (const key of ['contextWindow', 'maxOutput']) if (key in saved) spec[key] = clean[key]
   if ('pricing' in saved) spec.pricing = { ...spec.pricing, ...clean.pricing }
   if ('reasoning' in saved) spec.reasoning = { ...spec.reasoning, ...clean.reasoning }
+  if ('builtinTools' in saved) spec.builtinTools = { ...spec.builtinTools, ...clean.builtinTools }
+  if ('headers' in saved) spec.headers = clean.headers
+  if ('body' in saved) spec.body = clean.body
   return { ...spec, customized: true }
 }
 

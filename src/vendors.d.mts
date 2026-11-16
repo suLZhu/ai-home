@@ -11,6 +11,10 @@ export type Vendor = {
   builtin: boolean
   enabled?: boolean
   group?: string
+  avatar?: string
+  providerType?: 'openai' | 'google' | 'claude'
+  responseApi?: boolean
+  promptCacheKey?: boolean
   subscription?: boolean
   subscriptionChannel?: string
   subscriptionAccountId?: string

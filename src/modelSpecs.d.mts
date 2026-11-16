@@ -12,9 +12,16 @@ export type ModelPricing = {
 
 export type ModelReasoning = {
   dialect: string
+  levels: string[]
   canDisable: boolean
   defaultLevel: string
+  sampling: boolean
+  replay: 'all' | 'off'
+  replayField: string
 }
+
+export type ModelBuiltinTools = { codeInterpreter: boolean; imageGeneration: boolean }
+export type ModelKeyValue = { key: string; value: string }
 
 export type ModelSpec = {
   displayName: string
@@ -27,6 +34,9 @@ export type ModelSpec = {
   maxOutput: number
   pricing: ModelPricing
   reasoning: ModelReasoning
+  builtinTools: ModelBuiltinTools
+  headers: ModelKeyValue[]
+  body: ModelKeyValue[]
 }
 
 export type ResolvedModelSpec = ModelSpec & { customized: boolean }
@@ -39,6 +49,8 @@ export declare const OUTPUT_MODALITIES: { id: Modality; label: string }[]
 export declare const MODEL_ABILITIES: { id: ModelAbility; label: string }[]
 export declare const REASONING_DIALECTS: { id: string; label: string }[]
 export declare const PRICING_CURRENCIES: { id: 'USD' | 'CNY'; label: string }[]
+export declare const REASONING_LEVELS: { id: string; label: string }[]
+export declare const REPLAY_MODES: { id: string; label: string }[]
 
 export declare function emptyModelSpec(): ModelSpec
 export declare function inferModelSpec(modelId: string): ModelSpec

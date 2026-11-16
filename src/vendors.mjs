@@ -6,13 +6,13 @@
 // 常见 OpenAI 兼容服务商。只预置「名称 + 接口地址」，模型一律由用户按自己填的
 // 网址实时拉取或手动添加，不再塞任何写死的默认模型（用户明确要求别出现别的默认模型）。
 export const BUILTIN_VENDORS = [
-  { id: 'deepseek', name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', models: [] },
-  { id: 'siliconflow', name: '硅基流动', endpoint: 'https://api.siliconflow.cn/v1', models: [] },
-  { id: 'zhipu', name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', models: [] },
-  { id: 'moonshot', name: '月之暗面', endpoint: 'https://api.moonshot.cn/v1', models: [] },
-  { id: 'dashscope', name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: [] },
-  { id: 'openai', name: 'OpenAI', endpoint: 'https://api.openai.com/v1', models: [] },
-  { id: 'ollama', name: 'Ollama 本地', endpoint: 'http://127.0.0.1:11434/v1', models: [] },
+  { id: 'deepseek', name: 'DeepSeek', endpoint: 'https://api.deepseek.com/v1', avatar: '🐳', models: [] },
+  { id: 'siliconflow', name: '硅基流动', endpoint: 'https://api.siliconflow.cn/v1', avatar: '◇', models: [] },
+  { id: 'zhipu', name: '智谱 GLM', endpoint: 'https://open.bigmodel.cn/api/paas/v4', avatar: '◈', models: [] },
+  { id: 'moonshot', name: '月之暗面', endpoint: 'https://api.moonshot.cn/v1', avatar: '☾', models: [] },
+  { id: 'dashscope', name: '通义千问', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', avatar: '❖', models: [] },
+  { id: 'openai', name: 'OpenAI', endpoint: 'https://api.openai.com/v1', avatar: '✳', models: [] },
+  { id: 'ollama', name: 'Ollama 本地', endpoint: 'http://127.0.0.1:11434/v1', avatar: '🦙', models: [] },
 ]
 
 // 旧版本写死在供应商里的模型名。升级时清掉「未勾选」的预置项，
@@ -152,6 +152,12 @@ function normalizeKeys(raw) {
     }))
 }
 
+// 供应商协议类型：暂只按 OpenAI 兼容发请求，类型用于标识与后续切换。
+export function normalizeProviderType(raw) {
+  const v = str(raw).toLowerCase()
+  return v === 'google' || v === 'claude' ? v : 'openai'
+}
+
 // 模型规格覆盖表：{ [modelId]: ModelSpec }，只存用户改过的字段；坏数据直接丢掉。
 function normalizeOverrides(raw) {
   const out = {}
@@ -201,6 +207,10 @@ export function normalizeVendors(raw) {
       builtin: true,
       enabled: s ? s.enabled !== false : true,
       group: s ? str(s.group) : '',
+      avatar: s ? (str(s.avatar) || v.avatar || '') : (v.avatar || ''),
+      providerType: normalizeProviderType(s?.providerType),
+      responseApi: s ? s.responseApi === true : false,
+      promptCacheKey: s ? s.promptCacheKey === true : false,
       subscription: s ? !!s.subscription : false,
       keys: s ? normalizeKeys(s.keys) : [],
       models: s ? normalizeModels(s.models, v.models) : [],
@@ -218,6 +228,10 @@ export function normalizeVendors(raw) {
       builtin: false,
       enabled: v.enabled !== false,
       group: str(v.group),
+      avatar: str(v.avatar),
+      providerType: normalizeProviderType(v.providerType),
+      responseApi: v.responseApi === true,
+      promptCacheKey: v.promptCacheKey === true,
       subscription: !!v.subscription,
       keys: normalizeKeys(v.keys),
       models: normalizeModels(v.models, []),
@@ -312,5 +326,5 @@ export function readKeyCandidates(body) {
 
 // 自定义供应商 / 自定义模型的空白模板。
 export function blankVendor(name = '', endpoint = '') {
-  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, enabled: true, group: '', keys: [], models: [], modelOverrides: {} }
+  return { id: 'custom-' + Math.random().toString(36).slice(2, 10), name, endpoint, apiPath: '', modelsPath: '', builtin: false, enabled: true, group: '', avatar: '', providerType: 'openai', responseApi: false, promptCacheKey: false, keys: [], models: [], modelOverrides: {} }
 }

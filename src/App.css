@@ -3174,3 +3174,89 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .vendor-kelivo-provider-group-head span{width:14px;font-size:14px}
 .vendor-center .vendor-kelivo-provider-group-head b{font-size:11.5px;letter-spacing:.1em;font-weight:600}
 .vendor-center .vendor-kelivo-provider-group-head small{margin-left:auto;font-size:11px;opacity:.75}
+
+/* 供应商：排序模式与图标选择 */
+.vendor-center .vendor-summary{display:flex;align-items:center;gap:10px}
+.vendor-center .vendor-summary span:first-child{margin-right:0}
+.vendor-center .vendor-summary span:nth-child(2){margin-right:auto}
+.vendor-sort-toggle{border:1px solid var(--line,#e2dcea)!important;border-radius:99px!important;background:var(--field,#f7f4fa)!important;color:var(--muted)!important;font-size:11.5px!important;padding:4px 12px!important;min-height:28px!important;box-shadow:none!important}
+.vendor-sort-toggle.on{border-color:var(--accent,#8b593b)!important;color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 10%,transparent)!important}
+.vendor-center .vendor-kelivo-provider-row.sortrow{cursor:default;align-items:center}
+.vendor-sort-btns{display:flex;gap:7px;margin-left:auto}
+.vendor-sort-btns button{flex:0 0 34px;width:34px;height:34px;border:1px solid var(--line,#e2dcea)!important;border-radius:10px!important;background:var(--field,#f7f4fa)!important;color:var(--ink)!important;font-size:15px!important;box-shadow:none!important;min-height:34px!important;padding:0!important}
+.vendor-avatar-row{display:flex;align-items:center;gap:10px}
+.vendor-avatar-row small{font-size:10.5px;color:var(--muted)}
+.vendor-avatar-current{width:46px;height:46px;border:1px solid var(--line,#e2dcea)!important;border-radius:14px!important;background:var(--field,#f7f4fa)!important;font-size:22px!important;line-height:1;box-shadow:none!important;padding:0!important;min-height:46px!important}
+.vendor-avatar-grid{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}
+.vendor-avatar-grid button{width:42px;height:42px;border:1px solid var(--line,#e2dcea)!important;border-radius:12px!important;background:var(--field,#f7f4fa)!important;font-size:20px!important;box-shadow:none!important;padding:0!important;min-height:42px!important}
+.vendor-avatar-grid button.on{border-color:var(--accent,#8b593b)!important;background:color-mix(in srgb,var(--accent,#8b593b) 12%,transparent)!important}
+
+/* 模型行：圆形勾选 + 品牌图标 + 胶囊（对齐 Kelivo） */
+.vendor-center .vendor-kelivo-added-row{align-items:flex-start;gap:10px;padding:12px 4px}
+.vendor-model-check{display:flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;height:44px}
+.vendor-model-check input{appearance:none;width:23px;height:23px;border-radius:50%;border:1.5px solid var(--line,#cfc6d6);background:transparent;position:relative;margin:0}
+.vendor-model-check input:checked{border-color:var(--accent,#8a5a3b);background:var(--accent,#8a5a3b)}
+.vendor-model-check input:checked::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:13px;line-height:1}
+.vendor-model-brand{flex:0 0 38px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:19px;line-height:1;background:var(--field,#f2edf6);color:var(--accent,#8a5a3b)}
+.vendor-model-brand.brand-gpt{background:#eef3ee;color:#2f6b4f}
+.vendor-model-brand.brand-claude{background:#fbeee6;color:#c0603a}
+.vendor-model-brand.brand-gemini{background:#eef1fb;color:#4a63c0}
+.vendor-model-brand.brand-glm{background:#efeafa;color:#6d4fc0}
+.vendor-model-brand.brand-ds{background:#e9f1fb;color:#2f6bb0}
+.vendor-model-brand.brand-qwen{background:#f6ecf6;color:#a0499a}
+.vendor-model-brand.brand-kimi{background:#eef5f0;color:#3d7a58}
+.vendor-model-brand.brand-grok{background:#f1f1f3;color:#3a3a3f}
+.model-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+.model-chip{display:inline-flex;align-items:center;padding:1px 8px;border-radius:999px;background:var(--field,#f4f1f4);color:var(--muted,#7d7186);font-size:10.5px;line-height:1.7;border:1px solid transparent}
+.model-chip-arrow{margin:0 3px;font-style:normal;opacity:.65}
+.model-chips.dense .model-chip{font-size:10px}
+.vendor-kelivo-added-row.picked{background:color-mix(in srgb,var(--accent,#8a5a3b) 6%,transparent);border-radius:14px}
+.vendor-model-probe{flex:0 0 22px;width:22px;font-size:13px;line-height:44px;text-align:center}
+.vendor-model-probe.ok{color:#2f7d6b}
+.vendor-model-probe.bad{color:#b0453a}
+.vendor-probe-note{margin:6px 4px;font-size:11px;color:var(--muted)}
+
+/* 底部悬浮：获取/添加 或 批量操作 */
+.vendor-center .vendor-kelivo-bottomdock{position:sticky;bottom:6px;z-index:5;display:flex;justify-content:center;padding:8px 0 2px;pointer-events:none}
+.vendor-center .vendor-kelivo-bottomdock>*{pointer-events:auto}
+.vendor-center .vendor-kelivo-floating-actions{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:999px;background:var(--card,#fff);border:1px solid var(--line,#ece6f0);box-shadow:0 6px 20px rgba(40,30,50,.10)}
+.vendor-center .vendor-kelivo-floating-actions button{width:52px;height:52px;min-height:52px;border-radius:50%;border:1px solid var(--line,#e6dfeb)!important;background:var(--field,#f7f4fa)!important;color:var(--ink)!important;font-size:23px!important;padding:0!important;box-shadow:none!important}
+.vendor-kelivo-batchbar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;background:var(--card,#fff);border:1px solid var(--line,#ece6f0);box-shadow:0 6px 20px rgba(40,30,50,.10)}
+.vendor-kelivo-batchbar button{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid transparent!important;background:var(--field,#f5f1f7)!important;color:var(--ink)!important;font-size:13px!important;box-shadow:none!important}
+.vendor-kelivo-batchbar button.probe{background:color-mix(in srgb,var(--accent,#8a5a3b) 12%,transparent)!important;color:var(--accent,#8a5a3b)!important;border-color:color-mix(in srgb,var(--accent,#8a5a3b) 35%,transparent)!important}
+.vendor-kelivo-batchbar button.danger{background:#fbecea!important;color:#b0453a!important;border-color:#f2d6d1!important;font-size:16px!important}
+
+/* 供应商管理区：类型选择 / 分组输入 / 未接入占位 */
+.vendor-center .vendor-config-info .vendor-config-input{flex:0 1 150px;min-width:80px;height:34px;border:1px solid var(--line,#e6dfeb);border-radius:10px;background:var(--field,#f7f4fa);text-align:right;font-size:13px;color:var(--ink);padding:0 10px}
+.vendor-center .vendor-config-info.vendor-config-inline{align-items:center}
+.vendor-center .vendor-config-info .vendor-config-select{flex:0 0 auto;min-width:130px}
+.vendor-center .vendor-config-info .vendor-soon{font-size:11.5px;color:var(--muted);opacity:.75}
+.vendor-kelivo-sheet-model.added{opacity:.55}
+
+/* 供应商列表：扁平化，靠近 Kelivo 的列表感 */
+.vendor-center .vendor-kelivo-provider-list{border:0;border-radius:0;background:transparent;padding:0 0 8px;gap:0}
+.vendor-center .vendor-kelivo-provider-row{min-height:62px;padding:10px 4px;border-bottom:1px solid var(--line,#ece7f0);border-radius:0}
+.vendor-center .vendor-kelivo-provider-row:last-child{border-bottom:0}
+.vendor-center .vendor-kelivo-provider-icon{flex:0 0 40px;width:40px;height:40px;font-size:16px}
+.vendor-center .vendor-kelivo-provider-info>b{font-size:15.5px;font-weight:450}
+.vendor-kelivo-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 8px}
+.vendor-kelivo-list-head b{font-size:20px;font-weight:500}
+.vendor-kelivo-head-actions{display:flex;align-items:center;gap:4px}
+.vendor-kelivo-head-actions button{width:38px;height:38px;min-height:38px;border:0!important;background:transparent!important;color:var(--ink)!important;font-size:19px!important;box-shadow:none!important;padding:0!important;border-radius:50%!important}
+.vendor-kelivo-head-actions button.on{background:var(--field,#efeaf4)!important;color:var(--accent,#8a5a3b)!important}
+
+/* 圆形勾选（压过设置页通用 input 样式） */
+.vendor-center .vendor-model-check input,.model-edit-page .mep-check input{border-radius:999px!important;width:23px!important;height:23px!important;min-height:23px!important;flex:0 0 23px!important;padding:0!important;box-sizing:border-box}
+
+.shell .settings-detail .vendor-card-body .vendor-model-check input[type=checkbox],
+.shell .vendor-center .vendor-model-check input[type=checkbox],
+.shell .model-edit-page .mep-check input[type=checkbox]{
+  width:23px!important;height:23px!important;min-height:23px!important;max-height:23px!important;
+  border-radius:999px!important;padding:0!important;flex:0 0 23px!important;
+}
+.shell .settings-detail .vendor-card-body .vendor-model-check input[type=checkbox]:checked,
+.shell .vendor-center .vendor-model-check input[type=checkbox]:checked{background:var(--accent,#8a5a3b)!important;border-color:var(--accent,#8a5a3b)!important}
+
+/* 胶囊单行，放不下就裁掉，避免把上下文挤到分隔线下 */
+.vendor-center .model-chips,.model-edit-page .model-chips{flex-wrap:nowrap;overflow:hidden;gap:4px}
+.vendor-center .model-chip,.model-edit-page .model-chip{padding:0 7px;font-size:10px;line-height:1.6}
