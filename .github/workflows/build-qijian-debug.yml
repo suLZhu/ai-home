@@ -43,8 +43,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Type-check and build web assets
         run: npm run build
-      - name: Run vision attachment regression tests
-        run: node --test tests/vision-attachments.test.mjs
+      - name: Run vision, backup and time regression tests
+        run: node --test tests/vision-attachments.test.mjs tests/backups.test.mjs tests/time-context.test.mjs
       - name: Sync Capacitor
         run: npx cap sync android
       - name: Use runner native AAPT2
