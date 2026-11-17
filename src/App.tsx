@@ -89,7 +89,7 @@ import { channelPlan, notificationPayload, decideNotification, loadNotified, mar
 import { buildAlarmPlan } from './taskAlarms.mjs'
 import { readNotificationPrefs } from './notificationPreferences.mjs'
 import { registerSystemHandlers, clearConversationNotifications, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom, nativeHttpStreamAvailable, openNativeWebView, readClipboardText, appVersion } from './nativeSystem.mjs'
-import { friendlyHttpError, routeInfoFromError, diagnoseChatHttpError, diagnoseChatTransportError } from './chatHttpError.mjs'
+import { routeInfoFromError, diagnoseChatHttpError, diagnoseChatTransportError } from './chatHttpError.mjs'
 import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
