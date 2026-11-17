@@ -246,3 +246,8 @@ export const IconLock: IconComponent = props => <Icon {...props}>
   <rect x="5.5" y="10" width="13" height="10" rx="2" />
   <path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" />
 </Icon>
+
+
+export const IconCheck: IconComponent = props => <Icon {...props}>
+  <path d="m5.5 12.5 4 4 9-9" />
+</Icon>
