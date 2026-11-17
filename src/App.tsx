@@ -2953,6 +2953,11 @@ function Chat(p: any) {
   const [tray,setTray]=useState<''|'model'|'world'|'mcp'|'tools'>('')
   const [bindOpen,setBindOpen]=useState(false)
   const formRef=useRef<HTMLFormElement>(null)
+  // On Android, blurring the IME can move the fixed composer between pointerdown
+  // and click, consuming the first tap. Keep the focused editor during action taps.
+  const keepComposerFocus=(event:React.PointerEvent<HTMLButtonElement>)=>{
+    if(event.pointerType!=='mouse' && document.activeElement===composeTextRef.current) event.preventDefault()
+  }
   const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{
     // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
     if(id==='model'){const active=document.activeElement;if(active instanceof HTMLElement)active.blur()}
@@ -2995,7 +3000,7 @@ function Chat(p: any) {
   const [emojiTab,setEmojiTab]=useState<'emoji'|'fav'|'search'>('emoji')
   useEffect(()=>{
     if(!emojiOpen)return
-    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.emoji-panel,.compose-icon'))setEmojiOpen(false)}
+    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.emoji-panel,.cw-circle[aria-label="表情包"]'))setEmojiOpen(false)}
     document.addEventListener('pointerdown',onDown)
     return ()=>document.removeEventListener('pointerdown',onDown)
   },[emojiOpen])
@@ -3008,6 +3013,18 @@ function Chat(p: any) {
   const [newCustom,setNewCustom]=useState('')
   const [attachOpen,setAttachOpen]=useState(false)
   const [plusOpen,setPlusOpen]=useState(false)
+  // One outside tap dismisses ephemeral panels; let the target's click proceed.
+  useEffect(() => {
+    if (!tray && !attachOpen) return
+    const closeOutside = (event:PointerEvent) => {
+      const target=event.target
+      if (!(target instanceof Element)) return
+      if (tray && tray !== 'model' && !target.closest('.compose-tray,.compose-plus-panel,.cw-row')) setTray('')
+      if (attachOpen && !target.closest('.compose-attach-menu,.compose-plus-panel,.cw-row')) setAttachOpen(false)
+    }
+    document.addEventListener('pointerdown',closeOutside)
+    return () => document.removeEventListener('pointerdown',closeOutside)
+  },[tray,attachOpen])
   useEffect(() => {
     if (!plusOpen) return
     const closeOutside = (event:PointerEvent) => {
@@ -3140,7 +3157,7 @@ function Chat(p: any) {
   // Android 返回键：聊天页内临时层优先关闭（灯泡图→搜索→多选→表情/更多面板），
   // 全关完才把返回事件交还给上层（房间页/根），由 App 决定是否退出。
   useEffect(()=>{
-    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||attachOpen
+    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||attachOpen||plusOpen||(tray!==''&&tray!=='model')
     if(!anyLayer)return
     const unregister=pushBackHandler(()=>{
       if(lightbox){setLightbox(null);return true}
@@ -3148,10 +3165,12 @@ function Chat(p: any) {
       if(selectMode){exitSelect();return true}
       if(emojiOpen){setEmojiOpen(false);return true}
       if(attachOpen){setAttachOpen(false);return true}
+      if(plusOpen){setPlusOpen(false);return true}
+      if(tray&&tray!=='model'){setTray('');return true}
       return false
     })
     return unregister
-  },[lightbox,searchOpen,selectMode,emojiOpen,attachOpen])
+  },[lightbox,searchOpen,selectMode,emojiOpen,attachOpen,plusOpen,tray])
   // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
   // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
   const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
@@ -3595,11 +3614,11 @@ function Chat(p: any) {
         <textarea ref={composeTextRef} className="cw-input" rows={5} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="请输入您的问题…" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
       </div>
       <div className="cw-row">
-        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型"><IconSparkles className="ui-icon-inline" size={14}/> {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span><IconChevronDown size={13}/></span></button>
-        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><IconEmoji size={17}/></button>
-        <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><IconPlus size={17}/></button>
+        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型" onPointerDown={keepComposerFocus}><IconSparkles className="ui-icon-inline" size={14}/> {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span><IconChevronDown size={13}/></span></button>
+        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onPointerDown={keepComposerFocus} onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><IconEmoji size={17}/></button>
+        <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onPointerDown={keepComposerFocus} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><IconPlus size={17}/></button>
         <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
-        {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
+        {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" onPointerDown={keepComposerFocus} className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
       </div>
       {toolHint&&<div className="compose-tool-hint" role="status">{toolHint}</div>}
       {plusOpen&&<div className="compose-plus-panel" role="dialog" aria-label="更多功能">
