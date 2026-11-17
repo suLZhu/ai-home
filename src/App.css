@@ -3660,3 +3660,16 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
   border-radius:10px!important;background:var(--field,#f7f4fa)!important;color:var(--ink)!important;
   box-shadow:none!important;font-size:12px!important;
 }
+/* 聊天背景：从「只有消息列表」扩到整个聊天页，输入条改成磨砂半透明 */
+.shell.chatbg-image .fullscreen-chat{background-color:var(--field);background-image:var(--chat-bg-image);background-size:cover;background-position:center;background-repeat:no-repeat}
+@supports (color:color-mix(in srgb,red 50%,transparent)){.shell.chatbg-image .fullscreen-chat{background-image:linear-gradient(color-mix(in srgb,var(--field) calc((1 - var(--chat-bg-opacity,1)) * 100%),transparent)),var(--chat-bg-image)}}
+body.has-pack .fullscreen-chat{background-image:var(--pack-chat-bg,none);background-size:cover;background-position:center;background-repeat:no-repeat}
+.shell.chatbg-image .chat-body,body.has-pack .chat-body{background-image:none!important;background-color:transparent!important}
+.shell .fullscreen-chat .chat-header{background:var(--surface,#fffdf9)}
+.shell.chatbg-image .fullscreen-chat .compose.compose-box.compose-wechat,
+body.has-pack .fullscreen-chat .compose.compose-box.compose-wechat{
+  background:color-mix(in srgb,#fff 72%,transparent)!important;
+  border-top:1px solid color-mix(in srgb,var(--line,#e6ded2) 55%,transparent)!important;
+  -webkit-backdrop-filter:blur(26px) saturate(1.15);
+  backdrop-filter:blur(26px) saturate(1.15);
+}
