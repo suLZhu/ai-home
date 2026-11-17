@@ -3690,16 +3690,16 @@ body.has-pack{background:var(--surface,#f5f0e6)}
 body.has-pack .shell{background:transparent}
 body.has-pack .shell::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--pack-chat-bg,none) center/cover no-repeat;opacity:var(--pack-bg-opacity,1);pointer-events:none}
 body.has-pack .screen{background:transparent}
-body.has-pack .app-sidebar{background:rgba(255,253,249,.7);border-right:1px solid var(--line,#e2d9e5);color:var(--ink,#3f3743);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+body.has-pack .app-sidebar{background:transparent;border-right:1px solid var(--line,#e2d9e5);color:var(--ink,#3f3743);backdrop-filter:none;-webkit-backdrop-filter:none}
 body.has-pack .sidebar-brand b,body.has-pack .sidebar-link b{color:var(--ink,#3f3743)}
 body.has-pack .sidebar-link.active{background:var(--accent-soft,rgba(123,99,137,.16))}
 body.has-pack .sidebar-link-icon{background:var(--field,rgba(255,255,255,.55));color:var(--accent,#6b557c)}
 body.has-pack .sidebar-conv-row.active{background:var(--accent-soft,rgba(123,99,137,.14))}
 body.has-pack .settings-screen,body.has-pack .settings-detail,body.has-pack .settings-groups{background:transparent}
-body.has-pack .settings-row-list{background:rgba(255,253,249,.72)!important;border-color:var(--line,#e6ded2)!important;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+body.has-pack .settings-screen .settings-flat-list .settings-row-list{background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 body.has-pack .settings-row{background:transparent!important;border-bottom-color:var(--line,#eee7dc)!important}
-body.has-pack .setting-card,body.has-pack .settings-inner-card{background:rgba(255,253,249,.72);border:1px solid var(--line,#e6ded2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+body.has-pack .setting-card,body.has-pack .settings-inner-card{background:transparent!important;border:0!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
 body.has-pack .settings-heading h2,body.has-pack .setting-card b{color:var(--ink,#403b35)}
-body.has-pack .settings-back{background:rgba(255,255,255,.6)!important;border-color:var(--line,#e6ded2)!important;color:var(--ink,#403b35)!important}
+body.has-pack .settings-back{background:transparent!important;border-color:var(--line,#e6ded2)!important;color:var(--ink,#403b35)!important}
 /* 侧边栏打开时收起菜单胶囊，避免压住抽屉标题 */
 .shell:has(.app-sidebar.sidebar-open) .mobile-menu-toggle{opacity:0;pointer-events:none;transition:opacity .18s ease}
