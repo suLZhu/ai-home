@@ -62,6 +62,8 @@ import { ROUTE_STATE_KEY, normalizeRouteState, activeLogicalId, fixedRouteId, ty
 import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
+import { CHAT_TOOL_PREFS_KEY, normalizeChatToolPrefs, normalizeAssistantChatToolPrefs, type ChatToolPrefs } from './chatToolPrefs.mjs'
+import { fetchWeatherContext } from './weatherContext.mjs'
 import { sanitizeGeminiTools } from './geminiToolSchema.mjs'
 import { ModelPickerSheet } from './ModelPickerSheet'
 import { ModelSpecPage } from './ModelSpecPage'
@@ -365,6 +367,8 @@ export default function App() {
   const [projects,setProjects]=useState<ProjectRecord[]>(()=>read('ai-home.projects',[]))
   // 用户配置的 IANA 时区：只影响服务端生成的时间上下文（日期/星期/时间/时段），
   // 不发起任何网络请求。非法或空值由 normalizeTimeZone 回退到 Asia/Shanghai。
+  const [chatToolPrefs,setChatToolPrefs]=useState<Record<string,ChatToolPrefs>>(()=>normalizeAssistantChatToolPrefs(read<unknown>(CHAT_TOOL_PREFS_KEY,{}),ASSISTANT_PEOPLE))
+  useEffect(()=>{try{localStorage.setItem(CHAT_TOOL_PREFS_KEY,JSON.stringify(chatToolPrefs))}catch{}},[chatToolPrefs])
   const [timeZone,setTimeZone]=useState<string>(()=>normalizeTimeZone(read<string>('ai-home.timeZone','')))
   useEffect(()=>{ try{localStorage.setItem('ai-home.timeZone',JSON.stringify(timeZone))}catch{ /* private mode */ } },[timeZone])
   // ── Android 返回键 ──
@@ -724,7 +728,7 @@ export default function App() {
   const CLOUD_FLUSH_MAX_MS = 5000
   const firstDirtyAtRef = useRef(0)
 
-  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool])
+  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, chatToolPrefs, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, chatToolPrefs, modelProfiles, bindings, chatPool])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
@@ -771,6 +775,7 @@ export default function App() {
     if (Array.isArray(data.projects)) setProjects(data.projects)
     // 未知/非法时区回退默认值；旧快照没有 timeZone 字段时保持本机配置不变。
     if (typeof data.timeZone === 'string' && data.timeZone.trim()) setTimeZone(normalizeTimeZone(data.timeZone))
+    if (data.chatToolPrefs && typeof data.chatToolPrefs === 'object') setChatToolPrefs(normalizeAssistantChatToolPrefs(data.chatToolPrefs,ASSISTANT_PEOPLE))
     // 资源库字段是附加的：旧快照没有时不动本机值，行为与改造前一致。
     if (Array.isArray(data.modelProfiles)) setModelProfiles(normalizeProfiles(data.modelProfiles))
     if (data.bindings && typeof data.bindings === 'object') setBindings(normalizeBindings(data.bindings, ASSISTANT_PEOPLE))
@@ -1005,7 +1010,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal, modelProfiles, bindings, chatPool])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, chatToolPrefs, fallBackToLocal, modelProfiles, bindings, chatPool])
 
   useEffect(() => {
     if (authStatus !== 'signedIn' || isLocalMode()) return
@@ -1250,6 +1255,7 @@ export default function App() {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
+    const currentChatPrefs=normalizeChatToolPrefs(chatToolPrefs[target])
     // 聊天窗口选的模型预设优先；未绑定时回退旧的「每助手一份」配置（老数据零影响）。
     const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || defaultModelId || '', modelProfiles, modelConfig[target])
     // 多 KEY：默认「备用优先、主号兜底」，服务端按顺序自动换下一把；
@@ -1304,8 +1310,8 @@ export default function App() {
     const system = [
       '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
       '【排版】需要时可以用 Markdown：表格、列表、代码块、标题；折叠用 <details><summary>标题</summary>正文</details>；强调颜色或字号用 <span style="color:#c46a5a;font-size:15px">文字</span>。只在确实更清楚时使用，不要每句都上颜色，也不要输出脚本或外部样式。',
-      '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
-      '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
+      currentChatPrefs.tools && '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
+      currentChatPrefs.tools && '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
       card.description && '【角色描述】\n'+card.description,
       // 用户设定：助手该怎么称呼我、我是谁、偏好与忌讳；每个助手单独配置，直接进入提示词。
       buildUserContext(userSettings[target], {roomName}),
@@ -1316,7 +1322,7 @@ export default function App() {
       memoryEntries[target].length && '【长期记忆库召回】\n'+memoryEntries[target].filter(e=>e.pinned || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))).slice(0,12).map(e=>'['+e.category+'] '+e.title+'\n'+e.content).join('\n\n'),
       worldbook[target] && '【世界书补充】\n'+worldbook[target],
       enabledSkillsBlock(loadSkills(target)),
-      GUIDE_BRIEF,
+      currentChatPrefs.tools && GUIDE_BRIEF,
       matched.some(e=>e.target==='system'&&e.position==='top') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n'),
       matched.some(e=>e.target==='system'&&e.position==='tail') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='tail').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
     ].filter(Boolean).join('\n\n')
@@ -1494,7 +1500,9 @@ export default function App() {
       if(Array.isArray(currentContent)){if(userTop)currentContent=[{type:'text',text:'【世界书】\n'+userTop+'\n\n'},...currentContent];if(userTail)currentContent=[...currentContent,{type:'text',text:'\n\n【世界书】\n'+userTail}]}else currentContent=[userTop&&'【世界书】\n'+userTop,currentContent,userTail&&'【世界书】\n'+userTail].filter(Boolean).join('\n\n')
       const historyWithWorld:any[]=[...previous]
       for(const e of matched.filter(e=>e.target==='assistant')){const item={role:'assistant',content:'【世界书：'+e.title+'】\n'+e.content};const at=e.position==='top'?0:e.position==='tail'?historyWithWorld.length:Math.max(0,historyWithWorld.length-Math.max(0,e.depth));historyWithWorld.splice(at,0,item)}
+      const weatherText=currentChatPrefs.weather&&currentChatPrefs.city.trim()?await fetchWeatherContext(currentChatPrefs.city):null
       const requestMessages:any[]=[
+        ...(weatherText?[{role:'system',content:weatherText}]:[]),
         ...(system?[{role:'system',content:system}]:[]),
         ...(contextSummary?[{role:'system',content:buildSummarySystemMessage(contextSummary,summaryCovered||Math.max(0,coveredIndex+1))}]:[]),
         ...(summaryFailed?[{role:'system',content:'【上下文提示】更早的对话因为压缩失败没有带上。需要细节时用 conversation_search 工具按关键词回顾原文，不要假装记得没看到的内容。'}]:[]),
@@ -1508,6 +1516,7 @@ export default function App() {
       const toolRoutes=new Map<string,{id:string;person:Person;name:string;connectionName:string}>()
       const openAITools:any[]=[]
       // The active assistant may manage only worldbook entries bound to itself.
+      if(currentChatPrefs.tools){
       openAITools.push({type:'function',function:{name:'worldbook_create_entry',description:'在当前助手自己的世界书中新增条目。仅当用户明确要求记录或更新世界设定时使用；不要写入用户未确认的重大设定。',parameters:{type:'object',properties:{title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['title','keywords','content'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'worldbook_search_entries',description:'搜索当前助手有权限访问的世界书条目。',parameters:{type:'object',properties:{query:{type:'string'}},required:['query'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'worldbook_update_entry',description:'更新当前助手已绑定的世界书条目；必须先搜索并使用准确条目 ID。',parameters:{type:'object',properties:{id:{type:'string'},title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['id'],additionalProperties:false}}})
@@ -1569,11 +1578,12 @@ export default function App() {
           }
         }
       } catch { /* MCP is optional; continue with normal model chat. */ }
+      }
       for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         outgoingToolsEnabled=openAITools.length>0
         if(openAITools.length){requestBody.tools=/gemini|gemma/i.test(activeModel.model)?sanitizeGeminiTools(openAITools):openAITools;requestBody.tool_choice='auto'}
-        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,includeTimeContext:currentChatPrefs.time,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
         failurePhase='request'
         let response=await chatProxy()
         if(!response.ok){
@@ -2263,7 +2273,7 @@ export default function App() {
         enqueuePending={enqueuePending} flushPending={flushPending} cancelPending={cancelPending} editPendingText={editPendingText} stopGeneration={stopGeneration}
         editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} resendUserMessage={resendUserMessage} translateReasoning={translateReasoningText}
         tasks={tasks} addTask={addTask}
-        userSettings={userSettings} setUserSettings={setUserSettings}
+        userSettings={userSettings} setUserSettings={setUserSettings} chatToolPrefs={chatToolPrefs} setChatToolPrefs={setChatToolPrefs}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>{pageBeforeSettings.current='room';navigate('settings')}} packIcons={activePack?.icons} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId} />}
@@ -3025,6 +3035,8 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
 
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
+  const toolPrefs:ChatToolPrefs=normalizeChatToolPrefs(p.chatToolPrefs?.[chatPerson])
+  const setToolPrefs=(patch:Partial<ChatToolPrefs>)=>p.setChatToolPrefs((old:Record<string,ChatToolPrefs>)=>({...old,[chatPerson]:{...normalizeChatToolPrefs(old?.[chatPerson]),...patch}}))
  const chatDisplay = useChatDisplay()
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
@@ -3681,7 +3693,13 @@ function Chat(p: any) {
             {trayWorld.map(e=><label className="tray-option tray-switch-row" key={e.id}><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span><input type="checkbox" className="tray-switch" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/></label>)}
           </div>}
         </>}
-        {tray==='tools'&&<div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>}
+        {tray==='tools'&&<div className="tray-tool-settings">
+          <label className="tray-option tray-switch-row"><span>时间注入<small>每轮请求时生成日期、时间与时区</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.time} onChange={e=>setToolPrefs({time:e.target.checked})}/></label>
+          <label className="tray-option tray-switch-row"><span>天气注入<small>仅查询你填写的城市；不开定位，失败不编造天气</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.weather} onChange={e=>setToolPrefs({weather:e.target.checked})}/></label>
+          {toolPrefs.weather&&<label className="tray-weather-city">天气城市<input type="text" value={toolPrefs.city} maxLength={80} autoComplete="off" placeholder="输入城市，例如 北京 / 东京" onChange={e=>setToolPrefs({city:e.target.value})}/><small>{toolPrefs.city.trim()?'会查询该城市的实时天气':'填写城市后才会尝试注入天气；不会使用定位'}</small></label>}
+          <label className="tray-option tray-switch-row"><span>工具调用<small>关闭后只与模型聊天，不向模型发送 MCP 或内置工具</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.tools} onChange={e=>setToolPrefs({tools:e.target.checked})}/></label>
+          <div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>
+        </div>}
       </div>
     </div>}
     {selectMode
