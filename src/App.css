@@ -3562,3 +3562,11 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-model-card{padding:8px!important}
 .vendor-model-card-main{gap:2px!important}
 .vendor-tabs{margin-top:4px}
+
+/* 合并为一张卡片：设置列表 + 模型列表 */
+.settings-screen .settings-flat-list .settings-row-list{background:var(--surface,#fffdf9)!important;border:1px solid var(--line,#e6ded2)!important;border-radius:16px!important;overflow:hidden!important;gap:0!important}
+.settings-screen .settings-flat-list .settings-row{background:transparent!important;border:0!important;border-bottom:1px solid var(--line,#eee7dc)!important;border-radius:0!important;box-shadow:none!important}
+.settings-screen .settings-flat-list .settings-row:last-child{border-bottom:0!important}
+.vendor-model-cards{background:var(--card,#fffdf9)!important;border:1px solid var(--line,#e6ded2)!important;border-radius:14px!important;overflow:hidden!important;gap:0!important}
+.vendor-model-card{border:0!important;border-bottom:1px solid var(--line,#eee7dc)!important;border-radius:0!important;background:transparent!important;padding:8px 10px!important}
+.vendor-model-card:last-child{border-bottom:0!important}
