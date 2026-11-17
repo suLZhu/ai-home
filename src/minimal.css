@@ -1290,3 +1290,6 @@ html,body{
   padding-bottom:8px!important;
   align-items:center!important;
 }
+
+/* 5.0: chat model source headings are plain text, not legacy outlined buttons. */
+.shell .model-sheet .model-vendor-heading{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:0!important}
