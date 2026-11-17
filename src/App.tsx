@@ -21,7 +21,7 @@ import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
 import { applyWebUpdate, compareVersions, currentBundle, liveUpdateSupported, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
 import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
-import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
+import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, normalizeRoomStyle, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
@@ -2585,11 +2585,11 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
       if(legacy){
         const cls='ri-'+String(item.type||'')+(item.cls?' '+item.cls:'')
         const kids=item.type==='window'?<><i/><i/><i/></>:item.type==='shelf'?<><i/><i/><i/><i/></>:item.type==='desk'?<><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></>:item.text?item.text:null
-        return <div key={item.id} className={cls} style={item.style as any|undefined} aria-hidden="true">{kids}</div>
+        return <div key={item.id} className={cls} style={normalizeRoomStyle(item.style) as React.CSSProperties|undefined} aria-hidden="true">{kids}</div>
       }
       // 模板热点：沿用房间 CSS 的位置
       if(item.kind==='hotspot'&&item.hit){
-        return <button key={item.id} type="button" className={'ri-hit '+item.hit} style={item.style as any|undefined} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{icons?.[item.action||'']?<PackIcon value={icons[item.action||'']}/>:null}{icons?.[item.action||'']?' ':''}{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
+        return <button key={item.id} type="button" className={'ri-hit '+item.hit} style={normalizeRoomStyle(item.style) as React.CSSProperties|undefined} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{icons?.[item.action||'']?<PackIcon value={icons[item.action||'']}/>:null}{icons?.[item.action||'']?' ':''}{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
       }
       // 自由物件：任意位置/尺寸/样式/文字，AI 可以画公园、星空、太空……
       const pos:React.CSSProperties={
@@ -2598,7 +2598,7 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
         top:item.y!=null?`${item.y}%`:(item.style?.top as string|undefined),
         width:item.w!=null?`${item.w}%`:(item.style?.width as string|undefined),
         height:item.h!=null?`${item.h}%`:(item.style?.height as string|undefined),
-        ...(item.style as any|undefined),
+        ...(normalizeRoomStyle(item.style) || {}),
       }
       const content=item.emoji||item.text||null
       if(item.action){
