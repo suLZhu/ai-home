@@ -1,7 +1,7 @@
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-import { friendlyHttpError, routeInfoFromError, upstreamHint } from '../src/chatHttpError.mjs'
+import { friendlyHttpError, routeInfoFromError, upstreamHint, diagnoseChatHttpError, diagnoseChatTransportError } from '../src/chatHttpError.mjs'
 
 test('404 JSON 不把原始报文糊到界面', () => {
   const raw = JSON.stringify({ error: { code: 'model_not_found', message: "The model 'gpt-5-display-name' does not exist", type: 'invalid_request_error' } })
@@ -40,6 +40,29 @@ test('纯文本错误会保留成一条短提示', () => {
 test('App.tsx 不再把上游原始报文拼进聊天错误', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
   assert.doesNotMatch(app, /接口返回 HTTP '\+response\.status/)
-  assert.match(app, /friendlyHttpError\(response\.status,detail\)/)
+  assert.match(app, /diagnoseChatHttpError\(response\.status,detail/)
   assert.match(app, /console\.warn\('\[chat\] upstream HTTP error'/)
+})
+
+test('Gemini 工具 schema 400 显示工具兼容性，而不是代理问题', () => {
+  const detail=JSON.stringify({error:{message:'Invalid JSON payload received. Unknown name "dependentRequired" at tools[0].function.parameters'}})
+  const msg=diagnoseChatHttpError(400,detail,{toolsEnabled:true,elapsedMs:27000})
+  assert.match(msg,/工具参数兼容性/)
+  assert.match(msg,/27 秒/)
+  assert.doesNotMatch(msg,/代理|API Key/)
+})
+test('普通 400 不确定归因，带工具时提示对比测试', () => {
+  const msg=diagnoseChatHttpError(400,'Bad Request',{toolsEnabled:true})
+  assert.match(msg,/可能|无法仅凭/)
+})
+test('网络失败不会断言一定是梯子问题', () => {
+  const msg=diagnoseChatTransportError(new TypeError('Failed to fetch'),{stage:'request',elapsedMs:42000,localMode:true})
+  assert.match(msg,/42 秒/)
+  assert.match(msg,/代理|Clash/)
+  assert.match(msg,/不能直接判定/)
+})
+test('流式传输超时能区别连接之前和之后', () => {
+  const msg=diagnoseChatTransportError(new Error('Timed out'),{stage:'stream',elapsedMs:69000})
+  assert.match(msg,/流式/)
+  assert.match(msg,/69 秒/)
 })
