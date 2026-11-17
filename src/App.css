@@ -3518,3 +3518,14 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-inline-keys .vendor-key-add-card.inline{margin-top:6px;padding:9px;border-radius:10px;box-shadow:none;background:var(--field,#f7f3ec)}
 .vendor-inline-keys .vendor-key-add-card.inline>b{font-size:11px}
 .vendor-inline-keys .vendor-submit{margin-top:6px}
+
+/* 分组/隐藏一行不溢出，控件收窄 */
+.vendor-config-pair{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;align-items:center!important;gap:10px!important;width:100%;box-sizing:border-box;padding:0 2px}
+.vendor-config-pair .vendor-config-inline{display:grid!important;grid-template-columns:auto minmax(0,1fr)!important;align-items:center;gap:8px;min-width:0;padding:0!important;border:0!important}
+.vendor-config-pair .vendor-config-inline input{width:100%!important;max-width:120px!important;min-width:0!important}
+.vendor-config-pair .vendor-config-switch.compact{display:flex!important;align-items:center;gap:6px;flex:0 0 auto!important;padding:0!important;border:0!important;min-width:0}
+.vendor-config-pair .vendor-config-switch.compact input{width:44px!important;height:26px!important;flex:0 0 44px!important}
+.vendor-config-pair .vendor-config-switch.compact input::after{width:20px!important;height:20px!important}
+.vendor-config-pair .vendor-config-switch.compact input:checked::after{transform:translateX(18px)!important}
+/* 连接设置的输入框也收成窄长条 */
+.vendor-config-fields .vendor-field input{max-width:260px!important}

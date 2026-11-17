@@ -3766,7 +3766,6 @@ function brandOf(modelId:string){
   return {glyph:'◇',cls:'brand-other'}
 }
 
-const VENDOR_AVATARS=['🤖','🧠','⚡','🌙','☁️','🔮','🐳','🌊','🍀','🦊','🐱','🕊️','✦','◈','⬡','❋']
 
 // ── 供应商中心：一排两个小图标，点一家进入它自己的页面（配置 / 模型两个 tab） ─────────
 // 模型不再来自写死的预置清单：填好 API Key 后按该网址 /models 实时拉取，
@@ -3908,7 +3907,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [selectedVendors,setSelectedVendors]=useState<string[]>([])
   const [groupPrompt,setGroupPrompt]=useState(false)
   const [groupDraft,setGroupDraft]=useState('')
-  const [avatarOpen,setAvatarOpen]=useState(false)
   const [testState,setTestState]=useState<{busy:boolean;ok?:boolean;text:string}>({busy:false,text:''})
   const [remoteModels,setRemoteModels]=useState<Record<string,string[]>>({})
   const [listState,setListState]=useState<{loading:boolean;error:string}>({loading:false,error:''})
@@ -3996,7 +3994,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     if(!ok)return
     commit(vendors.filter(x=>x.id!==v.id));backToList()
   }
-  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setAvatarOpen(false);setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const backToDetail=()=>{resetEditUI();setTab('config');setShowBackupKeys(true);onSection('vendor:'+activeId)}
@@ -4337,13 +4335,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <div className="vendor-config-fields">
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
           <datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist>
-          <div className="vendor-field">图标
-            <div className="vendor-avatar-row"><button type="button" className="vendor-avatar-current" aria-label="选择供应商图标" onClick={()=>setAvatarOpen(o=>!o)}>{active.avatar||active.name.slice(0,1)}</button><small>点一下换图标，列表和详情都会用</small></div>
-            {avatarOpen&&<div className="vendor-avatar-grid">
-              {VENDOR_AVATARS.map(e=><button type="button" key={e} className={active.avatar===e?'on':''} onClick={()=>{patch(active.id,x=>({...x,avatar:e}));setAvatarOpen(false)}}>{e}</button>)}
-              <button type="button" className={!active.avatar?'on':''} onClick={()=>{patch(active.id,x=>({...x,avatar:''}));setAvatarOpen(false)}}>首字</button>
-            </div>}
-          </div>
+
           <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="粘贴 API Key"/><PasteButton onPaste={setPrimary}/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
