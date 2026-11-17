@@ -24,6 +24,7 @@ import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, set
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, normalizeRoomStyle, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { RoomWidgets } from './RoomWidgets'
+import { requestInputWeights, allocateInputTokens, tokenCountLabel } from './requestTokenBreakdown.mjs'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
 import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
@@ -123,7 +124,7 @@ function alignCardNames(cards:Record<string,CharacterCard>|null|undefined, names
 }
 type Tool = '人物设置' | '世界书' | '记忆面板' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板' | '助手档案'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
-type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
+type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number; inputBreakdown?: {context:number;tools:number;worldbook:number}; inputBreakdownEstimated?:boolean }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; at?: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string; reasoning?: string }
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; archivedAt?:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
@@ -1436,6 +1437,7 @@ export default function App() {
     }
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
+    const measuredParts={context:0,tools:0,worldbook:0}
     // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
     let lastStreamLog=0
     // 声明在 try 之外：catch 需要读取 answer，保留已流式到达的文本（块级作用域 let 进不了 catch）。
@@ -1586,6 +1588,8 @@ export default function App() {
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         outgoingToolsEnabled=openAITools.length>0
         if(openAITools.length){requestBody.tools=/gemini|gemma/i.test(activeModel.model)?sanitizeGeminiTools(openAITools):openAITools;requestBody.tool_choice='auto'}
+        const beforeRoundTokens=Number(usageTotals.promptTokens)||0
+        const roundWeights=requestInputWeights(requestMessages,requestBody.tools||[],matched)
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,includeTimeContext:currentChatPrefs.time,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
         failurePhase='request'
         let response=await chatProxy()
@@ -1618,6 +1622,11 @@ export default function App() {
         if(contentTail){roundText+=contentTail;answer+=contentTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}
         const reasoningTail=reasoningCleanup.flush()
         if(reasoningTail){thinking+=reasoningTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}
+        const inputTokensThisRound=(Number(usageTotals.promptTokens)||0)-beforeRoundTokens
+        const roundEstimate=allocateInputTokens(inputTokensThisRound,roundWeights)
+        measuredParts.context+=roundEstimate.context
+        measuredParts.tools+=roundEstimate.tools
+        measuredParts.worldbook+=roundEstimate.worldbook
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
@@ -1838,7 +1847,7 @@ export default function App() {
       const elapsedMs=Math.max(1,Math.round(performance.now()-requestStartedAt))
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
-      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
+      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined,inputBreakdown:measuredParts,inputBreakdownEstimated:true}:undefined
       if(!answer){
         // 重新生成拿到空白回复：不覆盖旧回复，恢复原样并提示（防止有效回复被空白顶掉）。
         if(regen){restoreRegenerate();setChatError('重新生成没有返回内容，已保留原来的回复。');return 'fail'}
@@ -3023,8 +3032,8 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
       const u = m.usage || {}
       const time = u.at ? new Date(u.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
       const total = (Number(u.promptTokens) || 0) + (Number(u.completionTokens) || 0)
-      return <div className="request-stats-row" key={m.id || Math.random()}>
-        <div className="request-stats-line1"><b>{u.model || '未知模型'}</b><span>{time}</span></div>
+      return <details className="request-stats-row" key={m.id || u.at || 'usage'}>
+        <summary className="request-stats-line1"><b>{u.model || '未知模型'}</b><span>{time} · {tokenCountLabel(total)} Token</span></summary>
         <div className="request-stats-line2">
           <span>输入 {Number(u.promptTokens || 0).toLocaleString()}</span>
           <span>输出 {Number(u.completionTokens || 0).toLocaleString()}</span>
@@ -3033,7 +3042,15 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
           {u.tokensPerSecond ? <span>{Math.round(Number(u.tokensPerSecond))} tok/s</span> : null}
           {u.elapsedMs ? <span>{(Number(u.elapsedMs) / 1000).toFixed(1)}s</span> : null}
         </div>
-      </div>
+        {u.inputBreakdown&&<div className="request-token-breakdown">
+          <div><b>本次输入构成（估算）</b><small>按实际输入 Token 总数和发送内容占比分摊；非供应商精确分类账单</small></div>
+          <div>上下文 <strong>≈{tokenCountLabel(u.inputBreakdown.context)} Token</strong></div>
+          <div>工具定义及结果 <strong>≈{tokenCountLabel(u.inputBreakdown.tools)} Token</strong></div>
+          <div>世界书 <strong>≈{tokenCountLabel(u.inputBreakdown.worldbook)} Token</strong></div>
+          <small>同一回复若多次调用工具，输入包含所有请求轮次；缓存命中不额外叠加。</small>
+        </div>}
+        {!u.inputBreakdown&&<p className="muted">这条记录来自旧版本，尚无分类估算；新版请求会自动记录。</p>}
+      </details>
     })}</div>
   </div>
 }
