@@ -3,6 +3,7 @@
 // 规则和服务端保持同一套语义：轮数 / 字数 / 天数任一满足就整理；整理结果只进
 // 候选区（除非用户打开「整理后自动生效」）；同样的内容不会重复写入。
 import { apiFetch } from './apiBase.mjs'
+import { embedText } from './memoryModels.mjs'
 
 export const LOCAL_AUTO_KEY = 'ai-home.memoryAuto'
 
@@ -146,7 +147,8 @@ function extractContent(text) {
 }
 
 // 跑一次整理：调当前模型 → 解析 JSON → 逐条写入本地记忆记录。
-export async function runLocalOrganize({ person, messages, endpoint, apiKey, chatUrl, model, cfg }) {
+// embedTarget 有值时顺带算 embedding，聊天召回就能走语义相似度。
+export async function runLocalOrganize({ person, messages, endpoint, apiKey, chatUrl, model, cfg, embedTarget }) {
   if (!endpoint || !apiKey || !model) throw new Error('先在「供应商」里配好并选中一个可用模型，再整理。')
   const list = (Array.isArray(messages) ? messages : []).filter(m => m && (m.role === 'user' || m.role === 'assistant') && messageText(m))
   const since = cfg.lastRunAt ? new Date(cfg.lastRunAt).getTime() : 0
@@ -176,7 +178,16 @@ export async function runLocalOrganize({ person, messages, endpoint, apiKey, cha
   const proposals = parseProposals(extractContent(text))
   let created = 0
   let duplicate = 0
+  let embedded = 0
   for (const proposal of proposals) {
+    // 向量是可选的：拿不到 embedding 不影响记忆本身写入。
+    let embedding = null
+    if (embedTarget) {
+      try {
+        embedding = await embedText(embedTarget, proposal.title + '\n' + proposal.content)
+        if (embedding) embedded += 1
+      } catch { embedding = null }
+    }
     const saved = await apiFetch('/api/memory/records', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -185,6 +196,7 @@ export async function runLocalOrganize({ person, messages, endpoint, apiKey, cha
         ...proposal,
         lifecycle: cfg.autoConfirm ? 'active' : 'candidate',
         createdBy: 'model',
+        ...(embedding ? { embedding } : {}),
       }),
     })
     if (!saved.ok) continue
@@ -193,6 +205,6 @@ export async function runLocalOrganize({ person, messages, endpoint, apiKey, cha
     else created += 1
   }
   const lastRunAt = new Date().toISOString()
-  writeLocalAuto({ lastRunAt, lastRun: { status: 'succeeded', finishedAt: lastRunAt, error: '', scanned: recent.length, created, proposals: proposals.length } })
+  writeLocalAuto({ lastRunAt, lastRun: { status: 'succeeded', finishedAt: lastRunAt, error: '', scanned: recent.length, created, proposals: proposals.length, embedded } })
   return { created, scanned: recent.length, duplicate }
 }

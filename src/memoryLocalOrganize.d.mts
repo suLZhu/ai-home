@@ -29,4 +29,5 @@ export function runLocalOrganize(input: {
   chatUrl?: string
   model: string
   cfg: LocalAuto
+  embedTarget?: { endpoint: string; apiKey: string; model: string } | null
 }): Promise<{ created: number; scanned: number; duplicate: number }>

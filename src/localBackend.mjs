@@ -686,6 +686,8 @@ export async function localHandle(path, init) {
         sourceMessageIds: Array.isArray(b.sourceMessageIds) ? b.sourceMessageIds.slice(0, 50) : [],
         createdBy, recallCount: 0, createdAt: ts, updatedAt: ts,
       }
+      // 向量模型给的 embedding 存在本机记录上，供聊天召回时做余弦排序。
+      if (Array.isArray(b.embedding) && b.embedding.length) record.embedding = b.embedding.slice(0, 4096)
       all.unshift(record)
       try { writeJSON(K.memoryRecords, all.slice(0, 2000)) } catch { return json(500, { error: '本地存储写入失败' }) }
       return json(201, { record, duplicate: false })

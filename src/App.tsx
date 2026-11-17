@@ -12,6 +12,7 @@ import { enabledSkillsBlock, loadSkills, parseSkillMarkdown } from './skills.mjs
 import { ToolDashboard } from './ToolDashboard'
 import { MemoryPanel } from './MemoryPanel'
 import { runLocalOrganize } from './memoryLocalOrganize.mjs'
+import { readMemoryModels, embeddingTarget, embedText, cosine } from './memoryModels.mjs'
 import { RichText } from './RichText.tsx'
 import { UiDialogHost } from './UiDialogHost'
 import { SystemSetupSheet } from './SystemSetupSheet'
@@ -1346,6 +1347,34 @@ export default function App() {
         }
       } catch { /* optional recall; normal chat continues */ }
     }
+    // 记忆库召回（本地/云端都走 /api/memory/records）：命中关键词或向量相似的生效记忆，一起塞进上下文。
+    if (text.length >= 2) {
+      try {
+        const memResponse = await apiFetch('/api/memory/records?person=' + encodeURIComponent(target) + '&lifecycle=active', { credentials: 'include' })
+        if (memResponse.ok) {
+          const memData = await memResponse.json()
+          const list = (Array.isArray(memData.records) ? memData.records : []) as { title: string; content: string; keywords?: string; embedding?: number[] }[]
+          if (list.length) {
+            const mm = readMemoryModels()
+            const embedTarget = mm.embed.model ? embeddingTarget(vendors, mm.embed) : null
+            let queryVector: number[] | null = null
+            if (embedTarget) {
+              try { queryVector = await embedText(embedTarget, text.slice(0, 500)) } catch { queryVector = null }
+            }
+            const scored = list.map(record => {
+              const keywords = String(record.keywords || '').split(/[,，、\s]+/).filter(Boolean)
+              const keywordScore = keywords.filter(keyword => text.includes(keyword)).length
+              const vectorScore = queryVector && Array.isArray(record.embedding) ? cosine(queryVector, record.embedding) : 0
+              return { record, score: vectorScore * 2 + keywordScore }
+            }).filter(item => item.score > 0.15).sort((a, b) => b.score - a.score).slice(0, 4)
+            if (scored.length) {
+              const block = '【记忆库召回（长期记忆，按相关性挑选）】\n' + scored.map(item => '· ' + item.record.title + '\n' + item.record.content).join('\n\n')
+              recalledContext = recalledContext ? recalledContext + '\n\n' + block : block
+            }
+          }
+        }
+      } catch { /* 记忆召回失败不影响聊天 */ }
+    }
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
     // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
@@ -2575,12 +2604,24 @@ function ToolPanel(p: any) {
   if (t === 'SKILL 技能库') return <SkillWorkbench person={p.person} personLabel={p.displayName}/>
   if (t === 'MCP') return <MCPSettings person={p.person} personLabel={p.displayName}/>
   if (t === '工具调用看板') return <ToolDashboard person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)}/>
-  if (t === '记忆面板') return <MemoryPanel person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)} personMessages={p.messages?.[p.person]||[]} onRunOrganize={async (cfg: any) => {
+  if (t === '记忆面板') return <MemoryPanel person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)} personMessages={p.messages?.[p.person]||[]} modelOptions={(p.vendors||[]).flatMap((v:any)=>(v.models||[]).filter((m:any)=>m.selected).map((m:any)=>({vendorId:v.id,model:m.id,label:v.name+' · '+(m.name||m.id)})))} onRunOrganize={async (cfg: any) => {
     const profileId = p.bindings?.[p.person]?.modelProfileId || p.defaultModelId || ''
     const active = resolveModelConfig(profileId, p.modelProfiles || [], p.modelConfig)
-    const vendor = (p.vendors || []).find((v: Vendor) => v.id === active.vendorId)
-    const apiKey = resolveKeyCandidates(p.vendors || [], p.bindings?.[p.person]?.keyId || '', p.apiKey || '', active.vendorId || '')[0] || ''
-    return runLocalOrganize({ person: p.person, messages: p.messages?.[p.person] || [], endpoint: vendor?.endpoint || '', apiKey, chatUrl: vendor ? chatRequestUrl(vendor) : '', model: active.model || '', cfg })
+    const mm = readMemoryModels()
+    // 记忆整理可以单独指定模型；没指定就用聊天模型。
+    const organizeVendor = mm.organize.model ? (p.vendors || []).find((v: Vendor) => v.id === mm.organize.vendorId) : (p.vendors || []).find((v: Vendor) => v.id === active.vendorId)
+    const organizeModel = mm.organize.model || active.model || ''
+    const apiKey = resolveKeyCandidates(p.vendors || [], p.bindings?.[p.person]?.keyId || '', p.apiKey || '', organizeVendor?.id || '')[0] || ''
+    return runLocalOrganize({
+      person: p.person,
+      messages: p.messages?.[p.person] || [],
+      endpoint: organizeVendor?.endpoint || '',
+      apiKey,
+      chatUrl: organizeVendor ? chatRequestUrl(organizeVendor) : '',
+      model: organizeModel,
+      cfg,
+      embedTarget: embeddingTarget(p.vendors || [], mm.embed),
+    })
   }}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '工作流') return <TaskManager person={p.person} personLabel={p.displayName}/>

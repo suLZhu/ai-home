@@ -7,9 +7,11 @@ import { useEffect, useRef, useState } from 'react'
 import './ToolDashboard.css'
 import './MemoryPanel.css'
 import { isLocalMode } from './apiBase.mjs'
+import { SoftSelect } from './SoftSelect'
 import { MemoryGovernancePanel } from './MemoryGovernancePanel'
 import { saveAutoOrganize, runAutoOrganize, useAutoOrganize, type AutoOrganizeStatus } from './memoryGovernance'
 import { localTrigger, pendingStats, readLocalAuto, writeLocalAuto, type LocalAuto } from './memoryLocalOrganize.mjs'
+import { readMemoryModels, writeMemoryModels } from './memoryModels.mjs'
 
 const RUN_STATUS_TEXT: Record<string, string> = {
   running: '进行中', succeeded: '已完成', failed: '失败', cancelled: '已取消', timed_out: '超时',
@@ -179,6 +181,44 @@ function AutoOrganizeCard({ person }: { person: string }) {
   </section>
 }
 
+// 记忆专用模型：整理模型 / 向量模型各一个槽位，和聊天模型解耦。
+// 留空分别表示「跟随聊天模型」和「不做向量检索（退回关键词）」。
+function MemoryModelCard({ options }: { options: { vendorId: string; model: string; label: string }[] }) {
+  const [models, setModels] = useState(() => readMemoryModels())
+  const [notice, setNotice] = useState('')
+  const encode = (slot: { vendorId: string; model: string }) => (slot.model ? slot.vendorId + '::' + slot.model : '')
+  const decode = (value: string) => {
+    const [vendorId, model] = String(value || '').split('::')
+    return { vendorId: vendorId || '', model: model || '' }
+  }
+  const picks = options.map(option => ({ value: option.vendorId + '::' + option.model, label: option.label }))
+  return <section className="memory-auto memory-models" aria-label="记忆模型">
+    <div className="memory-auto-head">
+      <div>
+        <b>记忆模型</b>
+        <small>整理和向量可以各用各的模型，不必跟聊天模型挤在一起。整理留空＝跟随聊天模型；向量留空＝不做语义检索，退回关键词。</small>
+      </div>
+    </div>
+    {notice && <p className="tool-dash-note" role="status">{notice}</p>}
+    <div className="memory-auto-fields memory-model-fields">
+      <label className="memory-auto-field">整理模型
+        <SoftSelect ariaLabel="整理模型" value={encode(models.organize)} onChange={value => setModels(old => ({ ...old, organize: decode(value) }))} options={[{ value: '', label: '跟随聊天模型' }, ...picks]} />
+        <span>整理对话、生成记忆条目用</span>
+      </label>
+    </div>
+    <div className="memory-auto-fields memory-model-fields">
+      <label className="memory-auto-field">向量模型
+        <SoftSelect ariaLabel="向量模型" value={encode(models.embed)} onChange={value => setModels(old => ({ ...old, embed: decode(value) }))} options={[{ value: '', label: '不使用向量' }, ...picks]} />
+        <span>写入记忆时算 embedding，聊天召回按相似度排序</span>
+      </label>
+    </div>
+    <div className="memory-auto-actions">
+      <button type="button" onClick={() => { writeMemoryModels(models); setNotice('记忆模型已保存。') }}>保存模型设置</button>
+    </div>
+    <p className="tool-dash-note">向量模型要供应商提供 OpenAI 兼容的 <code>/v1/embeddings</code>，并且先在该供应商的「模型」里加上它（例如 text-embedding-3-small）才能选到；不支持的供应商会自动退回关键词匹配，记忆本身照常保存。</p>
+  </section>
+}
+
 // 本地模式的自动整理：没有服务器，就在这台设备上用当前模型跑一次。
 // 交互和服务器版保持一致（阈值 / 自动生效 / 规则 / 立即整理），只是调度换成「打开面板时触发」。
 function LocalAutoCard({ personMessages, onRun }: {
@@ -291,11 +331,12 @@ function LocalAutoCard({ personMessages, onRun }: {
   </section>
 }
 
-export function MemoryPanel({ person, personLabel, onJumpToSource, personMessages, onRunOrganize }: {
+export function MemoryPanel({ person, personLabel, onJumpToSource, personMessages, modelOptions, onRunOrganize }: {
   person: string
   personLabel?: string
   onJumpToSource?: (conversationId: string, messageId?: string) => void
   personMessages?: unknown[]
+  modelOptions?: { vendorId: string; model: string; label: string }[]
   onRunOrganize?: (cfg: LocalAuto) => Promise<{ created: number; scanned: number; duplicate: number }>
 }) {
   return <div className="memory-panel">
@@ -303,6 +344,7 @@ export function MemoryPanel({ person, personLabel, onJumpToSource, personMessage
       <h3>{personLabel ? personLabel + ' 的记忆' : '记忆面板'}</h3>
       <p>助手记下来的事默认先进候选区；打开「整理后自动生效」后会直接进入记忆库。你随时可以归档或拒绝，拒绝过的内容会留下墓碑，不会再被重复提议。</p>
     </header>
+    {isLocalMode() && !!modelOptions?.length && <MemoryModelCard options={modelOptions} />}
     {isLocalMode()
       ? <LocalAutoCard personMessages={personMessages || []} onRun={onRunOrganize} />
       : <AutoOrganizeCard person={person} />}
