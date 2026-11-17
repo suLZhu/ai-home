@@ -564,3 +564,150 @@ body.has-pack .shell::before{display:none!important}
 .shell .switch-track{
   filter:grayscale(1)!important;
 }
+
+
+/* 6.2 页面层级结构统一：一级 / 二级 / 三级只允许一个页头。 */
+.shell .settings-screen{
+  padding-top:var(--minimal-top)!important;
+}
+.shell .settings-page-header{
+  display:grid!important;
+  grid-template-columns:92px minmax(0,1fr) 92px!important;
+  align-items:center!important;
+  width:100%!important;
+  height:var(--minimal-header)!important;
+  min-height:var(--minimal-header)!important;
+  margin:0!important;
+  padding:0 2px!important;
+  box-sizing:border-box!important;
+  background:#fff!important;
+  border:0!important;
+  border-bottom:1px solid var(--minimal-line)!important;
+  box-shadow:none!important;
+}
+.shell .settings-page-header h2{
+  margin:0!important;
+  padding:0!important;
+  font-size:17px!important;
+  line-height:1!important;
+  font-weight:600!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.shell .settings-page-back{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:5px!important;
+  width:auto!important;
+  min-width:0!important;
+  height:36px!important;
+  margin:0!important;
+  padding:0 4px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:#fff!important;
+  color:#222!important;
+  font-size:12px!important;
+}
+.shell .settings-page-head-spacer{display:block!important}
+
+.shell .settings-detail,
+.shell .vendor-center,
+.shell .vendor-page,
+.shell .vendor-card,
+.shell .vendor-card-body{
+  margin-top:0!important;
+  padding-top:0!important;
+}
+.shell .settings-detail{
+  width:100%!important;
+  margin:0!important;
+  padding:0!important;
+}
+
+/* 供应商内部不再拥有第二套页面头，只能有紧凑工具行。 */
+.shell .vendor-center{
+  display:block!important;
+  gap:0!important;
+}
+.shell .vendor-kelivo-list-head,
+.shell .vendor-inline-toolbar,
+.shell .vendor-page-meta{
+  min-height:38px!important;
+  height:38px!important;
+  margin:0!important;
+  padding:0 2px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:8px!important;
+  background:#fff!important;
+  border:0!important;
+  border-bottom:1px solid var(--minimal-line)!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+.shell .vendor-page-meta{
+  justify-content:flex-end!important;
+  color:var(--minimal-muted)!important;
+  font-size:11px!important;
+}
+.shell .vendor-inline-meta{
+  color:var(--minimal-muted)!important;
+  font-size:11px!important;
+}
+.shell .vendor-kelivo-head-actions{
+  margin-left:auto!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:2px!important;
+}
+.shell .vendor-kelivo-head-actions button{
+  width:32px!important;
+  min-width:32px!important;
+  height:32px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:#fff!important;
+}
+.shell .vendor-head-tabs{
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+}
+.shell .vendor-head-title{
+  height:38px!important;
+  padding:0!important;
+  border:0!important;
+  background:#fff!important;
+  font-size:12px!important;
+}
+.shell .vendor-kelivo-search{
+  margin:0!important;
+  border-radius:0!important;
+  border-left:0!important;
+  border-right:0!important;
+  border-top:0!important;
+  box-shadow:none!important;
+}
+.shell .vendor-kelivo-provider-list,
+.shell .vendor-key-manager-stats,
+.shell .vendor-key-manager-list{
+  margin-top:0!important;
+}
+
+/* 旧的页头规则即使还残留，也不能再占布局高度。 */
+.shell .vendor-kelivo-page-head,
+.shell .vendor-detail-head.vendor-kelivo-detail-head,
+.shell .vendor-account-back{
+  margin:0!important;
+}
+
+/* 新页面切换时禁止浏览器用锚点/滚动恢复改变视觉起点。 */
+html,body{
+  scroll-padding-top:0!important;
+}
