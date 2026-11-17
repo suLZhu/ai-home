@@ -3417,3 +3417,13 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
  .vendor-center .vendor-kelivo-page-head .vendor-kelivo-provider-meta{display:none}
  .vendor-key-manager-row-head .vendor-key-role,.vendor-key-add-meta .vendor-key-role{flex-basis:82px;min-width:82px}
 }
+
+/* 供应商列表：图标带文字 + 默认模型快捷行 + 行内 Key/模型数 */
+.vendor-kelivo-head-actions button{display:inline-flex;align-items:center;gap:3px;width:auto;padding:4px 7px;border-radius:8px}
+.vendor-kelivo-head-actions button em{font-style:normal;font-size:10px;color:var(--muted,#8a7d6d)}
+.vendor-kelivo-head-actions button.on em{color:inherit}
+.vendor-default-row{display:flex;align-items:center;gap:8px;width:100%;margin:2px 0 8px;padding:8px 10px;border:1px solid var(--line,#e6ded2);border-radius:12px;background:var(--card,#fffdf9);color:var(--ink,#403b35)}
+.vendor-default-row span[aria-hidden]{font-size:13px;color:#c9a227}
+.vendor-default-row b{font-size:12px}
+.vendor-default-row small{margin-left:auto;font-size:10.5px;color:var(--muted,#8a7d6d);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vendor-kelivo-provider-info small{display:block;font-size:9.5px;color:var(--muted,#8a7d6d);margin-top:1px}

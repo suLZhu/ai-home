@@ -4090,13 +4090,14 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       <div className="vendor-kelivo-list-head">
         <b>供应商</b>
         <div className="vendor-kelivo-head-actions">
-          <button type="button" aria-label="模型目录" title="模型目录" onClick={()=>onSection('vendor:catalog')}>📖</button>
-          <button type="button" aria-label="多选供应商" title="多选供应商" className={selectMode?'on':''} onClick={()=>{setSelectMode(v=>!v);setSelectedVendors([]);setGroupPrompt(false)}}>☑</button>
-          <button type="button" aria-label="导入供应商" title="从 Kelivo 配置导入" onClick={()=>{setImportOpen(true);setImportText('');setImportMsg('')}}>☁</button>
-          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}>＋</button>
+          <button type="button" aria-label="模型目录" title="模型目录" onClick={()=>onSection('vendor:catalog')}><span aria-hidden="true">📖</span><em>目录</em></button>
+          <button type="button" aria-label="多选供应商" title="多选供应商" className={selectMode?'on':''} onClick={()=>{setSelectMode(v=>!v);setSelectedVendors([]);setGroupPrompt(false)}}><span aria-hidden="true">☑</span><em>多选</em></button>
+          <button type="button" aria-label="导入供应商" title="从 Kelivo 配置导入" onClick={()=>{setImportOpen(true);setImportText('');setImportMsg('')}}><span aria-hidden="true">☁</span><em>导入</em></button>
+          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><span aria-hidden="true">＋</span><em>添加</em></button>
         </div>
       </div>
       <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
+      {(()=>{const def=modelProfiles.find(p=>p.id===defaultModelId);return <button type="button" className="vendor-default-row" onClick={()=>onSection('vendor:default')}><span aria-hidden="true">★</span><b>默认模型</b><small>{def?def.name:'未设置'}</small><span className="vendor-kelivo-provider-caret">›</span></button>})()}
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
         {(()=>{
           const q=vendorQuery.trim().toLowerCase()
@@ -4115,17 +4116,17 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();setSelectedVendors(ids=>picked?ids.filter(x=>x!==v.id):[...ids,v.id])}}}>
                 <span className="vendor-pick" aria-hidden="true">{picked?'✓':''}</span>
                 <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
-                <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
+                <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
               </div>
             }
             if(sortMode) return <div className={'vendor-kelivo-provider-row sortrow'+(off?' off':'')} key={v.id}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
-              <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
+              <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
               <span className="vendor-sort-btns"><button type="button" aria-label={'上移 '+v.name} onClick={()=>moveVendor(v.id,-1)}>↑</button><button type="button" aria-label={'下移 '+v.name} onClick={()=>moveVendor(v.id,1)}>↓</button></span>
             </div>
             return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
-              <span className="vendor-kelivo-provider-info"><b>{v.name}</b></span>
+              <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
               <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
               <span className="vendor-kelivo-provider-caret">›</span>
             </button>
