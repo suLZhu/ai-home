@@ -63,9 +63,14 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
         </select>
       </label>
       <label className="theme-radius-setting">
-        <span className="theme-control-title">按钮与输入框圆角 <strong>{value.radius}px</strong></span>
-        <small className="theme-control-hint">只调整常用按钮、输入框和下拉框的边角；列表分隔线与头像不变。</small>
-        <input type="range" min="4" max="24" step="2" value={value.radius} aria-label="按钮与输入框圆角" onChange={e => update({ radius: Number(e.target.value) })}/>
+        <span className="theme-control-title">全局圆角 <strong>{value.radius}px</strong></span>
+        <small className="theme-control-hint">调整主要控件的圆角：按钮、输入框、下拉框、聊天气泡和输入栏。头像与分隔线不受影响。</small>
+        <div className="theme-radius-preview" aria-label="圆角效果预览">
+          <button type="button" className="theme-radius-preview-button" style={{ borderRadius: value.radius + 'px' }} tabIndex={-1}>按钮</button>
+          <span className="theme-radius-preview-field" style={{ borderRadius: value.radius + 'px' }}>输入框</span>
+          <span className="theme-radius-preview-bubble" style={{ borderRadius: (value.radius + 4) + 'px' }}>消息气泡</span>
+        </div>
+        <input type="range" min="4" max="24" step="2" value={value.radius} aria-label="全局圆角" onChange={e => update({ radius: Number(e.target.value) })}/>
       </label>
     </div>
 
