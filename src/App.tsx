@@ -4126,11 +4126,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       }catch(e){capPatch(id,'tool',{state:'fail',note:e instanceof Error?e.message:'请求失败'})}
     }
   }
-  const hideSelected=(v:Vendor)=>{
-    if(!batchIds.length) return
-    patch(v.id,x=>({...x,models:x.models.map(m=>batchIds.includes(m.id)?{...m,hidden:true}:m)}))
-    setBatchIds([]);setModelSelectMode(false)
-  }
   const removeSelected=async(v:Vendor)=>{
     if(!batchIds.length) return
     const ok=await confirmDialog({title:'删除模型',message:'从「'+v.name+'」移除 '+batchIds.length+' 个模型？之后可以重新获取再添加。',confirmLabel:'删除',danger:true})
@@ -4455,7 +4450,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           {modelSelectMode?<div className="vendor-kelivo-batchbar">
             <button type="button" onClick={()=>setBatchIds(batchIds.length===pickedModels.length?[]:pickedModels.map(m=>m.id))}>{batchIds.length===pickedModels.length&&pickedModels.length?'全不选':'全选'}</button>
             <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>{setModelSelectMode(false);void runCapTest(active,batchIds)}}>测试</button>
-            <button type="button" disabled={!batchIds.length} onClick={()=>hideSelected(active)}>隐藏</button>
             <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>🗑</button>
             <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}>×</button>
           </div>:<div className="vendor-kelivo-floating-actions">
