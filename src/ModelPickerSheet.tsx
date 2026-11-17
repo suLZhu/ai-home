@@ -10,6 +10,7 @@ import {
   selectLogicalModel, fixedRouteId, type RouteState,
 } from './routeState.mjs'
 import { ModelRoutesPanel } from './ModelRoutesPanel'
+import { IconCheck, IconChevronDown, IconChevronUp, IconClose, IconSearch, IconSettings, IconStar } from './icons'
 
 // 统一模型面板：订阅账号模型和 API 模型在这里是同一份目录、同一个选择入口，
 // 来源只是行上一枚小标；同一个逻辑模型挂 A/B/C 三条线路也只显示一行。
@@ -99,29 +100,29 @@ export function ModelPickerSheet({
     <section className="model-sheet" role="dialog" aria-label="选择模型" onClick={e => e.stopPropagation()}>
       <span className="model-sheet-handle" aria-hidden="true"/>
       <div className="model-sheet-head">
-        <button type="button" className="model-sheet-close" aria-label="关闭模型面板" onClick={onClose}>×</button>
+        <button type="button" className="model-sheet-close" aria-label="关闭模型面板" onClick={onClose}><IconClose size={16}/></button>
         <b>选择模型</b>
         <span aria-hidden="true"/>
       </div>
       {lastRouteInfo && <p className="model-sheet-routeinfo" data-route-info>{lastRouteInfo}</p>}
       <div className="model-sheet-search">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.5 15.5 4.3 4.3"/></g></svg>
+        <IconSearch size={16}/>
         <input id="model-sheet-search-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索模型或服务商" aria-label="搜索模型或服务商"/>
-        {query && <button type="button" className="model-sheet-clear" aria-label="清除搜索" onClick={() => setQuery('')}>×</button>}
+        {query && <button type="button" className="model-sheet-clear" aria-label="清除搜索" onClick={() => setQuery('')}><IconClose size={14}/></button>}
       </div>
       {vendorKeys.length > 0 && <div className="model-sheet-keyrow">
         <span className="model-sheet-keylabel">密钥</span>
         <div className="model-sheet-keyselect" ref={keyRef}>
           <button type="button" className="model-sheet-keytrigger" aria-expanded={keyOpen} aria-label="选择 API Key" onClick={() => setKeyOpen(v => !v)}>
-            <span>{keyLabel}</span><i aria-hidden="true">⌄</i>
+            <span>{keyLabel}</span><i aria-hidden="true"><IconChevronDown size={13}/></i>
           </button>
           {keyOpen && <div className="model-sheet-keymenu" role="listbox" aria-label="选择 API Key">
             <button type="button" role="option" aria-selected={!binding.keyId} className={'model-sheet-keyoption' + (!binding.keyId ? ' active' : '')}
-              onClick={() => { onPatchBinding({ ...binding, keyId: '' }); setKeyOpen(false) }}><span>自动 · 先备用再主号</span>{!binding.keyId && <b aria-hidden="true">✓</b>}</button>
+              onClick={() => { onPatchBinding({ ...binding, keyId: '' }); setKeyOpen(false) }}><span>自动 · 先备用再主号</span>{!binding.keyId && <b aria-hidden="true"><IconCheck size={13}/></b>}</button>
             {vendorKeys.map(k => <button type="button" role="option" aria-selected={binding.keyId === k.id} key={k.id}
               className={'model-sheet-keyoption' + (binding.keyId === k.id ? ' active' : '')}
               onClick={() => { onPatchBinding({ ...binding, keyId: k.id }); setKeyOpen(false) }}>
-              <span>{k.vendorName} · {k.label}</span>{binding.keyId === k.id && <b aria-hidden="true">✓</b>}
+              <span>{k.vendorName} · {k.label}</span>{binding.keyId === k.id && <b aria-hidden="true"><IconCheck size={13}/></b>}
             </button>)}
           </div>}
         </div>
@@ -178,10 +179,10 @@ export function ModelPickerSheet({
                 <span className="model-sheet-avatar">{vendorInitial(choice.name)}</span>
                 <span className="model-sheet-main"><b>{choice.name}</b><small>{choice.model}</small>{badges.length>0&&<span className="model-sheet-specs">{badges.map(b=><em key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</em>)}</span>}</span>
                 {choice.subscription&&<span className="model-sheet-badge">订阅</span>}
-                {selected&&<span className="model-sheet-check">✓</span>}
+                {selected&&<span className="model-sheet-check"><IconCheck size={13}/></span>}
               </button>
-              {choice.routeId&&<button type="button" className="model-sheet-route-toggle" aria-label={'编辑线路 · '+choice.vendorName} onClick={()=>setRoutesOpen(routesOpen===choice.routeId?'':choice.routeId)}>⚙</button>}
-              <button type="button" className={'model-sheet-fav'+(favorites.includes(choice.logicalId)?' on':'')} onClick={()=>toggleFav(choice.logicalId)} aria-label="收藏模型">{favorites.includes(choice.logicalId)?'♥':'♡'}</button>
+              {choice.routeId&&<button type="button" className="model-sheet-route-toggle" aria-label={'编辑线路 · '+choice.vendorName} onClick={()=>setRoutesOpen(routesOpen===choice.routeId?'':choice.routeId)}><IconSettings size={15}/></button>}
+              <button type="button" className={'model-sheet-fav'+(favorites.includes(choice.logicalId)?' on':'')} onClick={()=>toggleFav(choice.logicalId)} aria-label="收藏模型"><IconStar size={15}/></button>
               {choice.routeId&&routesOpen===choice.routeId&&<ModelRoutesPanel logicalId={choice.logicalId} defaultModel={choice.model} routes={routesForModel(routeState.routes,choice.logicalId)} vendors={vendors} fixedRouteId={fixed} onAdd={patch=>update(s=>addRoute(s,choice.logicalId,patch,crypto.randomUUID()))} onUpdate={(id,patch)=>update(s=>updateRoute(s,id,patch))} onRemove={id=>update(s=>removeRoute(s,id))} onPrimary={id=>update(s=>primaryRoute(s,choice.logicalId,id))} onFixed={id=>update(s=>setFixedRoute(s,person,id))}/>}
             </div>
           }
@@ -194,12 +195,12 @@ export function ModelPickerSheet({
           }
           return <>
             {favItems.length>0&&<section className="model-sheet-group model-sheet-favgroup">
-              <div className="model-vendor-heading static"><b>收藏</b><small>{favItems.length} 个模型</small><span aria-hidden="true">♥</span></div>
+              <div className="model-vendor-heading static"><b>收藏</b><small>{favItems.length} 个模型</small><span aria-hidden="true"><IconStar size={14}/></span></div>
               {favItems.map(renderRow)}
             </section>}
             {[...groups.entries()].map(([vendorId,group])=><section className="model-sheet-group" key={vendorId}>
               <button type="button" className="model-vendor-heading" aria-expanded={!collapsedVendors.includes(vendorId)} onClick={()=>setCollapsedVendors(old=>old.includes(vendorId)?old.filter(id=>id!==vendorId):[...old,vendorId])}>
-                <b>{group.name}</b><small>{group.items.length} 个模型</small><span>{collapsedVendors.includes(vendorId)?'⌄':'⌃'}</span>
+                <b>{group.name}</b><small>{group.items.length} 个模型</small><span>{collapsedVendors.includes(vendorId)?<IconChevronDown size={13}/>:<IconChevronUp size={13}/>}</span>
               </button>
               {!collapsedVendors.includes(vendorId)&&group.items.map(renderRow)}
             </section>)}
