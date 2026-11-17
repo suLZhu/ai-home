@@ -112,3 +112,20 @@ export function diagnoseChatTransportError(error, { stage = 'request', elapsedMs
   return '模型请求失败' + duration + '（阶段：' + (stage === 'stream' ? '流式接收' : stage === 'tool' ? '工具调用' : '请求准备或连接') + '）：'
     + (toolsEnabled && /schema|tool|function|parameter/i.test(text) ? '疑似工具兼容问题，请尝试关闭当前模型工具。' : '请查看请求记录或联系中转服务核查。')
 }
+
+/** Codex subscription uses OAuth and ChatGPT account identity; never call it an API
+ * balance problem solely because an upstream 429 uses billing-related wording. */
+export function diagnoseGptSubscriptionError(status,detail,{elapsedMs=0,hasAccountId=false}={}) {
+  const code=Number(status)
+  const hint=upstreamHint(detail)
+  const searchable=(String(detail||'').slice(0,2500)+' '+hint).toLowerCase()
+  const waited=Number(elapsedMs)>1000?' · 已等待 '+Math.round(Number(elapsedMs)/1000)+' 秒':''
+  const accountAdvice=hasAccountId?'请检查该订阅账号的 Codex 使用权限和模型是否受支持。':'请求中缺少可确认的 ChatGPT 账号标识；请在栖间订阅页核对登录账号。'
+  if ((code===429||code===402||code===403) && /account is not active|account.*inactive|check your billing details|billing details/.test(searchable))
+    return 'GPT 订阅接口返回账户状态异常（HTTP '+code+waited+'）：这是 Codex 订阅接口的上游响应，不能据此判断 ChatGPT Plus 欠费。'+accountAdvice
+  if(code===429)
+    return 'GPT 订阅接口返回 HTTP 429'+waited+'：可能是 Codex 配额、账号状态或服务限流，不等同于 API 中转余额不足。'+accountAdvice
+  if(code===401||code===403)
+    return 'GPT 订阅授权被拒绝（HTTP '+code+waited+'）：请核对 OAuth 登录是否过期，以及当前账号有无 Codex 接口权限。'
+  return 'GPT 订阅接口：'+friendlyHttpError(code,detail)+waited
+}
