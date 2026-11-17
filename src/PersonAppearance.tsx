@@ -24,7 +24,7 @@ export function PersonAppearance({ value, assets, onChange }: {
         { value: 'follow', label: '跟随全局' },
         { value: 'theme', label: '主题背景' },
         { value: 'plain', label: '纯色简洁' },
-        { value: 'custom1', label: '自定义背景' + (assets.bg1 ? ' ✓' : '（未上传）'), disabled: !assets.bg1 },
+        { value: 'custom1', label: '自定义背景' + (assets.bg1 ? '（已上传）' : '（未上传）'), disabled: !assets.bg1 },
       ]}/>
     </label>
     <label>聊天气泡
@@ -44,7 +44,7 @@ export function PersonAppearance({ value, assets, onChange }: {
         { value: 'glass', label: '玻璃' },
         { value: 'comic', label: '漫画' },
         { value: 'note', label: '便签' },
-        { value: 'image', label: '自定义气泡图' + (assets.bubble ? ' ✓' : '（未上传）'), disabled: !assets.bubble },
+        { value: 'image', label: '自定义气泡图' + (assets.bubble ? '（已上传）' : '（未上传）'), disabled: !assets.bubble },
       ]}/>
     </label>
   </section>
