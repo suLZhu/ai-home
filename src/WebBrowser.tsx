@@ -2,6 +2,7 @@
 // 用 iframe 做内嵌；部分站点禁止被 iframe 嵌入，底部提供「在浏览器打开」兜底。
 import './WebBrowser.css'
 import { openNativeWebView } from './nativeSystem.mjs'
+import { IconClose } from './icons'
 
 export type WebPage = { url: string; title?: string }
 
@@ -15,7 +16,7 @@ export function WebBrowser({ page, onClose }: { page: WebPage | null; onClose: (
         <span className="web-browser-title"><b>{page.title || host}</b><small>{host}</small></span>
         <button type="button" className="web-browser-inapp" onClick={() => { if (openNativeWebView(page.url, page.title || '')) onClose() }}>内置</button>
         <button type="button" className="web-browser-external" onClick={() => window.open(page.url, '_blank', 'noopener')}>外部</button>
-        <button type="button" className="web-browser-close" onClick={onClose} aria-label="关闭内置浏览器">×</button>
+        <button type="button" className="web-browser-close" onClick={onClose} aria-label="关闭内置浏览器"><IconClose size={15}/></button>
       </header>
       <iframe className="web-browser-frame" src={page.url} title={page.title || host}
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
