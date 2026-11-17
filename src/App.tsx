@@ -4699,7 +4699,6 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
   // 已添加的服务收进一个下拉：默认只占一行，选中才展开详情与移除按钮。
   const [mcpCounts, setMcpCounts] = useState<Record<string, number | undefined>>({})
   const [mcpStatus, setMcpStatus] = useState<Record<string, 'ok' | 'fail'>>({})
-  const mcpStatusLoadedRef = useRef<Set<string>>(new Set())
   const [mcpEdit, setMcpEdit] = useState<Array<{ id: string; person: Person }>>([])
   const [mcpTest, setMcpTest] = useState<{ busy: boolean; ok?: boolean; message: string }>({ busy: false, message: '' })
   const [mcpFormOpen, setMcpFormOpen] = useState(false)
@@ -4804,7 +4803,6 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       setMcpFormOpen(false)
       mcpProbeCache.clear()
       mcpProbeInflight.clear()
-      mcpStatusLoadedRef.current.clear()
       setMcpStatus({})
       setMcpCounts({})
       await mcp.refresh()
@@ -4830,7 +4828,6 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       }
       mcpProbeCache.clear()
       mcpProbeInflight.clear()
-      mcpStatusLoadedRef.current.clear()
       setMcpStatus({})
       setMcpCounts({})
       await mcp.refresh()
@@ -4849,7 +4846,6 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       }
       mcpProbeCache.clear()
       mcpProbeInflight.clear()
-      mcpStatusLoadedRef.current.clear()
       setMcpStatus({})
       setMcpCounts({})
       await mcp.refresh()
