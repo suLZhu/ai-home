@@ -3679,3 +3679,7 @@ body.has-pack .fullscreen-chat .compose.compose-box.compose-wechat{
 .shell .fullscreen-chat .compose.compose-box.compose-wechat{gap:4px!important;padding:8px 14px calc(8px + env(safe-area-inset-bottom))!important;border-radius:20px 20px 0 0!important}
 .shell .fullscreen-chat .compose-editor .cw-input{height:46px!important;min-height:46px!important;max-height:120px!important;padding:6px 8px!important;line-height:1.5!important}
 .shell .fullscreen-chat .cw-row{min-height:38px}
+
+/* 贴边把手：稍微大一点、看得见，但仍不挡内容 */
+.shell .mobile-menu-toggle.sidebar-edge-handle{width:18px!important;height:56px!important;min-height:56px!important;opacity:.55!important;border-radius:0 10px 10px 0!important;padding:0!important}
+.shell .mobile-menu-toggle.sidebar-edge-handle span{font-size:13px!important}
