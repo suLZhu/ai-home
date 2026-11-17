@@ -344,7 +344,7 @@ async function handleSubscriptionChatLocal(b, init) {
   if (!config) return json(400, { error: '未知的订阅聊天协议' })
   if (!b.body || typeof b.body !== 'object') return json(400, { error: '缺少请求体' })
   if (!nativeHttpStreamAvailable()) return json(400, { error: '订阅聊天需要 App 原生网络桥；请用 APK，或连接服务器。' })
-  b.body.messages = injectTimeContext(b.body.messages, new Date(), b.timeZone)
+  if (b.includeTimeContext !== false) b.body.messages = injectTimeContext(b.body.messages, new Date(), b.timeZone)
   const request = config.build(b.body)
   const stream = createNativeStream(config.url, config.headers, JSON.stringify(request))
   if (!stream) return json(502, { error: '无法启动原生网络请求' })
@@ -390,6 +390,7 @@ async function handleRouteChat(b, init) {
     routes: b.routes,
     body: b.body,
     timeZone: b.timeZone,
+    includeTimeContext: b.includeTimeContext !== false,
     signal: (init && init.signal) || null,
     fetchImpl: fetch,
   })
@@ -416,7 +417,7 @@ async function handleChat(init) {
   const chatBody = b.body
   if (!chatBody || typeof chatBody !== 'object' || Array.isArray(chatBody)) return json(400, { error: '缺少请求体' })
   // 动态时间上下文：与服务端 /api/chat 完全同源（共享纯函数），每轮实时生成。
-  chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
+  if (b.includeTimeContext !== false) chatBody.messages = injectTimeContext(chatBody.messages, new Date(), b.timeZone)
   const target = /^https?:\/\//i.test(String(b.chatUrl || ''))
     ? String(b.chatUrl).trim()
     : /\/chat\/completions$/.test(raw) ? raw : raw.endsWith('/v1') ? raw + '/chat/completions' : raw + '/v1/chat/completions'
