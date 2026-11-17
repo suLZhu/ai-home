@@ -23,6 +23,7 @@ import { applyWebUpdate, compareVersions, currentBundle, liveUpdateSupported, no
 import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, normalizeRoomStyle, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
+import { RoomWidgets } from './RoomWidgets'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
 import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
@@ -2564,6 +2565,8 @@ function Room(props: {
       const map:Record<string,Tool>={world:'世界书',mcp:'MCP',skill:'SKILL 技能库',memory:'记忆面板'}
       const tool=map[action]; if(tool) props.setActiveTool(tool)
     }}/>
+    {/* One widget data source serves both the assistant workspace and its room. */}
+    <RoomWidgets person={person}/>
   </div>
 }
 
