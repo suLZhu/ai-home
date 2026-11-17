@@ -3,6 +3,7 @@ import './Ledger.css'
 import { apiFetch } from './apiBase.mjs'
 import { SoftSelect } from './SoftSelect'
 import { confirmDialog } from './uiDialog'
+import { IconPlus } from './icons'
 
 type Entry = { id:string; kind:'expense'|'income'; amount:number; category:string; note:string; date:string }
 const storageKey='ai-home.ledger.v1'
@@ -32,7 +33,7 @@ export function Ledger(){
  <label className="ledger-month">查看月份 <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label>
  <div className="ledger-summary"><div><small>本月收入</small><b>＋{money(income)}</b></div><div><small>本月支出</small><b>－{money(expense)}</b></div><div><small>本月结余</small><b>{money(income-expense)}</b></div></div>
  <form className="ledger-form" onSubmit={add}><h4>记一笔</h4><div className="ledger-kinds"><button type="button" className={kind==='expense'?'selected':''} onClick={()=>{setKind('expense');setCategory('餐饮')}}>支出</button><button type="button" className={kind==='income'?'selected':''} onClick={()=>{setKind('income');setCategory('工资')}}>收入</button></div>
- <div className="ledger-fields"><label>金额<input required type="number" min="0.01" max="10000000000" step="0.01" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></label><label>日期<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>分类<SoftSelect ariaLabel="分类" value={category} onChange={setCategory} options={(kind==='expense'?['餐饮','购物','交通','住房','娱乐','健康','其他']:['工资','奖金','红包','退款','其他']).map(x=>({value:x,label:x}))}/></label><label>备注<input value={note} maxLength={100} onChange={e=>setNote(e.target.value)} placeholder="可选"/></label></div><button className="ledger-add" type="submit">＋ 保存账目</button></form>
+ <div className="ledger-fields"><label>金额<input required type="number" min="0.01" max="10000000000" step="0.01" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></label><label>日期<input required type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>分类<SoftSelect ariaLabel="分类" value={category} onChange={setCategory} options={(kind==='expense'?['餐饮','购物','交通','住房','娱乐','健康','其他']:['工资','奖金','红包','退款','其他']).map(x=>({value:x,label:x}))}/></label><label>备注<input value={note} maxLength={100} onChange={e=>setNote(e.target.value)} placeholder="可选"/></label></div><button className="ledger-add" type="submit"><IconPlus className="ui-icon-inline" size={14}/> 保存账目</button></form>
  {error&&<p role="alert" className="ledger-error">{error}</p>}
  {loading&&<p className="muted">正在读取云端账本……</p>}
  <div className="ledger-history"><h4>{month} · 账目明细</h4>{visible.length?visible.map(x=><article key={x.id}><div><b>{x.category}</b><small>{x.date}{x.note?' · '+x.note:''}</small></div><strong className={x.kind}>{x.kind==='income'?'+':'−'}{money(x.amount)}</strong><button type="button" onClick={()=>remove(x.id)} aria-label={'删除'+x.category+'账目'}>删除</button></article>):<p className="muted">这个月还没有账目，记下第一笔吧。</p>}</div>
