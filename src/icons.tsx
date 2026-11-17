@@ -1,4 +1,6 @@
 // 统一图标集：24×24 描边，currentColor，跟随字号与主题色。
+// Common control icons use Iconoir geometry (MIT): https://github.com/iconoir-icons/iconoir
+// Keep third-party license notice in THIRD_PARTY_NOTICES.md.
 //
 // 之前在底部导航、首页和侧边栏里混用 emoji 与全角符号（☕ ▧ ♫ ¥ ✎），
 // 不同 Android 字体渲染出来粗细不一。这里用同一套 SVG 统一，页面只引用组件。
@@ -9,7 +11,7 @@ export type IconComponent = (props: IconProps) => ReactElement
 
 function Icon({ size = 20, className, children }: IconProps & { children: ReactNode }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round"
+    stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
     className={className} aria-hidden="true" focusable="false">{children}</svg>
 }
 
@@ -87,7 +89,7 @@ export const IconBook: IconComponent = props => <Icon {...props}>
 </Icon>
 
 export const IconPlus: IconComponent = props => <Icon {...props}>
-  <path d="M12 5v14M5 12h14" />
+  <path d="M6 12H18M12 6V18" />
 </Icon>
 
 export const IconSun: IconComponent = props => <Icon {...props}>
@@ -157,51 +159,49 @@ export const IconInfo: IconComponent = props => <Icon {...props}>
 
 // 通用控制图标：所有小按钮统一用这组线性 SVG，不再依赖系统字体里的符号/emoji。
 export const IconBack: IconComponent = props => <Icon {...props}>
-  <path d="m15 5-7 7 7 7" />
+  <path d="M15 6L9 12L15 18" />
 </Icon>
 
 export const IconChevronRight: IconComponent = props => <Icon {...props}>
-  <path d="m9 5 7 7-7 7" />
+  <path d="M9 6L15 12L9 18" />
 </Icon>
 
 export const IconChevronDown: IconComponent = props => <Icon {...props}>
-  <path d="m5 9 7 7 7-7" />
+  <path d="M6 9L12 15L18 9" />
 </Icon>
 
 export const IconChevronUp: IconComponent = props => <Icon {...props}>
-  <path d="m5 15 7-7 7 7" />
+  <path d="M6 15L12 9L18 15" />
 </Icon>
 
 export const IconClose: IconComponent = props => <Icon {...props}>
-  <path d="M6 6l12 12M18 6 6 18" />
+  <path d="M6.758 17.243 12.001 12M17.244 6.757 12.001 12M12.001 12 6.758 6.757M12.001 12l5.243 5.243" />
 </Icon>
 
 export const IconEdit: IconComponent = props => <Icon {...props}>
-  <path d="M4.5 19.5 5.8 14 15 4.8a2.1 2.1 0 0 1 3 3L8.8 17Z" />
-  <path d="m13.7 6.1 4.2 4.2" />
+  <path d="M14.363 5.652 15.843 4.172a2 2 0 0 1 2.829 0l1.414 1.414a2 2 0 0 1 0 2.828l-1.48 1.48M14.363 5.652 4.747 15.267a2 2 0 0 0-.578 1.238l-.242 2.741a1 1 0 0 0 1.085 1.084l2.74-.242a2 2 0 0 0 1.238-.578l9.616-9.616M14.363 5.652l4.243 4.242" />
 </Icon>
 
 export const IconTrash: IconComponent = props => <Icon {...props}>
-  <path d="M5 7h14M9 7V4.8h6V7M7.5 7l.8 12h7.4l.8-12M10.5 10.5v5M13.5 10.5v5" />
+  <path d="M20 9 18.005 20.346A2 2 0 0 1 16.035 22H7.965a2 2 0 0 1-1.97-1.654L4 9" />
+  <path d="M21 6h-5.625M3 6h5.625M8.625 6V4a2 2 0 0 1 2-2h2.75a2 2 0 0 1 2 2v2M8.625 6h6.75" />
 </Icon>
 
 export const IconEye: IconComponent = props => <Icon {...props}>
-  <path d="M3.5 12s3-5 8.5-5 8.5 5 8.5 5-3 5-8.5 5-8.5-5-8.5-5Z" />
-  <circle cx="12" cy="12" r="2.4" />
+  <path d="M3 13C6.6 5 17.4 5 21 13" />
+  <path d="M12 17a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
 </Icon>
 
 export const IconEyeOff: IconComponent = props => <Icon {...props}>
-  <path d="M4 4l16 16" />
-  <path d="M9.3 7.5A8.9 8.9 0 0 1 12 7c5.5 0 8.5 5 8.5 5a14 14 0 0 1-2.2 2.8M14.6 16.6A8.7 8.7 0 0 1 12 17c-5.5 0-8.5-5-8.5-5a14 14 0 0 1 2.1-2.8" />
-  <path d="M10.3 10.3a2.4 2.4 0 0 0 3.4 3.4" />
+  <path d="m19.5 16-2.475-3.396M12 17.5V14M4.5 16l2.469-3.388M3 8c3.6 8 14.4 8 18 0" />
 </Icon>
 
 export const IconArrowUp: IconComponent = props => <Icon {...props}>
-  <path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" />
+  <path d="M12 21V3M12 3l8.5 8.5M12 3l-8.5 8.5" />
 </Icon>
 
 export const IconArrowDown: IconComponent = props => <Icon {...props}>
-  <path d="M12 5v14M6.5 13.5 12 19l5.5-5.5" />
+  <path d="M12 3v18M12 21l8.5-8.5M12 21l-8.5-8.5" />
 </Icon>
 
 export const IconSwitch: IconComponent = props => <Icon {...props}>
@@ -209,22 +209,21 @@ export const IconSwitch: IconComponent = props => <Icon {...props}>
 </Icon>
 
 export const IconShare: IconComponent = props => <Icon {...props}>
-  <path d="M12 5h7v7" />
-  <path d="m19 5-9 9" />
-  <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+  <path d="M20 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6M12 15V3M12 3 8.5 6.5M12 3l3.5 3.5" />
 </Icon>
 
 export const IconTest: IconComponent = props => <Icon {...props}>
-  <path d="M4 12h3l1.5-4 3 8 2.2-6 1.6 2H20" />
+  <path d="M6.141 19.995c2.458 1.721 4.281-.012 5.318-1.492l7.3-10.426 1.967-1.065-6.554-4.588-8.447 12.063c-1.037 1.481-2.041 3.787.416 5.508Z" />
+  <path d="M16.091 11.019c-2.876-.852-4.403.782-7.28-.07" />
 </Icon>
 
 export const IconSearch: IconComponent = props => <Icon {...props}>
-  <circle cx="10.8" cy="10.8" r="6.3" />
-  <path d="m15.4 15.4 4.1 4.1" />
+  <path d="M17 17l4 4" />
+  <path d="M3 11a8 8 0 1 0 16 0 8 8 0 0 0-16 0Z" />
 </Icon>
 
 export const IconMinus: IconComponent = props => <Icon {...props}>
-  <path d="M5 12h14" />
+  <path d="M6 12h12" />
 </Icon>
 
 export const IconFile: IconComponent = props => <Icon {...props}>
@@ -233,8 +232,8 @@ export const IconFile: IconComponent = props => <Icon {...props}>
 </Icon>
 
 export const IconWarning: IconComponent = props => <Icon {...props}>
-  <path d="M12 4 3.8 19h16.4Z" />
-  <path d="M12 9v4M12 16.4h.01" />
+  <path d="M20.043 21H3.957a2 2 0 0 1-1.734-2.997l8.043-13.988a2 2 0 0 1 3.468 0l8.043 13.988A2 2 0 0 1 20.043 21Z" />
+  <path d="M12 9v4M12 17.01l.01-.011" />
 </Icon>
 
 export const IconMail: IconComponent = props => <Icon {...props}>
@@ -249,5 +248,5 @@ export const IconLock: IconComponent = props => <Icon {...props}>
 
 
 export const IconCheck: IconComponent = props => <Icon {...props}>
-  <path d="m5.5 12.5 4 4 9-9" />
+  <path d="m5 13 4 4 10-10" />
 </Icon>
