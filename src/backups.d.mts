@@ -11,3 +11,5 @@ export function kindFromFileName(name: string): string
 export function parseBackup(text: string): any
 export function makeBackupEnvelope(kindId: string, local: Record<string, string>, server?: any, date?: Date): any
 export function summarizeBackup(payload: any): { localKeys: number; memoryPeople: number; memoryCount: number; apiKeys: number }
+
+export function summarizeChatBackup(payload: any): { conversationCount: number; messagesCount: number; preview: Array<{ assistantId: string; title: string; count: number }> }
