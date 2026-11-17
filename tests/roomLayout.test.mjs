@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_ROOM_LAYOUT, buildRoomItem, loadRoomLayout, normalizeRoomLayout, resetRoomLayout, saveRoomLayout } from '../src/roomLayout.mjs'
+import { DEFAULT_ROOM_LAYOUT, buildRoomItem, loadRoomLayout, normalizeRoomLayout, normalizeRoomStyle, resetRoomLayout, saveRoomLayout } from '../src/roomLayout.mjs'
 
 function mem() {
   const map = new Map()
@@ -64,4 +64,32 @@ test('自由项支持 emoji 与无动作装饰', () => {
   const layout = normalizeRoomLayout({ items: [{ id: 'tree', kind: 'visual', x: 10, y: 60, w: 20, h: 30, emoji: '🌳', style: { fontSize: '48px' } }] })
   assert.equal(layout.items[0].emoji, '🌳')
   assert.equal('action' in layout.items[0], false)
+})
+
+test('AI 的 style 数组不会再把房间 React 渲染器崩掉', () => {
+  const layout=normalizeRoomLayout({items:[
+    {id:'bad-array',kind:'visual',text:'星星',style:['color:red','font-size:24px']},
+    {id:'bad-object',kind:'visual',style:{0:'bad',color:'white',background:{nested:true},width:50}},
+    {id:'bad-string',kind:'visual',style:'color:red;position:absolute'},
+  ]})
+  assert.equal(layout.items.length,3)
+  assert.equal(layout.items[0].style,undefined)
+  assert.deepEqual(layout.items[1].style,{color:'white',width:50})
+  assert.equal(layout.items[2].style,undefined)
+})
+test('旧版已保存的坏 style 在读取时自动安全归一化，保留场景和内容', () => {
+  const storage=mem()
+  storage.setItem('ai-home.roomLayout.assistant-001',JSON.stringify({
+    name:'言朔改的房间',items:[{id:'lamp',kind:'visual',text:'💡',style:['red','blue']},{id:'tree',kind:'visual',emoji:'🌳',style:{left:'20%',fontSize:28}}],
+  }))
+  const recovered=loadRoomLayout('assistant-001',storage)
+  assert.equal(recovered.name,'言朔改的房间')
+  assert.equal(recovered.items.length,2)
+  assert.equal(recovered.items[0].style,undefined)
+  assert.deepEqual(recovered.items[1].style,{left:'20%',fontSize:28})
+})
+test('style 不是对象或含数字键时不得进入 DOM', () => {
+  assert.equal(normalizeRoomStyle(null),undefined)
+  assert.equal(normalizeRoomStyle([1,2]),undefined)
+  assert.deepEqual(normalizeRoomStyle({'0':'invalid','1':'invalid',background:'linear-gradient(red, blue)'}),{background:'linear-gradient(red, blue)'})
 })
