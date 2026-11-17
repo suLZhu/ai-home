@@ -3669,8 +3669,7 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
 <div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>
 
 {!isLocalMode()&&<button className="settings-logout" onClick={onLogout}>退出登录</button>}
-<div className="setting-card settings-inner-card"><b>关于 栖间</b><p className="muted">当前为{isLocalMode()?'本地模式（数据只存这台设备）':'云端同步模式'}。设置已按「聊天与外观 / 模型与助手 / 工作区与工具 / 数据与系统」分类；主题美化、供应商各有两个二级页。版本 v{appVersion()}。</p></div><details className="data-fold"><summary>开发者 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/></details>
-</div>}{section==='about'&&<><AppUpdateCard/><div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div></>}</div>}</div>
+</div>}{section==='about'&&<><AppUpdateCard/><div className="setting-card settings-inner-card"><b>关于 栖间</b><BrandAbout/></div><details className="data-fold"><summary>云同步服务器 / 调试</summary><ApiBaseSettings onApplied={onApiBaseApplied}/></details></>}</div>}</div>
 }
 
 // 二级设置：两个分组名横排成小标签，点一个只显示那一个内容，不再铺两行大卡片。
