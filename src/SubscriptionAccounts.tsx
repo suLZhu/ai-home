@@ -8,6 +8,7 @@ import { nativeHttpGet, nativeHttpPost, openExternalUrl } from './nativeSystem.m
 // P1-9：上游原始 JSON / 错误码统一转成中文短句，原文只在「查看详情」里展开。
 import { formatLoginError, type LoginErrorInfo } from './loginError.mjs'
 import { apiFetch } from './apiBase.mjs'
+import { IconChat, IconCheck, IconChevronRight, IconGrid, IconMore, IconSparkles, IconStar, type IconComponent } from './icons'
 import {
   mergeAvailableModels, normalizeModelIds, buildSubscriptionModels,
   pickedModelIds, type ModelState,
@@ -40,10 +41,10 @@ type Props = {
   setSubscriptions: Dispatch<SetStateAction<SubscriptionAccount[]>>
 }
 
-const ROWS = [
-  { id: 'gpt', name: 'ChatGPT', sub: 'GPT / Codex 订阅', mark: '◎' },
-  { id: 'claude', name: 'Claude', sub: 'Pro / Max 订阅', mark: '✳' },
-  { id: 'grok', name: 'Grok', sub: 'X / xAI 订阅', mark: '◉' },
+const ROWS: Array<{ id: string; name: string; sub: string; mark: IconComponent }> = [
+  { id: 'gpt', name: 'ChatGPT', sub: 'GPT / Codex 订阅', mark: IconChat },
+  { id: 'claude', name: 'Claude', sub: 'Pro / Max 订阅', mark: IconSparkles },
+  { id: 'grok', name: 'Grok', sub: 'X / xAI 订阅', mark: IconStar },
 ]
 
 // 放到模块级，避免组件渲染作用域里出现不纯的时间调用。
@@ -455,9 +456,10 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
           const available = a?.availableModels?.length ? a.availableModels : mergeAvailableModels([], r.id)
           const picked = a?.pickedModels || []
           const expanded = modelOpen === r.id && on
+          const MarkIcon = r.mark
           return <div className="account-row-wrap" key={r.id}>
             <div className="account-row" data-channel-id={r.id}>
-              <span className={'account-mark mark-' + r.id} aria-hidden="true">{r.mark}</span>
+              <span className={'account-mark mark-' + r.id} aria-hidden="true"><MarkIcon size={17}/></span>
               <span className="account-row-text">
                 <b>{r.name}</b>
                 <small>{on ? (a!.modelSource === 'candidate' ? '已登录 · 模型未拉取（候选 ' + (picked.length || 0) + ' 个）' : '已登录 · ' + (picked.length || 0) + ' 个模型') : r.sub}</small>
@@ -466,13 +468,13 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
                 className={'account-login-btn' + (on ? ' done' : '')}
                 aria-label={(on ? '已登录 ' : '登录 ') + r.name}
                 onClick={() => { if (on) setMenu(menu === r.id ? '' : r.id); else if (r.id === 'grok') void startGrokLogin(); else void login(r.id) }}>
-                {busy === r.id ? '登录中…' : on ? '✓ 已登录' : '→ 登录'}
+                {busy === r.id ? '登录中…' : on ? <><IconCheck className="ui-icon-inline" size={13}/> 已登录</> : <><IconChevronRight className="ui-icon-inline" size={13}/> 登录</>}
               </button>
             </div>
             {on && <div className="account-row-links">
               <button type="button" className={expanded ? 'active' : ''}
-                onClick={() => openModels(a!)}>◈ 选择模型 · {picked.length || 0}</button>
-              <button type="button" onClick={() => setMenu(menu === r.id ? '' : r.id)}>⋯</button>
+                onClick={() => openModels(a!)}><IconGrid className="ui-icon-inline" size={13}/> 选择模型 · {picked.length || 0}</button>
+              <button type="button" onClick={() => setMenu(menu === r.id ? '' : r.id)} aria-label="更多账号操作"><IconMore size={15}/></button>
             </div>}
             {expanded && <div className="account-models" data-models-for={r.id}>
               <p className="account-models-lead">勾选的模型会进入聊天模型面板；可自己增删。</p>
@@ -489,7 +491,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
                   aria-pressed={picked.includes(id)} data-model-id={id}
                   onClick={() => updateModels(a!, available,
                     picked.includes(id) ? picked.filter(x => x !== id) : [...picked, id])}>
-                  {picked.includes(id) ? '✓ ' : ''}{id}
+                  {picked.includes(id) ? <IconCheck className="ui-icon-inline" size={12}/> : null}{id}
                 </button>)}
               </div>
               <div className="account-model-actions">
