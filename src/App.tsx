@@ -4474,7 +4474,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <span className="vendor-inline-meta">{pickedModels.length} 个模型</span>
         {tab==='config'&&<div className="vendor-kelivo-head-actions vendor-actions-text">
           <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}><IconTest size={14}/><span>{testState.busy?'测试中':'测试'}</span></button>
-          <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}><IconShare size={14}/><span>分享</span></button>
           <button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}><IconTrash size={14}/><span>删除</span></button>
         </div>}
       </div>
