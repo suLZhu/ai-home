@@ -25,7 +25,7 @@ import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, t
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
+import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
