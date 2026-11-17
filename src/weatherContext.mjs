@@ -2,7 +2,7 @@
 // Cache successful lookups briefly so chat doesn't pay a network penalty every turn.
 const cache=new Map()
 const weatherLabels={0:'晴',1:'大致晴朗',2:'局部多云',3:'阴天',45:'有雾',48:'雾凇',51:'小毛毛雨',53:'毛毛雨',55:'较强毛毛雨',61:'小雨',63:'中雨',65:'大雨',71:'小雪',73:'中雪',75:'大雪',80:'阵雨',81:'较强阵雨',82:'强阵雨',95:'雷雨',96:'雷雨伴冰雹',99:'强雷雨伴冰雹'}
-const numberOrNull=v=>Number.isFinite(Number(v))?Number(v):null
+const numberOrNull=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null
 export async function fetchWeatherContext(city,{fetchImpl=fetch,timeoutMs=4000,now=Date.now()}={}) {
   const name=String(city||'').trim().slice(0,80)
   if(!name)return null
