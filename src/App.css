@@ -3541,3 +3541,24 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-model-card-menu button{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:7px;font-size:12px}
 .vendor-model-card-menu button:active{background:var(--field,#f7f3ec)}
 .vendor-model-card-menu button.danger{color:#b4453a}
+
+/* 全局间距收紧 */
+.settings-screen .settings-flat-list{padding:2px 0 12px!important}
+.settings-screen .settings-flat-list .settings-row-list{gap:6px!important}
+.settings-screen .settings-flat-list .settings-row{min-height:56px!important;padding:8px 12px!important;gap:9px!important}
+.settings-screen .settings-row-icon{width:32px!important;height:32px!important;border-radius:10px!important}
+.settings-detail{gap:8px!important}
+.vendor-kelivo-list-head{margin-bottom:6px!important}
+.vendor-kelivo-provider-row{padding-top:7px!important;padding-bottom:7px!important}
+.vendor-kelivo-provider-list{display:flex;flex-direction:column;gap:0}
+.vendor-kelivo-provider-info b{font-size:12.5px}
+.vendor-config-menu{gap:2px!important}
+.vendor-config-info{padding-top:7px!important;padding-bottom:7px!important}
+.vendor-config-hero{padding:4px 2px 8px!important}
+.vendor-config-fields{gap:8px!important}
+.vendor-config-section-title{margin:6px 0 2px!important}
+.vendor-key-manager-row{margin-bottom:6px!important}
+.vendor-model-cards{gap:6px!important}
+.vendor-model-card{padding:8px!important}
+.vendor-model-card-main{gap:2px!important}
+.vendor-tabs{margin-top:4px}
