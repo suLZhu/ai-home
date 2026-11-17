@@ -41,13 +41,35 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+// AI-generated room layouts are untrusted data. React's style prop only accepts
+// a plain CSSProperties object; arrays expose numeric keys (0, 1, ...) that
+// throw "Failed to set an indexed property on CSSStyleDeclaration" in WebView.
+export function normalizeRoomStyle(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const clean = Object.create(null)
+  for (const [key, entry] of Object.entries(value)) {
+    if (!key || /^\\d+$/.test(key) || key === '__proto__' || key === 'constructor' || key === 'prototype') continue
+    // Nested objects, arrays and nulls are not valid inline React CSS values.
+    if (typeof entry !== 'string' && (typeof entry !== 'number' || !Number.isFinite(entry))) continue
+    if (typeof entry === 'string' && entry.length > 1000) continue
+    clean[key] = entry
+  }
+  return Object.keys(clean).length ? { ...clean } : undefined
+}
+
 export function normalizeRoomLayout(input) {
   const base = clone(DEFAULT_ROOM_LAYOUT)
   if (!input || typeof input !== 'object' || !Array.isArray(input.items)) return base
   const items = input.items
-    .filter((it) => it && typeof it === 'object' && typeof it.id === 'string')
-    .map((it) => ({ ...it }))
+    .filter((it) => it && typeof it === 'object' && !Array.isArray(it) && typeof it.id === 'string')
     .slice(0, 80)
+    .map((it) => {
+      const item = { ...it }
+      const style = normalizeRoomStyle(item.style)
+      if (style) item.style = style
+      else delete item.style
+      return item
+    })
   const background = input.background && typeof input.background === 'object' ? { ...input.background } : undefined
   if (!items.length && !background) return base
   return { version: 2, name: String(input.name || '自定义房间'), items, background }
