@@ -4099,7 +4099,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setCapTest(null);setPickerOpen(false);setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
-  const backToDetail=()=>{resetEditUI();setTab('config');setShowBackupKeys(true);onSection('vendor:'+activeId)}
   const openVendorPage=(id:string)=>{setTab('config');resetEditUI();setShowBackupKeys(true);onSection('vendor:'+id)}
   const addVendor=(e:FormEvent)=>{
     e.preventDefault()
