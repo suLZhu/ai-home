@@ -2574,9 +2574,10 @@ function Room(props: {
       if(action==='settings'){props.onOpenSettings?.();return}
       const map:Record<string,Tool>={world:'世界书',mcp:'MCP',skill:'SKILL 技能库',memory:'记忆面板'}
       const tool=map[action]; if(tool) props.setActiveTool(tool)
-    }}/>
-    {/* One widget data source serves both the assistant workspace and its room. */}
-    <RoomWidgets person={person}/>
+    }}>
+      {/* Room and workspace share the same widgets; place them inside the scene. */}
+      <RoomWidgets person={person}/>
+    </RoomScene>
   </div>
 }
 
@@ -2590,7 +2591,7 @@ function PackIcon({ value }: { value?: string }) {
 // Only hide duplicate built-in navigation in the room scene. Keep custom widgets,
 // decorations and saved layouts intact; settings and chat remain accessible elsewhere.
 const ROOM_DUPLICATE_ACTIONS = new Set(['world','mcp','settings','chat','skill','memory'])
-function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void;icons?:Record<string,string>}) {
+function RoomScene({layout,counts,onAction,icons,children}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void;icons?:Record<string,string>;children?:React.ReactNode}) {
   const bg=layout.background as Record<string,string>|undefined
   const bgStyle:React.CSSProperties|undefined=bg?(bg.image?{backgroundImage:`url(${bg.image})`,backgroundSize:'cover',backgroundPosition:'center'}:bg.css?{background:bg.css}:bg.color?{background:bg.color}:undefined):undefined
   return <div className={'room-illustration'+(bgStyle?' free-bg':'')} style={bgStyle}>
@@ -2620,6 +2621,7 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
       }
       return <div key={item.id} className="free-item" style={pos} aria-hidden="true">{content}</div>
     })}
+    <div className="room-scene-widgets">{children}</div>
   </div>
 }
 
