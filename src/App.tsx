@@ -1312,7 +1312,7 @@ export default function App() {
       latestStreamContent = content
       latestStreamReasoning = reasoning
       if (streamPaintTimer !== undefined) return
-      const delay = Math.max(0, 90 - (Date.now() - lastStreamPaint))
+      const delay = Math.max(0, 160 - (Date.now() - lastStreamPaint))
       streamPaintTimer = setTimeout(flushStreamPaint, delay)
     }
     // 重新生成失败/空白时恢复原有有效回复；消息若已被用户删除，map 匹配不到、天然无副作用。
@@ -3260,13 +3260,20 @@ function Chat(p: any) {
     pin()
     // 进入聊天时消息/图片/键盘可能晚一步撑高，补几次并监听 DOM 变化，确保落在最新一条。
     const timers=[60,220,500,900,1400,2000].map(ms=>window.setTimeout(pin,ms))
-    const mo=new MutationObserver(()=>requestAnimationFrame(pin))
+    // A streamed reply can update text dozens of times per second. Coalesce scroll
+    // work into one animation frame, and never fight intentional history scrolling.
+    let queuedFrame=0
+    const schedulePin=()=>{
+      if(!scrollPinned.current || queuedFrame) return
+      queuedFrame=requestAnimationFrame(()=>{queuedFrame=0;pin()})
+    }
+    const mo=new MutationObserver(schedulePin)
     mo.observe(el,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['src']})
-    const onImgLoad=()=>requestAnimationFrame(pin)
+    const onImgLoad=schedulePin
     el.addEventListener('load',onImgLoad,true)
-    const ro=new ResizeObserver(()=>requestAnimationFrame(pin))
+    const ro=new ResizeObserver(schedulePin)
     ro.observe(el)
-    return ()=>{timers.forEach(t=>window.clearTimeout(t));mo.disconnect();ro.disconnect();el.removeEventListener('load',onImgLoad,true)}
+    return ()=>{timers.forEach(t=>window.clearTimeout(t));if(queuedFrame)cancelAnimationFrame(queuedFrame);mo.disconnect();ro.disconnect();el.removeEventListener('load',onImgLoad,true)}
   },[chatPerson,activeChatConversationId,p.person])
   // 打字时键盘把可视高度压小，容器 resize 后滚动位置会被浏览器重算；
   // 只要焦点还在输入框，就补滚到最新一条，保证「边打字边看得见聊天记录」。
