@@ -1244,3 +1244,37 @@ html,body{
   border:0!important;
   border-radius:0!important;
 }
+
+
+/* 6.7 供应商详情操作改成带文字，避免只看图标猜含义。 */
+.shell .vendor-inline-toolbar{
+  height:auto!important;
+  min-height:42px!important;
+  flex-wrap:wrap!important;
+}
+.shell .vendor-actions-text{
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  flex-wrap:wrap!important;
+}
+.shell .vendor-actions-text button{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:4px!important;
+  width:auto!important;
+  min-width:58px!important;
+  height:34px!important;
+  padding:0 9px!important;
+  border:1px solid var(--minimal-line-strong)!important;
+  border-radius:6px!important;
+  background:#fff!important;
+  color:#222!important;
+  font-size:11px!important;
+}
+.shell .vendor-actions-text button.danger{
+  color:#a33!important;
+  border-color:#e5c8c8!important;
+  background:#fff!important;
+}
