@@ -62,3 +62,41 @@ export function routeInfoFromError(status, detail) {
   const hint = upstreamHint(detail)
   return hint ? `HTTP ${status}：${hint}` : `HTTP ${status}`
 }
+
+/**
+ * Classify errors without pretending to identify a VPN/proxy from a browser fetch failure.
+ * Do not show URLs, API keys, raw request bodies or server JSON in the UI.
+ */
+export function diagnoseChatHttpError(status, detail, { toolsEnabled = false, elapsedMs = 0 } = {}) {
+  const raw = String(detail ?? '')
+  const hint = upstreamHint(raw).toLowerCase()
+  const text = (raw.slice(0, 3500) + ' ' + hint).toLowerCase()
+  const time = Number.isFinite(Number(elapsedMs)) && Number(elapsedMs) >= 1000
+    ? ' · 已等待 ' + Math.round(Number(elapsedMs) / 1000) + ' 秒' : ''
+  const http = Number(status)
+  if ((http === 400 || http === 422) && /unknown name|invalid json payload|dependentrequired|dependentschemas|additionalproperties|function.?declaration|tool.?schema|invalid.*(tool|function|parameter)|unsupported.*(tool|function)/i.test(text)) {
+    return '工具参数兼容性错误（HTTP ' + http + time + '）：模型接口不接受部分工具定义字段。'
+      + (toolsEnabled ? '建议临时关闭此模型的工具后重试；其他模型的 MCP 配置不需要改。' : '请检查中转接口要求的请求格式。')
+  }
+  if ((http === 400 || http === 422) && toolsEnabled)
+    return '请求参数被拒绝（HTTP ' + http + time + '）：可能是模型 ID、工具定义或流式请求参数不兼容。可先关闭当前模型的工具进行对比；无法仅凭状态码确定是工具故障。'
+  if (http === 502 && /failed to fetch|networkerror|network request failed|load failed|无法连接该接口/i.test(text)) {
+    return '网络请求未成功连接上游（HTTP 502' + time + '）：无法确认是代理导致。请检查中转地址、Clash 分流、DNS、证书或 WebView 跨域限制（CORS）；可对比关闭代理后的情况。'
+  }
+  return friendlyHttpError(http, detail) + time
+}
+
+export function diagnoseChatTransportError(error, { stage = 'request', elapsedMs = 0, toolsEnabled = false, localMode = true } = {}) {
+  const text = String(error?.message ?? error ?? '')
+  const duration = Number.isFinite(Number(elapsedMs)) && Number(elapsedMs) >= 1000
+    ? '（已等待 ' + Math.round(Number(elapsedMs) / 1000) + ' 秒）' : ''
+  if (/abort|cancel/i.test(text)) return '请求被取消' + duration
+  if (/timeout|timed out|deadline/i.test(text))
+    return '请求等待超时' + duration + '。'
+      + (stage === 'stream' ? '已进入流式接收阶段，可能是中转服务停止传输。' : '尚未确认模型是否接收到请求，请检查中转服务或网络线路。')
+  if (/failed to fetch|networkerror|network request failed|load failed|fetch failed/i.test(text))
+    return (stage === 'stream' ? '流式连接中断' : '无法连接模型接口') + duration + '：'
+      + (localMode ? '浏览器网络层没有提供具体原因，可能是代理分流、DNS、证书、CORS 或中转服务器问题；不能直接判定为梯子故障。' : '尚未得到明确的上游响应，请检查后端连接与网络。')
+  return '模型请求失败' + duration + '（阶段：' + (stage === 'stream' ? '流式接收' : stage === 'tool' ? '工具调用' : '请求准备或连接') + '）：'
+    + (toolsEnabled && /schema|tool|function|parameter/i.test(text) ? '疑似工具兼容问题，请尝试关闭当前模型工具。' : '请查看请求记录或联系中转服务核查。')
+}
