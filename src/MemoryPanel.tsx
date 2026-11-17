@@ -331,13 +331,14 @@ function LocalAutoCard({ personMessages, onRun }: {
   </section>
 }
 
-export function MemoryPanel({ person, personLabel, onJumpToSource, personMessages, modelOptions, onRunOrganize }: {
+export function MemoryPanel({ person, personLabel, onJumpToSource, personMessages, modelOptions, onRunOrganize, onTidyMemories }: {
   person: string
   personLabel?: string
   onJumpToSource?: (conversationId: string, messageId?: string) => void
   personMessages?: unknown[]
   modelOptions?: { vendorId: string; model: string; label: string }[]
   onRunOrganize?: (cfg: LocalAuto) => Promise<{ created: number; scanned: number; duplicate: number }>
+  onTidyMemories?: (records: unknown[]) => Promise<{ created: number; archived: number; scanned: number }>
 }) {
   return <div className="memory-panel">
     <header className="memory-panel-head">
@@ -348,6 +349,6 @@ export function MemoryPanel({ person, personLabel, onJumpToSource, personMessage
     {isLocalMode()
       ? <LocalAutoCard personMessages={personMessages || []} onRun={onRunOrganize} />
       : <AutoOrganizeCard person={person} />}
-    <MemoryGovernancePanel person={person} onJumpToSource={onJumpToSource} />
+    <MemoryGovernancePanel person={person} onJumpToSource={onJumpToSource} onTidy={onTidyMemories} />
   </div>
 }

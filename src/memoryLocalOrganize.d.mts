@@ -21,6 +21,17 @@ export function writeLocalAuto(patch: Partial<LocalAuto>): LocalAuto
 export function pendingStats(messages: unknown[], lastRunAt: string | null): LocalAutoStats
 export function localTrigger(cfg: LocalAuto, stats: LocalAutoStats): LocalTrigger
 export function parseProposals(text: string): LocalProposal[]
+export function parseTidyItems(text: string): { title: string; content: string; keywords: string; category: string; sources: string[] }[]
+export function tidyMemoryLibrary(input: {
+  person: string
+  records: any[]
+  endpoint: string
+  apiKey: string
+  chatUrl?: string
+  model: string
+  autoConfirm?: boolean
+  rules?: string
+}): Promise<{ created: number; archived: number; scanned: number }>
 export function runLocalOrganize(input: {
   person: string
   messages: unknown[]

@@ -17,15 +17,17 @@ function formatWhen(iso: string): string {
   return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-export function MemoryGovernancePanel({ person, onJumpToSource, hint, showViews = true }: {
+export function MemoryGovernancePanel({ person, onJumpToSource, hint, showViews = true, onTidy }: {
   person: string
   onJumpToSource?: (conversationId: string, messageId?: string) => void
   hint?: string
   showViews?: boolean
+  onTidy?: (records: MemoryRecord[]) => Promise<{ created: number; archived: number; scanned: number }>
 }) {
   const { records, error, refresh } = useMemoryRecords(person)
   const [filter, setFilter] = useState<'全部' | MemoryLifecycle>('全部')
   const [busy, setBusy] = useState('')
+  const [tidying, setTidying] = useState(false)
   const [actionError, setActionError] = useState('')
   const [notice, setNotice] = useState('')
   const [draft, setDraft] = useState({ title: '', content: '', keywords: '', category: '其他' })
@@ -53,6 +55,19 @@ export function MemoryGovernancePanel({ person, onJumpToSource, hint, showViews 
     finally { setBusy('') }
   }
 
+  async function tidy() {
+    if (!onTidy || tidying) return
+    setTidying(true); setActionError(''); setNotice('')
+    try {
+      const result = await onTidy(records)
+      setNotice(result.scanned === 0
+        ? '还没有可整理的记忆。'
+        : `AI 整理完成：看了 ${result.scanned} 条，合并/改写后新增 ${result.created} 条，归档 ${result.archived} 条。`)
+      await refresh()
+    } catch (e) { setActionError(e instanceof Error ? e.message : 'AI 整理失败') }
+    finally { setTidying(false) }
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault()
     if (creating) return
@@ -77,7 +92,10 @@ export function MemoryGovernancePanel({ person, onJumpToSource, hint, showViews 
   return <section className="tool-dash-memory" aria-label="记忆治理">
     <header className="tool-dash-runs-head">
       <div><b>记忆治理</b><small>{hint || '助手提议的记忆进候选区（自动整理可在上方设为直接生效）；拒绝会留墓碑，同样的内容不会再被提议。'}</small></div>
-      <button type="button" className="tool-dash-refresh" onClick={() => void refresh()}>刷新</button>
+      <div className="tool-dash-runs-actions">
+        {onTidy && records.length > 0 && <button type="button" className="tool-dash-refresh" disabled={tidying || !!busy} onClick={() => void tidy()}>{tidying ? '整理中…' : 'AI 整理'}</button>}
+        <button type="button" className="tool-dash-refresh" onClick={() => void refresh()}>刷新</button>
+      </div>
     </header>
     {showViews && <MemoryViewSwitcher value={view} onChange={changeView}/>}
     {error && <p className="tool-dash-error" role="alert">{error}</p>}

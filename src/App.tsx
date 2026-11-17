@@ -11,7 +11,7 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 import { enabledSkillsBlock, loadSkills, parseSkillMarkdown } from './skills.mjs'
 import { ToolDashboard } from './ToolDashboard'
 import { MemoryPanel } from './MemoryPanel'
-import { runLocalOrganize } from './memoryLocalOrganize.mjs'
+import { runLocalOrganize, tidyMemoryLibrary, readLocalAuto } from './memoryLocalOrganize.mjs'
 import { readMemoryModels, embeddingTarget, embedText, cosine } from './memoryModels.mjs'
 import { RichText } from './RichText.tsx'
 import { UiDialogHost } from './UiDialogHost'
@@ -2622,7 +2622,16 @@ function ToolPanel(p: any) {
       cfg,
       embedTarget: embeddingTarget(p.vendors || [], mm.embed),
     })
-  }}/>
+  }} onTidyMemories={isLocalMode() ? async (records: any[]) => {
+    const profileId = p.bindings?.[p.person]?.modelProfileId || p.defaultModelId || ''
+    const active = resolveModelConfig(profileId, p.modelProfiles || [], p.modelConfig)
+    const mm = readMemoryModels()
+    const tidyVendor = mm.organize.model ? (p.vendors || []).find((v: Vendor) => v.id === mm.organize.vendorId) : (p.vendors || []).find((v: Vendor) => v.id === active.vendorId)
+    const tidyModel = mm.organize.model || active.model || ''
+    const tidyKey = resolveKeyCandidates(p.vendors || [], p.bindings?.[p.person]?.keyId || '', p.apiKey || '', tidyVendor?.id || '')[0] || ''
+    const auto = readLocalAuto()
+    return tidyMemoryLibrary({ person: p.person, records, endpoint: tidyVendor?.endpoint || '', apiKey: tidyKey, chatUrl: tidyVendor ? chatRequestUrl(tidyVendor) : '', model: tidyModel, autoConfirm: auto.autoConfirm, rules: auto.rules })
+  } : undefined}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '工作流') return <TaskManager person={p.person} personLabel={p.displayName}/>
   if (t === '自主生活') return <ProactivePanel person={p.person} personLabel={p.displayName}/>

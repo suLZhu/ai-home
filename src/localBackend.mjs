@@ -697,6 +697,20 @@ export async function localHandle(path, init) {
       const record = readJSON(K.memoryRecords, []).find(r => r && r.id === memRec[1])
       return record ? json(200, { record }) : json(404, { error: '记忆不存在' })
     }
+    if (memRec && method === 'PATCH') {
+      const b = await readBody(init)
+      const all = readJSON(K.memoryRecords, [])
+      const record = all.find(r => r && r.id === memRec[1])
+      if (!record) return json(404, { error: '记忆不存在' })
+      if (typeof b.title === 'string' && b.title.trim()) record.title = b.title.trim().slice(0, 160)
+      if (typeof b.content === 'string' && b.content.trim()) record.content = b.content.trim().slice(0, 4000)
+      if (typeof b.keywords === 'string') record.keywords = b.keywords.slice(0, 500)
+      if (typeof b.category === 'string' && b.category.trim()) record.category = b.category.trim().slice(0, 40)
+      if (Array.isArray(b.embedding) && b.embedding.length) record.embedding = b.embedding.slice(0, 4096)
+      record.updatedAt = nowISO()
+      try { writeJSON(K.memoryRecords, all) } catch { return json(500, { error: '本地存储写入失败' }) }
+      return json(200, { record })
+    }
     const memTrans = p.match(/^\/api\/memory\/records\/([0-9a-f-]{36})\/transition$/)
     if (memTrans && method === 'POST') {
       const b = await readBody(init)
