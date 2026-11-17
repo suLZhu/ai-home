@@ -3593,3 +3593,11 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-inline-keys .vendor-key-add-card.inline{padding:7px!important}
 .vendor-config-hero{padding:2px 0 6px!important}
 .vendor-config-menu .vendor-config-info{padding-top:5px!important;padding-bottom:5px!important}
+
+.vendor-inline-keys{padding:4px 0 0!important;margin:0!important}
+.vendor-key-add-card.inline{margin-top:4px!important;padding:6px!important}
+.vendor-key-add-meta{gap:4px!important;margin-bottom:4px!important}
+.vendor-inline-keys .vendor-key-manager-row{padding:6px!important;margin-bottom:4px!important}
+.vendor-inline-keys .vendor-submit{margin-top:4px!important;padding:7px!important}
+.vendor-config-fields{gap:6px!important}
+.vendor-field{gap:3px!important}

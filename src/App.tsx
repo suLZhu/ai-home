@@ -3950,7 +3950,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const patch=(id:string,fn:(v:Vendor)=>Vendor)=>commit(vendors.map(v=>v.id===id?fn(v):v))
   const active=activeId?vendors.find(v=>v.id===activeId):undefined
   const primary=active?(active.keys.find(k=>k.role==='primary')||active.keys[0]):undefined
-  const chatUrl=active?chatRequestUrl(active):''
   // 批量点选：一次 patch 落盘，避免连续 setState 互相覆盖。
   const pickModels=(vendorId:string,ids:string[])=>patch(vendorId,v=>{
     const map=new Map(v.models.map(m=>[m.id,m]))
@@ -4272,7 +4271,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <p>订阅账号用网页登录，不需要填 API Key。</p>
           <button type="button" className="vendor-submit" onClick={()=>onSection('vendor:account')}>去登录订阅账号</button>
         </div>:<form className="vendor-add-form" onSubmit={addVendor}>
-          <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={newEnabled} onChange={e=>setNewEnabled(e.target.checked)}/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>启用</span><input type="checkbox" checked={newEnabled} onChange={e=>setNewEnabled(e.target.checked)}/></label>
           {addTab==='openai'&&<label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={newResponseApi} onChange={e=>setNewResponseApi(e.target.checked)}/></label>}
           <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="例如 OpenAI"/></label>
           <label className="vendor-field">API Key <div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="例如 sk-…"/></div></label>
@@ -4303,11 +4302,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
         <div className="vendor-config-hero"><b>供应商类型</b><SoftSelect className="vendor-config-select" ariaLabel="供应商类型" value={active.providerType||'openai'} onChange={v=>patch(active.id,x=>({...x,providerType:v as 'openai'|'google'|'claude'}))} options={[{value:'openai',label:'OpenAI 兼容'},{value:'google',label:'Google'},{value:'claude',label:'Claude'}]}/></div>
         <div className="vendor-config-menu">
-          <div className="vendor-config-pair">
-            <label className="vendor-config-info vendor-config-inline"><span>分组</span><input className="vendor-config-input" aria-label="供应商分组" list="vendor-group-options" value={active.group||''} onChange={e=>patch(active.id,x=>({...x,group:e.target.value}))} placeholder="其他"/></label>
-            <label className="vendor-config-info vendor-config-switch compact"><span>隐藏</span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
-          </div>
-          <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+                    <label className="vendor-config-info vendor-config-switch"><span>隐藏</span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
+<label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           {showBackupKeys&&<div className="vendor-inline-keys">
             {active.keys.length===0?<p className="vendor-inline-empty">还没有 API Key，添加后可设置主号与备用。</p>:active.keys.map((k,index)=><div className="vendor-key-manager-row" key={k.id}>
@@ -4352,9 +4348,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
-          <p className="vendor-url-hint">实际聊天请求地址 <b>{chatUrl||'填写 Base URL 后显示'}</b></p>
-          <label className="vendor-field">模型列表路径 <small>可选；留空自动推导</small><input aria-label="模型列表路径" type="text" autoCapitalize="off" spellCheck={false} value={active.modelsPath||''} onChange={e=>patch(active.id,x=>({...x,modelsPath:e.target.value}))} placeholder="/models"/></label>
-          <p className="vendor-url-hint">模型列表地址 <b>{modelListUrl(active)||'填写 Base URL 后显示'}</b></p>
         </div>
 
       </div>}
