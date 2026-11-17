@@ -89,7 +89,7 @@ import { channelPlan, notificationPayload, decideNotification, loadNotified, mar
 import { buildAlarmPlan } from './taskAlarms.mjs'
 import { readNotificationPrefs } from './notificationPreferences.mjs'
 import { registerSystemHandlers, clearConversationNotifications, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom, nativeHttpStreamAvailable, openNativeWebView, readClipboardText, appVersion } from './nativeSystem.mjs'
-import { friendlyHttpError, routeInfoFromError } from './chatHttpError.mjs'
+import { friendlyHttpError, routeInfoFromError, diagnoseChatHttpError, diagnoseChatTransportError } from './chatHttpError.mjs'
 import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
@@ -1434,6 +1434,8 @@ export default function App() {
     let finished=false
     // 记录本轮生成结果，供 finally 判断是否自动补发 pending（成功才补发；报错/中断保留）。
     let genOutcome: 'ok'|'fail'|'noop' = 'noop'
+    let failurePhase: 'prepare'|'request'|'stream'|'tool' = 'prepare'
+    let outgoingToolsEnabled = false
     try {
       // 缓发 flush：把已显示的待发消息从历史里排除，随后合并成一条最终 user 消息——
       // 同一条消息绝不在请求里出现两次（气泡也不重复插入）。
@@ -1569,8 +1571,10 @@ export default function App() {
       } catch { /* MCP is optional; continue with normal model chat. */ }
       for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
+        outgoingToolsEnabled=openAITools.length>0
         if(openAITools.length){requestBody.tools=/gemini|gemma/i.test(activeModel.model)?sanitizeGeminiTools(openAITools):openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        failurePhase='request'
         let response=await chatProxy()
         if(!response.ok){
           const detail=await response.text()
@@ -1583,11 +1587,12 @@ export default function App() {
           }
           if(response.status===400&&/stream_options|include_usage/i.test(detail)){
             delete requestBody.stream_options;response=await chatProxy()
-            if(!response.ok){const retryDetail=await response.text();console.warn('[chat] retry upstream HTTP error',response.status,retryDetail.slice(0,2000));throw new Error(friendlyHttpError(response.status,retryDetail))}
-          }else throw new Error(friendlyHttpError(response.status,detail))
+            if(!response.ok){const retryDetail=await response.text();console.warn('[chat] retry upstream HTTP error',response.status,retryDetail.slice(0,2000));throw new Error(diagnoseChatHttpError(response.status,retryDetail,{toolsEnabled:outgoingToolsEnabled,elapsedMs:performance.now()-requestStartedAt}))}
+          }else throw new Error(diagnoseChatHttpError(response.status,detail,{toolsEnabled:outgoingToolsEnabled,elapsedMs:performance.now()-requestStartedAt}))
         }
         if(routeMode){const used=response.headers.get('X-Route-Used')||'';const usedLabel=(()=>{try{return decodeURIComponent(response.headers.get('X-Route-Label')||'')}catch{return ''}})();if(used)setLastRouteInfo('实际使用线路：'+(usedLabel||used))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
+        failurePhase='stream'
         // 正文与思考各用一个有状态清洗器：跨 chunk 的协议标签由缓冲窗口负责识别，
         // 清洗后的增量才写进 answer / thinking（持久化与通知因此天然都是干净的）。
         const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
@@ -1603,6 +1608,7 @@ export default function App() {
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
+        failurePhase='tool'
         for(const call of toolCalls){
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
@@ -1837,14 +1843,17 @@ export default function App() {
       return 'ok'
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
+      const elapsed=performance.now()-requestStartedAt
+      const isDiagnosed=/^(工具参数兼容性错误|请求参数被拒绝|网络请求未成功连接上游|模型接口|请求被模型接口拒绝|模型服务暂时不可用|请求被取消|请求等待超时|流式连接中断|无法连接模型接口|模型请求失败)/.test(msg)
+      const shownError=isDiagnosed?msg:diagnoseChatTransportError(err,{stage:failurePhase,elapsedMs:elapsed,toolsEnabled:outgoingToolsEnabled,localMode:isLocalMode()})
       // 用户删除「正在生成」的回复会触发中止：消息已不在，不写错误文案、也不弹错误提示。
       if(!abortController.signal.aborted){
         if(regen){
           // 重新生成失败 → 恢复原有有效回复，绝不把旧回复换成失败占位。
           restoreRegenerate()
-          setChatError('重新生成失败：'+(msg.includes('Failed to fetch')?(isLocalMode()?'连接模型接口失败，请检查模型设置里的 API 地址与网络。':'连接失败，请确认后端服务（'+(getApiBase()||'本机后端')+'）正在运行。'):msg))
+          setChatError('重新生成失败：'+shownError)
         }else{
-          setChatError(msg.includes('Failed to fetch')?(isLocalMode()?'连接模型接口失败：请检查模型设置里的 API 地址、API Key 与网络后重试。':'连接失败：后端未响应，请确认后端服务（'+(getApiBase()||'本机后端 127.0.0.1:4180')+'）正在运行，或检查网络后重试。'):msg)
+          setChatError(shownError)
           // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
           updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
         }
