@@ -250,3 +250,14 @@ export const IconLock: IconComponent = props => <Icon {...props}>
 export const IconCheck: IconComponent = props => <Icon {...props}>
   <path d="m5 13 4 4 10-10" />
 </Icon>
+
+
+export const IconMore: IconComponent = props => <Icon {...props}>
+  <path d="M20 12.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1Z" fill="currentColor" />
+  <path d="M12 12.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1Z" fill="currentColor" />
+  <path d="M4 12.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1Z" fill="currentColor" />
+</Icon>
+
+export const IconVideo: IconComponent = props => <Icon {...props}>
+  <path d="M15 12v4.4a.6.6 0 0 1-.6.6H3.6a.6.6 0 0 1-.6-.6V7.6a.6.6 0 0 1 .6-.6h10.8a.6.6 0 0 1 .6.6V12Zm0 0 5.016-4.18A.6.6 0 0 1 21 8.281v7.438a.6.6 0 0 1-.984.461L15 12Z" />
+</Icon>
