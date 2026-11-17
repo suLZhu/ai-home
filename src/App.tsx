@@ -1282,7 +1282,7 @@ export default function App() {
     const subscriptionProtocol = !routeMode && activeVendor?.subscriptionChannel === 'gpt' ? 'codex'
       : !routeMode && activeVendor?.subscriptionChannel === 'claude' ? 'anthropic'
       : !routeMode && activeVendor?.subscriptionChannel === 'grok' ? 'grok' : ''
-    const subscriptionAccountId = activeVendor?.subscriptionAccountId || (subscriptionProtocol==='codex'?chatGptAccountIdFromToken(activeApiKey):'')
+    const subscriptionAccountId = (subscriptionProtocol==='codex'?chatGptAccountIdFromToken(activeApiKey):'') || activeVendor?.subscriptionAccountId || ''
     if (subscriptionProtocol && isLocalMode() && !nativeHttpStreamAvailable()) {
       setChatError('订阅聊天需要 App 原生网络桥：请用最新 APK，或连接服务器 / 改用兼容网关。')
       return 'fail'
