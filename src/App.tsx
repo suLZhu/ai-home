@@ -4133,8 +4133,12 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     }catch{}
   }
   const deleteVendor=async(v:Vendor)=>{
-    if(v.builtin)return
-    const ok=await confirmDialog({title:'删除供应商',message:'删除「'+v.name+'」及其 '+v.keys.length+' 把 Key 和模型？',confirmLabel:'删除',danger:true})
+    const ok=await confirmDialog({
+      title:'删除供应商',
+      message:'删除「'+v.name+'」及其 '+v.keys.length+' 把 Key 和模型？删除后可重新添加供应商。',
+      confirmLabel:'删除',
+      danger:true
+    })
     if(!ok)return
     commit(vendors.filter(x=>x.id!==v.id));backToList()
   }
@@ -4468,10 +4472,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {active&&!showKeyManager&&<section className="vendor-page">
       <div className="vendor-inline-toolbar">
         <span className="vendor-inline-meta">{pickedModels.length} 个模型</span>
-        {tab==='config'&&<div className="vendor-kelivo-head-actions">
-          <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}><IconTest size={16}/></button>
-          <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}><IconShare size={16}/></button>
-          {!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}><IconTrash size={16}/></button>}
+        {tab==='config'&&<div className="vendor-kelivo-head-actions vendor-actions-text">
+          <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}><IconTest size={14}/><span>{testState.busy?'测试中':'测试'}</span></button>
+          <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}><IconShare size={14}/><span>分享</span></button>
+          <button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}><IconTrash size={14}/><span>删除</span></button>
         </div>}
       </div>
       <div className="vendor-card open" key={active.id}>
