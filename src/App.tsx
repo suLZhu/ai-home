@@ -1035,9 +1035,47 @@ export default function App() {
   }, [])
 
   useEffect(() => { localStorage.setItem('ai-home.assistants', JSON.stringify(assistants)) }, [assistants])
-  useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
+  // Streaming responses previously stringified *all* conversations and active messages on
+  // every paint (about 6x/sec), blocking Android WebView's UI thread for large histories.
+  // Coalesce writes and cap the dirty window. Flush on background/unload and generation end.
+  const chatPersistLatest = useRef({ conversations, messages })
+  chatPersistLatest.current = { conversations, messages }
+  const chatPersistTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const chatPersistDirtySince = useRef(0)
+  const flushChatPersistence = useCallback(() => {
+    if (chatPersistTimer.current !== null) { clearTimeout(chatPersistTimer.current); chatPersistTimer.current = null }
+    chatPersistDirtySince.current = 0
+    const data = chatPersistLatest.current
+    try { localStorage.setItem('ai-home.conversations', JSON.stringify(data.conversations)) }
+    catch { /* storage quota must not interrupt chatting */ }
+    try {
+      const safeMessages = Object.fromEntries(Object.entries(data.messages).map(([k,v])=>[
+        k, (v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({
+          name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent,
+        }))}))
+      ]))
+      localStorage.setItem('ai-home.messages', JSON.stringify(safeMessages))
+    } catch { /* storage quota must not interrupt chatting */ }
+  }, [])
+  useEffect(() => {
+    const now = Date.now()
+    if (!chatPersistDirtySince.current) chatPersistDirtySince.current = now
+    if (chatPersistTimer.current !== null) clearTimeout(chatPersistTimer.current)
+    const delay = Math.min(550, Math.max(0, 1800 - (now - chatPersistDirtySince.current)))
+    chatPersistTimer.current = setTimeout(flushChatPersistence, delay)
+  }, [conversations, messages, flushChatPersistence])
+  useEffect(() => {
+    const flushOnHide = () => { if (document.hidden && chatPersistDirtySince.current) flushChatPersistence() }
+    const flushOnPageHide = () => { if (chatPersistDirtySince.current) flushChatPersistence() }
+    document.addEventListener('visibilitychange', flushOnHide)
+    window.addEventListener('pagehide', flushOnPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide)
+      window.removeEventListener('pagehide', flushOnPageHide)
+      flushOnPageHide()
+    }
+  }, [flushChatPersistence])
   useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
-  useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   // 消息 id 补齐（一次性迁移，幂等）：老版本的用户消息没有 id，而编辑/删除/重新生成都按 id 定位。
   // 视图（messages）与持久化（conversations）按「同会话、同位置、同角色同内容」对齐，
   // 保证两边拿到同一个 id——修改才能同时写进两边、刷新后仍生效。
@@ -1814,6 +1852,8 @@ export default function App() {
       return 'fail'
     } finally {
       if (streamPaintTimer !== undefined) flushStreamPaint()
+      // Persist the final generated answer immediately; intermediate chunks are batched.
+      window.setTimeout(flushChatPersistence, 0)
       if(sendAbortRef.current[sendScope]?.id===assistantMessageId)delete sendAbortRef.current[sendScope]
       delete sendingRef.current[sendScope]
       setSendingScopes(prev=>({...prev,[sendScope]:false}))
