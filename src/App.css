@@ -2199,7 +2199,7 @@ html[data-keyboard-native="open"] .shell.shell-chat-lock{padding-bottom:var(--ap
 /* ── 首页「今天」+ 浮动胶囊导航（对齐 ai-home 定稿） ──────────
    大时钟、一句近况、两位助手状态卡、「今天的事」；底部导航改成悬浮胶囊
    四格（主页 / 房间 / 记忆 / 设置），聊天态隐藏。 */
-.home-today{display:block;min-height:0;overflow:visible;padding:calc(var(--app-safe-top,0px) + 54px) 0 30px}
+.home-today{display:block;min-height:0;overflow:visible;padding:calc(var(--app-safe-top,0px) + 46px) 0 30px}
 .home-today .home-hero{display:block;padding:8px 20px 6px}
 .home-today .home-clock{font-size:42px;line-height:1.05;letter-spacing:1px;color:var(--ink);font-weight:400}
 .home-today .home-date{margin-top:4px;font-size:11px;letter-spacing:1px;color:var(--muted)}
@@ -3427,7 +3427,7 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-kelivo-provider-info small{display:block;font-size:9.5px;color:var(--muted,#8a7d6d);margin-top:1px}
 
 /* 设置整体上提 + 紧凑 */
-.settings-screen{padding-top:calc(var(--app-safe-top,0px) + 6px)!important}
+.settings-screen{padding-top:calc(var(--app-safe-top,0px) + 46px)!important}
 .settings-heading{padding-top:0;margin-bottom:8px}
 .settings-screen .settings-flat-list{padding:4px 0 18px}
 .settings-screen .settings-flat-list .settings-row-list{gap:8px}
@@ -3443,7 +3443,7 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-kelivo-added-row.hidden-model{opacity:.6}
 .vendor-hidden-models .vendor-kelivo-added-group-head b{color:var(--muted,#8a7d6d)}
 
-.shell .settings-screen{padding-top:calc(var(--app-safe-top,0px) + 6px)!important}
+.shell .settings-screen{padding-top:calc(var(--app-safe-top,0px) + 46px)!important}
 .shell .settings-heading{padding-top:0!important}
 
 /* 供应商主页面：顶部 tabs + 窄搜索 */
@@ -3703,3 +3703,5 @@ body.has-pack .settings-heading h2,body.has-pack .setting-card b{color:var(--ink
 body.has-pack .settings-back{background:transparent!important;border-color:var(--line,#e6ded2)!important;color:var(--ink,#403b35)!important}
 /* 侧边栏打开时收起菜单胶囊，避免压住抽屉标题 */
 .shell:has(.app-sidebar.sidebar-open) .mobile-menu-toggle{opacity:0;pointer-events:none;transition:opacity .18s ease}
+/* 统一页顶：标题不再叠加自己的上边距，所有一级页面都从 safe+46 开始 */
+.shell .settings-heading{padding-top:0!important}
