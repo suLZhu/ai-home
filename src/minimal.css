@@ -1104,3 +1104,12 @@ html,body{
 .shell .theme-fontctl-foot button{
   border-radius:var(--radius,7px)!important;
 }
+
+
+/* 圆角滑杆也覆盖主题页动作按钮；列表导航和分隔线仍保持直边。 */
+.shell .theme-settings .theme-pack-import,
+.shell .theme-settings .theme-pack-reset,
+.shell .theme-settings .theme-reset,
+.shell .theme-settings .theme-fontctl-foot button{
+  border-radius:var(--radius,7px)!important;
+}
