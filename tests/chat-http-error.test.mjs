@@ -66,3 +66,20 @@ test('流式传输超时能区别连接之前和之后', () => {
   assert.match(msg,/流式/)
   assert.match(msg,/69 秒/)
 })
+
+test('上游 429 账户未激活应提示账单，而非限流', () => {
+  const nested = JSON.stringify({error:{message:'Upstream returned HTTP 429 · {\\"error\\":{\\"message\\":\\"Your account is not active, please check your billing details\\",\\"type\\":\\"invalid_request_error\\"}}'}})
+  const msg=diagnoseChatHttpError(429,nested,{elapsedMs:3500})
+  assert.match(msg,/账户未激活|被停用/)
+  assert.match(msg,/账单/)
+  assert.doesNotMatch(msg,/稍后再试|请求过于频繁/)
+  assert.doesNotMatch(msg,/\\\\"error/)
+})
+test('上游 429 余额不足应区别于限流', () => {
+  const msg=diagnoseChatHttpError(429,JSON.stringify({error:{message:'insufficient balance'}}))
+  assert.match(msg,/余额或计费/)
+})
+test('真正的 429 限流仍被正确识别', () => {
+  const msg=diagnoseChatHttpError(429,JSON.stringify({error:{message:'rate limit exceeded'}}))
+  assert.match(msg,/限流/)
+})
