@@ -1,4 +1,24 @@
-# 空房子框架说明（Agent 化后）
+# 空房子框架说明（Agent 化后，4.8）
+
+## 本地模式（4.8 起默认）
+
+`apiFetch()`（`src/apiBase.mjs`）在没有配置服务器地址时，把 `/api/*` 直接交给浏览器内的 `src/localBackend.mjs` 应答，**不发网络请求**：
+
+```
+/api/chat          直连上游 OpenAI 兼容接口（流式透传 + 时间注入 + 多 Key 换用）
+/api/models        直连上游模型列表
+/api/state         本地快照（localStorage，上限 4.5 MB）
+/api/memory/*      记忆检索 + 治理记录（candidate/active/archived/rejected）+ transition + PATCH
+/api/workspace/*   本机工作区
+其他 /api/*        同源服务器的等价实现或明确报错
+```
+
+配置了服务器地址后自动回到「云端代理模式」，行为与之前一致；两种模式的数据互不影响。
+
+本地模式下额外接了两块：
+
+- `memoryLocalOrganize.mjs`：按「轮数 / 字数 / 天数」判断是否整理，用当前模型把新对话提炼成记忆；`tidyMemoryLibrary()` 负责合并去重、改写已有记忆（源条目归档）。
+- `memoryModels.mjs`：整理模型 / 向量模型两个独立槽位；`embedText()` 调 `/v1/embeddings`，`cosine()` 供聊天召回排序，失败退关键词。
 
 ## 原则
 - 这是独立的新项目，不修改 Kelivo，也不复用 Kelivo 的用户数据。
@@ -47,11 +67,12 @@ fakeMcp.mjs     进程内 Fake MCP（echo/delayed_success/always_fail/write_once
 | 房间/聊天 | 独立房间、多会话、流式请求、真实工具调用状态卡 | — |
 | 人物设置 | 角色名称、描述、定义、开场白 | 角色卡导入导出 |
 | 世界书 | 人物隔离、关键词/常驻条目召回 | 优先级、预算、导入导出 |
-| 长期记忆 | 分类条目 + 治理状态机（候选/生效/归档/拒绝）、Recall Ledger、跳回来源会话、定时自动整理（写候选）、独立记忆面板（策略 / 进度 / 确认） | 向量检索、外接 MemoryProvider |
+| 长期记忆 | 分类条目 + 治理状态机（候选/生效/归档/拒绝）、Recall Ledger、跳回来源会话、**本地自动整理 + AI 整理记忆库 + 可选向量召回** | 外接 MemoryProvider |
 | 定时任务 | 持久化队列、到期扫描、原子认领、经 Runner 执行、绑定会话 | 重试策略细化 |
 | MCP | 远程 Streamable HTTP、加密 Token、按人物隔离、审批策略、真实执行落账 | 超时分级、更多传输方式 |
 | 主动生活 | Jiwen 积温、免打扰、收件箱投递、调试轨迹 | PWA/ntfy 推送、日记写入 |
-| 模型设置 | OpenAI 兼容端点、模型名、服务端加密 Key | 连接测试、多模态探测 |
+| 供应商 / 模型 | 多供应商多 Key、OpenAI 兼容端点、模型编辑（模态/能力/上下文/内置工具）、模型测试卡片 | 更多厂商协议 |
+| 外观 / 美化包 | tokens + 背景（色/图）+ 气泡 + 字体 + 图标；整机皮肤、背景取色（明暗自适应）、线性图标集 | 整套图标资源包、状态栏联动 |
 | 工具调用看板 | 运行卡片、调用记录（7 态）、SSE、审批、策略、记忆治理 | — |
 | 客厅/娱乐房 | 留言原型 / 模块入口 | 实时同步、按需接入 |
 
@@ -84,9 +105,11 @@ fakeMcp.mjs     进程内 Fake MCP（echo/delayed_success/always_fail/write_once
 ## 测试与发布
 ```bash
 npm run build      # tsc -b && vite build
-npm run lint       # oxlint（9 条 React Hooks 风格警告基线，0 error）
+npm run lint       # oxlint（0 error，少量 hooks 风格警告）
 node --check src/server.mjs
-npm test           # 15 项 Agent 验收（tests/agent-acceptance.test.mjs，node:test）
+npm test           # 全量 node:test（Agent 验收 / 记忆 / 备份 / 线路 / 本地后端 等 60+ 项）
 ```
 
-自动化测试用脚本化模型（fetch stub）+ 进程内 Fake MCP 驱动真实 Runner/Executor/审批门，覆盖：单工具成功、失败回传、连续两步、并行 tool_call_id 对应、MCP 掉线不阻断、写工具审批（批准/拒绝）、取消、刷新/重启恢复、幂等键、助手隔离、定时任务写回原会话、主动任务写回原会话、无成功回执不得显示"已验证执行"、version 2 迁移不丢失不串助手。真实模型 + 远程 MCP 的端到端验证仍待真实凭证。
+发版：`package.json` 的 `version` 与 `android/app/build.gradle` 的 `versionName` / `versionCode` 一起改；`main` 上打 tag（如 `v4.8`）。
+
+自动化测试用脚本化模型（fetch stub）+ 进程内 Fake MCP 驱动真实 Runner/Executor/审批门；真实模型 + 远程 MCP 的端到端验证仍待真实凭证。

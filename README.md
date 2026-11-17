@@ -1,68 +1,102 @@
-# 私人 AI 前端 · 空房子原型
+# 栖间 · 私人 AI 前端（4.8）
 
- React + TypeScript + Vite 安卓优先网页原型，后端使用 Node.js 与 SQLite。
+React + TypeScript + Vite + Capacitor 的安卓优先 App。**默认本地模式**：不填服务器地址也能完整使用，聊天、设置、记忆、备份都只存在这台设备；填了服务器地址才走同源 / 云端同步。
 
-## 当前已实现
-- 书页风格首页、房间目录与底部导航
-- assistant-001` / `assistant-002`，显示名可改、数据归属不随显示名漂移）各自独立聊天记录、人物设定、长期记忆和世界书
-- 世界书关键词匹配与常驻条目注入当前轮提示词
-- OpenAI 兼容 Chat Completions 流式聊天；API Key 经 AES-256-GCM 加密保存在服务端
-- 图片/文件选择与附件预览；常见文本文件读取
-- 登录保护、服务端 SQLite 云端状态保存
-- 远程 MCP Streamable HTTP 配置，Bearer Token 服务端加密保存；MCP 服务按人物隔离
-- **统一 Agent Runner（服务端）**：聊天/定时任务/主动触发共用同一条最多 5 轮的工具循环；AbortController 取消、工具失败以 `role=tool` 回传模型、写操作不自动重试、读操作一次重试、身份由服务端从运行记录确定
-- **聊天富文本**：Markdown 表格、折叠块（details/summary）、代码块、列表、标题；支持安全的颜色与字号内联样式，脚本 / 事件属性 / 危险 CSS 一律白名单过滤
-- **房间小组件**：助手可以用 HTML/CSS/JS 自由设计小组件（不限记账/清单/便签/计算器），数据通过 `qijian` 数据桥自动持久化；长期保存、手动删除；支持 `widget_create / widget_append / widget_list` 工具
-- **15 种聊天气泡**：旧信纸、无边框透明、彩色像素、小装饰、可爱、古典花框、新艺术等，选择器一行一个样式、左边名称右边预览
-- **开源花纹气泡**：内置古典雕版花框、新艺术藤蔓花边（来自 Openclipart 的 CC0 矢量素材，见 `src/assets/bubble-frames/NOTICE.md`）
-- **图床表情包**：图片表情包除了本地上传，还可以直接粘贴图床直链；助手也能用 Markdown 图片（`![](https://…)`）发表情
-- **联网搜索与内置浏览器**：`web_search` 走 DuckDuckGo；`open_web_page` 优先用原生 WebView 内置浏览器打开（iframe 作为兜底），随时可关
-- **分类备份**：模型 / 记忆 / 聊天 / 整体四类，固定存到手机「下载/栖间/」；可单独备份与按类恢复，模型与整体备份包含 API Key（请勿外发）。还能识别 Kelivo 的模型配置备份，直接导入成栖间的供应商与模型
-- **记忆可视化**：记忆面板支持星空 / 花园 / 日记本 / 列表四种视图，选择会记住；点星星、花朵或日记条目打开详情，直接确认 / 拒绝 / 归档
-- **启动提醒引导**：每次进入 App 时检查通知 / 精确定时 / 全屏提醒 / 电池优化，缺什么就在首页底部列出「去开启」，不用自己翻设置
-- **到点提醒**：本机定时任务用 AlarmManager（RTC_WAKEUP）在 App 关闭 / 锁屏时也能触发；高优先级渠道 + 锁屏全屏提醒卡（Android 14+ 需授权「全屏提醒」），开机后自动恢复未完成的提醒
-- **本机工作区**：助手可读写服务器所在机器的文件、搜索、查看/提交 Git、执行 bash 命令；根目录强制限制、写/删/提交/命令逐次弹确认，设置里按助手开关
-- **上下文压缩**：长对话把早段压成「前情提要」注入提示词，原文完整保留；摘要覆盖点之后的消息继续原样带上，AI 可用 conversation_search 工具回顾更早的原话，不会压缩完就失忆
-- **首页与导航**：今天式首页（大时钟、两位助手状态卡、今天的事）、浮动胶囊导航（主页 / 房间 / 记忆 / 设置），统一的 SVG 图标集
-- **工具调用看板**：真实执行记录（7 态状态机）、Agent 运行卡片、SSE 实时推送、运行取消
-- **工具权限策略**：auto / ask / deny；ask 挂起等待用户批准/拒绝，审批超时或重启后不可重放
-- **定时任务接入 Runner**：到期任务原子认领、绑定原 conversationId、经统一工具循环执行
-- **Jiwen 积温主动触发**：热量按真实流逝时间累积，满温经统一 Runner 真实执行，答案投递收件箱；沉默/失败绝不假造消息；遵守免打扰
-- **记忆治理（DuduLove 风格轻量版）**：模型提议先进 `candidate`，用户确认后才 `active`；拒绝留墓碑防重复提议；Recall Ledger 30 分钟窗口内同一会话不重复注入；看板可跳回来源会话
-- **记忆自动整理 + 独立记忆面板**：服务端每 5 分钟按「轮数 / 字数 / 天数」任一满足触发一次整理；可写「整理规则」约束记什么，可设「整理后自动生效」跳过逐条确认；面板里可开关、调阈值、看待整理进度并手动整理
-- **Fake MCP + 自动化测试**：`npm test` 跑 15 项验收（工具成功/失败回传/并行对应/MCP 掉线/审批/取消/幂等/隔离/会话绑定/迁移）
+- 当前版本：**4.8**（`package.json` 4.8.0 / `android/app/build.gradle` versionName 4.8、versionCode 49）
+- 分支约定：`main` 是主支，功能改动直接在主支提交；发布打 tag（`v4.7`、`v4.8`…）
 
-## 框架状态与下一步
-详细模块边界、接口与未完成项见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
+## 已实现（按模块）
 
-## 尚未实现或仍需验证
-- 使用真实远程 MCP 与真实模型完成端到端自动工具调用验证（自动化测试用脚本化模型 + 进程内 Fake MCP）
-- Serein/其他记忆引擎的正式接入（已预留 MemoryProvider 接口，当前为 SQLiteMemoryProvider）
-- PocketBase/服务端共享存储、实时客厅/群聊（目前客厅仅为留言原型）
-- 内嵌浏览器、相册、播放器等娱乐房模块
-- 图片和普通文件的持久化云端上传
-- 主动消息的 PWA/ntfy 推送通道（当前走应用内收件箱）
+### 聊天
+- 全屏对话、流式输出、多会话、消息搜索、长按菜单（复制/编辑/重发/删除）
+- 上下文压缩：早段压成「前情提要」，原文保留；顶部「前情 · 已压缩 N 条」可展开
+- 富文本：Markdown 表格 / 折叠块 / 代码块 / 列表，安全白名单过滤颜色与字号
+- 附件：相册选图、文件、文本读取；表情包支持本地上传与图床直链
+- 15 种气泡样式（旧信纸、像素、花框、新艺术等），可按助手单独设置
 
-## 本地运行
+### 模型与供应商
+- 供应商中心：OpenAI 兼容 / Google / Claude 三类；每个供应商可存多把 Key（备用优先、主号兜底）
+- 配置页：「隐藏 / 启用」同一行，多 Key 模式内联展开；连接设置收窄
+- 模型页：点卡片进「编辑模型」，长按进多选；多选条为 全选 / 测试 / 删除 / 退出
+- **模型测试小卡片**：文本 / 图片 / 工具三项真打请求，逐项 ✓ / ✗，失败写原因，单项 25 秒超时
+- 模型编辑：基本设置 / 高级设置 / 内置工具三页；上下文 128K / 200K / 1M / 自定义
+- 订阅账号登录（ChatGPT / Claude / Grok），统一模型线路 + 自动 fallback
+
+### 记忆
+- 记忆治理：候选 → 生效 → 归档 / 拒绝（墓碑去重），可跳回来源会话
+- **本地 AI 整理**：打开记忆面板时按「轮数 / 字数 / 天数」任一满足，用当前模型把新对话整理成记忆；可选「整理后自动生效」
+- **记忆专用模型**：整理模型、向量模型各一个槽位；向量模型可用时聊天召回按余弦相似度排序，不可用自动退回关键词
+- **AI 整理记忆库**：把已有记忆合并去重、改写清楚，被合并的源条目归档
+- 记忆可视化：星空 / 花园 / 日记本 / 列表四种视图
+
+### 外观
+- 美化包（Theme Pack）：单 JSON 或 ZIP（pack.json + 图片/字体），导入即用；助手也能用 `theme_pack_*` 工具切换
+- 包能换：tokens、背景（色/图）、气泡样式、字体、图标
+- **整机皮肤**：包背景铺满首页 / 设置 / 侧边栏 / 聊天；卡片平铺、只用细线分隔
+- **背景取色**：包只给背景色/背景图时自动推导强调色与明暗（暗背景转浅字），tokens 可覆盖
+- 图标：统一 24×24 线性 SVG 图标集（`src/icons.tsx`），不再混用 emoji 符号
+
+### 工具与自动化
+- 统一 Agent Runner（服务端模式）：聊天 / 定时任务 / 主动触发共用 ≤5 轮工具循环
+- 工具策略 auto / ask / deny；审批挂起与超时；工具调用看板（7 态状态机 + SSE）
+- MCP：远程 Streamable HTTP，按人物隔离，Token 服务端加密
+- 本机工作区：读写文件 / 搜索 / Git / 命令，根目录强制限制，写操作逐次确认
+- 房间小组件：AI 可用 HTML/CSS/JS 设计小组件，数据走 `qijian` 数据桥持久化
+- 提醒：AlarmManager 到点触发（App 关闭 / 锁屏也可），锁屏全屏提醒，开机恢复
+- 联网搜索（DuckDuckGo）与内置浏览器
+
+### 数据
+- 分类备份：模型 / 记忆 / 聊天 / 世界书 / MCP / 整体，固定存到「下载/栖间/」
+- 本地存储：聊天、设置、记忆都在本机浏览器存储；快照上限 4.5 MB
+- 应用更新：APK 更新 + 界面热更新（dist.zip + 清单），可恢复内置界面
+
+## 目录结构
+
+```
+src/
+  App.tsx            主界面与业务逻辑（房间、聊天、设置、供应商、记忆面板入口）
+  MemoryPanel.tsx    记忆面板（整理策略、记忆模型、治理）
+  MemoryGovernancePanel.tsx / memoryGovernance.ts  记忆治理与轮询
+  memoryLocalOrganize.mjs  本地自动整理 / AI 整理记忆库
+  memoryModels.mjs   整理模型 / 向量模型设置与 embedding
+  themePack.mjs      美化包解析、应用、背景取色
+  icons.tsx          统一线性图标集
+  localBackend.mjs   本地模式的后端垫片（/api/* 全部在本机应答）
+  server.mjs         可选的服务端（Express 风格 HTTP + SQLite）
+  server/agent/      统一 Agent Runner / 工具注册 / 记忆存储
+android/             Capacitor 安卓壳
+docs/                真机验收清单等
+```
+
+## 开发与构建
+
 ```bash
 npm install
-npm run dev
-npm run build
-npm run lint
-npm test
+npm run dev        # 浏览器开发
+npm run build      # tsc -b && vite build
+npm run lint       # oxlint
+npm test           # node:test 全量验收
 ```
 
-后端需要设置 `AI_HOME_PASSWORD`（至少 16 字符）与 `AI_HOME_SECRET_KEY`（32 字节十六进制密钥）。可选设置 `AI_HOME_DB` 和 `AI_HOME_ALLOWED_ORIGIN`。服务默认监听 `127.0.0.1:4180`，应通过 HTTPS 反向代理对外提供访问。
+安卓打包（Windows，含本地工具链路径时按实际环境替换）：
 
-### Android 局域网一键启动（npm start）
 ```bash
-npm start    # scripts/start-server.mjs
+node node_modules/vite/bin/vite.js build
+npx cap sync android
+cd android && gradlew assembleDebug "-Pandroid.aapt2FromMavenOverride="
 ```
-脚本自动完成：读取 `.ai-home.env`（缺 `AI_HOME_PASSWORD` 则生成 24 位密码并保存）→ 以
-`AI_HOME_BIND=0.0.0.0` + `AI_HOME_ALLOWED_ORIGIN=https://localhost` 启动服务 →
-探测局域网 IP（排除 Clash fake-IP/链路本地等不可达地址）→ 打印手机端要粘贴的 API 地址与登录密码。
 
-手机装好 APK 后，在「设置 → 开发者 → API 服务器地址」填入打印的 `http://<局域网IP>:4180`，
-输入打印的密码登录即可（7 天免登）。登录凭证由服务端以 token 返回，客户端自动附加
-（JSON 走 `Authorization: Bearer`，图片与 SSE 走 `?token=`），跨源 http 不依赖 Cookie，
-无需 HTTPS 反向代理。多网卡时可在 `.ai-home.env` 加 `AI_HOME_LAN_IP=<你的局域网IP>` 强制指定。
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`。
+
+**发版动版本号的地方**：`package.json` 的 `version`、`android/app/build.gradle` 的 `versionName` / `versionCode`。
+
+## 测试
+
+`npm test` 覆盖 Agent 验收、任务投递、时间上下文、记忆自动整理、消息清理、备份、订阅登录、模型线路、附件持久化、本地后端等 60+ 项。
+
+## 已知限制
+
+- 向量检索需要供应商提供 OpenAI 兼容的 `/v1/embeddings`；没有就退关键词
+- 本机后台调度依赖 App 打开（记忆整理在打开面板时触发）；真正的定时靠 AlarmManager 的提醒
+- 系统状态栏颜色只能改图标亮暗，下拉通知面板无法被 App 主题化
+- 服务端模式的 MCP Token / API Key 使用 AES-256-GCM 加密，密钥丢失后无法解密
