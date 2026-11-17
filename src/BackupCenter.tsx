@@ -164,6 +164,12 @@ export function BackupCenter({ people, vendors, setVendors, setModelProfiles }: 
     // A local-only worldbook/MCP restore also needs cloud-write priority.
     // Otherwise startup may immediately replace it with an older snapshot.
     if (!isLocalMode() && Object.keys(local).length) localStorage.setItem('ai-home.restorePending', '1')
+    // 恢复需要整页刷新才能让所有 useState 从新的 localStorage / 快照重新初始化。
+    // 刷新前把用户当前所在的设置页记到 sessionStorage，避免每次恢复都被默认首页接管。
+    try {
+      sessionStorage.setItem('ai-home.afterRestorePage', 'settings')
+      sessionStorage.setItem('ai-home.afterRestoreSection', 'data')
+    } catch { /* sessionStorage 不可用时仍可正常恢复，只是回到默认页 */ }
     setMessage('已恢复' + kind.label + '，正在刷新…')
     window.setTimeout(() => location.reload(), 800)
   }
