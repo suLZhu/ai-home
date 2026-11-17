@@ -3673,3 +3673,9 @@ body.has-pack .fullscreen-chat .compose.compose-box.compose-wechat{
   -webkit-backdrop-filter:blur(26px) saturate(1.15);
   backdrop-filter:blur(26px) saturate(1.15);
 }
+
+/* 输入条：高度收到约原来一半，底部贴齐屏幕下边 */
+.shell .fullscreen-chat{padding-bottom:0!important}
+.shell .fullscreen-chat .compose.compose-box.compose-wechat{gap:4px!important;padding:8px 14px calc(8px + env(safe-area-inset-bottom))!important;border-radius:20px 20px 0 0!important}
+.shell .fullscreen-chat .compose-editor .cw-input{height:46px!important;min-height:46px!important;max-height:120px!important;padding:6px 8px!important;line-height:1.5!important}
+.shell .fullscreen-chat .cw-row{min-height:38px}
