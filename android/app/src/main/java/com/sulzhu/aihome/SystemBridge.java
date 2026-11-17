@@ -83,6 +83,26 @@ final class SystemBridge {
     }
 
     /**
+     * MCP 专用异步请求。JavascriptInterface 同步调用不得执行网络 I/O；
+     * 连接在工作线程进行，结果投递回主 WebView。
+     */
+    @JavascriptInterface
+    public void httpPostAsync(String requestId, String url, String headersJson, String body) {
+        new Thread(() -> {
+            String result = httpPost(url, headersJson, body);
+            try {
+                if (activity.getBridge() == null || activity.getBridge().getWebView() == null) return;
+                android.webkit.WebView webView = activity.getBridge().getWebView();
+                String js = "window.__aihomeMcpHttpDone && window.__aihomeMcpHttpDone("
+                    + JSONObject.quote(requestId) + "," + JSONObject.quote(result) + ")";
+                webView.post(() -> webView.evaluateJavascript(js, null));
+            } catch (Exception e) {
+                Log.w("AiHomeSystem", "MCP HTTP result dispatch failed", e);
+            }
+        }, "qijian-mcp-http").start();
+    }
+
+    /**
      * 同步 HTTP POST（仅 HTTPS）：给本地模式直连远程 MCP 用。
      * WebView 的 fetch 会被远端 CORS 拦截，走原生请求则不受同源策略限制。
      * 返回 {"status":200,"headers":{...},"body":"..."} 或 {"error":"..."}。
