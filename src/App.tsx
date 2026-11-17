@@ -3886,10 +3886,10 @@ function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
     const g=groups.get(key)||{label:fam?fam.label:'其他',items:[]}
     g.items.push(e);groups.set(key,g)
   }
+  void onBack
   return <section className="vendor-page">
-    <button type="button" className="settings-back" onClick={onBack}><IconBack className="ui-icon-inline" size={14}/> 供应商</button>
     <div className="vendor-card open">
-      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconBook size={16}/></span><b>模型目录</b><span className="vendor-kelivo-provider-meta">{entries.length} 个模型</span></div>
+      <div className="vendor-page-meta"><span>{entries.length} 个模型</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
         <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索模型目录" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}><IconClose size={15}/></button>}</div>
         <div className="vendor-kelivo-added">
@@ -3937,10 +3937,10 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
     g.items.push(p);groups.set(id,g)
   }
   const current=profiles.find(p=>p.id===defaultModelId)
+  void onBack
   return <section className="vendor-page default-model-page">
-    <button type="button" className="settings-back" onClick={onBack}><IconBack className="ui-icon-inline" size={14}/> 供应商</button>
     <div className="vendor-card open">
-      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconStar size={16}/></span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
+      <div className="vendor-page-meta"><span>{current?(current.name||current.model):'未设置'}</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
         <p className="resource-hint">助手没有单独选模型时，聊天用这个兜底；助手自己选过的，仍以助手的为准。</p>
         <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索默认模型" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}><IconClose size={15}/></button>}</div>
@@ -4244,7 +4244,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {isList&&<>
       <div className="vendor-kelivo-list-head">
         <div className="vendor-head-tabs">
-          <span className="vendor-head-title active">供应商</span>
+          
           <button type="button" className="vendor-head-title" onClick={()=>onSection('vendor:account')}>订阅账号</button>
         </div>
         <div className="vendor-kelivo-head-actions">
@@ -4336,11 +4336,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
 
 
     {showKeyManager&&active&&<section className="vendor-page vendor-key-manager-page">
-      <header className="vendor-kelivo-page-head">
-        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商配置" onClick={backToDetail}><IconBack size={18}/></button>
-        <span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span>
-        <div className="vendor-kelivo-page-title"><b>多 Key 管理</b><small>{active.name} · 备用优先，主号兜底</small></div>
-      </header>
+      <div className="vendor-page-meta"><span>{active.name} · 备用优先，主号兜底</span></div>
       <div className="vendor-key-manager-stats">
         <div><small>总计</small><b>{active.keys.length}</b></div>
         <div><small>主号</small><b>{active.keys.filter(k=>k.role==='primary').length||(active.keys.length?1:0)}</b></div>
@@ -4429,17 +4425,14 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     </div>}
 
     {active&&!showKeyManager&&<section className="vendor-page">
-      <header className={'vendor-kelivo-page-head'+(tab==='model'?' vendor-head-centered':'')}>
-        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商列表" onClick={backToList}><IconBack size={18}/></button>
-        <span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span>
-        <b>{active.name}</b>
-        <small className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</small>
+      <div className="vendor-inline-toolbar">
+        <span className="vendor-inline-meta">{pickedModels.length} 个模型</span>
         {tab==='config'&&<div className="vendor-kelivo-head-actions">
           <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}><IconTest size={16}/></button>
           <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}><IconShare size={16}/></button>
           {!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}><IconTrash size={16}/></button>}
         </div>}
-      </header>
+      </div>
       <div className="vendor-card open" key={active.id}>
 
       {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
