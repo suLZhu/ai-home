@@ -3529,3 +3529,15 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-config-pair .vendor-config-switch.compact input:checked::after{transform:translateX(18px)!important}
 /* 连接设置的输入框也收成窄长条 */
 .vendor-config-fields .vendor-field input{max-width:260px!important}
+
+/* 模型卡片 */
+.vendor-model-cards{display:flex;flex-direction:column;gap:8px}
+.vendor-model-card{position:relative;display:flex;align-items:center;gap:9px;padding:10px 10px;border:1px solid var(--line,#e6ded2);border-radius:12px;background:var(--card,#fffdf9);cursor:pointer}
+.vendor-model-card:active{background:var(--field,#f7f3ec)}
+.vendor-model-card-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.vendor-model-card-main>b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vendor-model-card-more{flex:0 0 auto;border:0;background:transparent;font-size:17px;line-height:1;color:var(--muted,#8a7d6d);padding:2px 4px}
+.vendor-model-card-menu{position:absolute;right:8px;top:34px;z-index:6;display:flex;flex-direction:column;min-width:96px;padding:4px;border:1px solid var(--line,#e6ded2);border-radius:10px;background:var(--surface,#fffdf9);box-shadow:0 8px 22px rgba(40,30,20,.14)}
+.vendor-model-card-menu button{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:7px;font-size:12px}
+.vendor-model-card-menu button:active{background:var(--field,#f7f3ec)}
+.vendor-model-card-menu button.danger{color:#b4453a}

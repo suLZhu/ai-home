@@ -3753,6 +3753,18 @@ function useMcpLibrary() {
 
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
+function groupModelsByName(ids: string[]): { id: string; label: string; models: string[] }[] {
+  const map = new Map<string, string[]>()
+  for (const id of ids) {
+    const raw = String(id || '').trim()
+    const ch = raw ? raw[0].toUpperCase() : '#'
+    const key = /[A-Z]/.test(ch) ? ch : '#'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(id)
+  }
+  return [...map.entries()].sort((a, b) => a[0] === '#' ? 1 : b[0] === '#' ? -1 : a[0].localeCompare(b[0])).map(([label, models]) => ({ id: 'letter-' + label, label, models }))
+}
+
 function brandOf(modelId:string){
   const s=modelId.toLowerCase()
   if(/gpt|openai|(?:^|[^a-z0-9])o[1-9]/.test(s)) return {glyph:'✳',cls:'brand-gpt'}
@@ -3895,7 +3907,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [modelSelectMode,setModelSelectMode]=useState(false)
   const [specTarget,setSpecTarget]=useState('')
   const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
-  const [probe,setProbe]=useState<Record<string,boolean>>({})
+  const [,setProbe]=useState<Record<string,boolean>>({})
   const [importOpen,setImportOpen]=useState(false)
   const [importText,setImportText]=useState('')
   const [importMsg,setImportMsg]=useState('')
@@ -4083,6 +4095,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
   const [showHidden,setShowHidden]=useState(false)
+  const [modelMenu,setModelMenu]=useState<string|null>(null)
   const [showMore,setShowMore]=useState(false)
   const isList=!showNew&&!showDefault&&!showCatalog&&!showKeyManager&&!active
   return <div className="vendor-center">
@@ -4363,27 +4376,23 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             })}
           </div>}
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
-            groupModels(pickedModels.filter(m=>!m.hidden).filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=>m.id)).map(g=><div className="vendor-kelivo-added-group" key={g.id}>
-              <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen[g.id]!==false} onClick={()=>setAddedGroupOpen(v=>({...v,[g.id]:v[g.id]!==false?false:true}))}>
-                <span>{addedGroupOpen[g.id]!==false?'⌄':'›'}</span><b>{g.label}</b><small>{g.models.length}</small>
-              </button>
-              {addedGroupOpen[g.id]!==false&&g.models.map(id=>{
-                const m=pickedModels.find(x=>x.id===id); if(!m) return null
-                const spec=specForModel(active,id); const brand=brandOf(id)
-                const checked=batchIds.includes(id)
-                return <div className={'vendor-kelivo-added-row'+(checked?' picked':'')} key={id}>
-                  {modelSelectMode&&<label className="vendor-model-check" aria-label={'选择 '+id}><input type="checkbox" checked={checked} onChange={e=>setBatchIds(ids=>e.target.checked?[...ids,id]:ids.filter(x=>x!==id))}/><span aria-hidden="true"/></label>}
+            <div className="vendor-model-cards">
+              {pickedModels.filter(m=>!m.hidden).filter(m=>!query||m.id.toLowerCase().includes(query)).sort((a,b)=>(a.name||a.id).localeCompare(b.name||b.id)).map(m=>{
+                const spec=specForModel(active,m.id); const brand=brandOf(m.id)
+                return <div className={'vendor-model-card'+(batchIds.includes(m.id)?' picked':'')} key={m.id} role="button" tabIndex={0}
+                  onClick={()=>setSpecTarget(m.id)}
+                  onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();setSpecTarget(m.id)}}}>
                   <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
-                  <button type="button" className="vendor-kelivo-model-label" aria-label={'查看模型 '+id} onClick={()=>setSpecTarget(id)}>
-                    <b>{spec.displayName||m.name||id}</b>
-                    <ModelChips spec={spec}/>
-                  </button>
-                  {probe[id]===true&&<span className="vendor-model-probe ok" title="上次拉取时在列表里">✓</span>}
-                  {probe[id]===false&&<span className="vendor-model-probe bad" title="上次拉取时不在列表里">×</span>}
-                  <button type="button" className="vendor-kelivo-spec-gear" aria-label={'编辑模型规格 '+id} title="模型规格" onClick={()=>setSpecTarget(id)}>⚙</button>
-                  <button type="button" className={'vendor-model-hide'+(m.hidden?' on':'')} aria-label={m.hidden?'取消隐藏':'隐藏模型'} onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===id?{...x,hidden:!x.hidden}:x)}))}>{m.hidden?'🙈':'👁'}</button>
-                </div>})}
-            </div>)}
+                  <span className="vendor-model-card-main"><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></span>
+                  <button type="button" className="vendor-model-card-more" aria-label={'更多操作 '+m.id} onClick={ev=>{ev.stopPropagation();setModelMenu(v=>v===m.id?null:m.id)}}>⋮</button>
+                  {modelMenu===m.id&&<div className="vendor-model-card-menu" onClick={ev=>ev.stopPropagation()}>
+                    <button type="button" onClick={()=>{setSpecTarget(m.id);setModelMenu(null)}}>编辑</button>
+                    <button type="button" onClick={()=>{patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:true}:x)}));setModelMenu(null)}}>隐藏</button>
+                    <button type="button" className="danger" onClick={()=>{void confirmDialog({title:'删除模型',message:'从这家供应商移除 '+m.id+'？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)patch(active.id,v=>({...v,models:v.models.filter(x=>x.id!==m.id)}));setModelMenu(null)})}}>删除</button>
+                  </div>}
+                </div>
+              })}
+            </div>}
           {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
           {!!probeNote&&<p className="vendor-probe-note" role="status">{probeNote}</p>}
         </div>
@@ -4410,7 +4419,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             {listState.error&&<p className="mcp-error" role="alert">{listState.error}</p>}
             {listState.loading&&<p className="muted">正在读取「{active.name}」的模型…</p>}
             <div className="vendor-kelivo-sheet-items">
-              {groupModels([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
+              {groupModelsByName([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
                 <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span>{sheetGroupOpen[g.id]?'›':'⌄'}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}>＋</span></button>
                 {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
               </div>)}
