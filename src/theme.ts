@@ -63,7 +63,7 @@ export function themeStyle(p:ThemePrefs):Record<string,string>{
   '--accent-soft':'#ede7f4',
   '--running':'#7a71b5','--running-soft':'#e8e3f6',
   '--ok':'#4f7d62','--ok-soft':'#dcecdf',
-  '--danger':'#ac5f68','--danger-soft':'#f4dee1',
+  '--danger':'#ac5f68','--danger-soft':'#f4dee1','--warning':'#a87935','--warning-soft':'#f4e8d2',
   '--shadow-card':'0 5px 18px rgba(64,50,74,.07)',
   '--shadow-lift':'0 10px 28px rgba(64,50,74,.12)',
   // 像素风选框/图标：纯黑白灰，不随主题着色。
@@ -74,23 +74,49 @@ export function themeStyle(p:ThemePrefs):Record<string,string>{
   '--accent-soft':'#343049',
   '--running':'#b3aee0','--running-soft':'#3b3763',
   '--ok':'#86bd97','--ok-soft':'#2e4a39',
-  '--danger':'#dd9ba1','--danger-soft':'#5c363c',
+  '--danger':'#dd9ba1','--danger-soft':'#5c363c','--warning':'#e2bb72','--warning-soft':'#54452d',
   '--shadow-card':'0 5px 18px rgba(0,0,0,.28)',
   '--shadow-lift':'0 10px 28px rgba(0,0,0,.4)',
   '--pixel-ink':'#e8e6ee','--pixel-paper':'#262b3a',
   '--pixel-shadow':'rgba(0,0,0,.45)',
  }
  const semantics=p.theme==='night'?nightSemantics:lightSemantics
+ // 全局 UI 语义层：页面只认这些 token，不再自己写一套颜色。
+ // 美化包可以覆盖其中任意 token；未覆盖的值会继续从 accent / surface / field 等基础色派生。
+ const uiSemantics:Record<string,string>={
+  '--app-bg':'var(--page-bg)',
+  '--wallpaper':'var(--page-bg)',
+  '--wallpaper-opacity':'1',
+  '--control-bg':'var(--field)',
+  '--control-bg-hover':'var(--accent-soft)',
+  '--control-bg-active':'var(--accent-soft)',
+  '--control-border':'var(--line)',
+  '--icon':'var(--ink)',
+  '--icon-muted':'var(--muted)',
+  '--icon-accent':'var(--accent)',
+  '--icon-ok':'var(--ok)',
+  '--icon-warning':'var(--warning)',
+  '--icon-danger':'var(--danger)',
+  '--button-primary-bg':'var(--accent)',
+  '--button-primary-fg':'var(--accent-contrast,#fff)',
+  '--button-secondary-bg':'var(--field)',
+  '--button-secondary-fg':'var(--ink)',
+  '--button-secondary-border':'var(--line)',
+  '--button-danger-bg':'var(--danger-soft)',
+  '--button-danger-fg':'var(--danger)',
+  '--focus-ring':'var(--accent)',
+  '--scrim':'rgba(26,22,31,.28)',
+ }
  // 每套主题都给出完整语义色；新增 Liquid / Soft / Paper / Aurora / OLED 时只需替换这一层。
  const themes:Record<ThemeId,Record<string,string>>={
   // 薄雾 Mist：奶灰页面、白色 surface、低饱和薰衣草强调、极淡灰紫描边。
-  lavender:{'--page-bg':'#f3f0f4','--surface':'#ffffff','--surface-elevated':'#ffffff','--card':'#faf8fc','--field':'#f7f4fa','--line':'#e8e2ee','--divider':'#eee9f1','--border-subtle':'#eee9f1','--muted':'#8b8494','--ink':'#302c37','--text-primary':'#302c37','--text-secondary':'#8b8494','--accent':'#8a79aa','--primary':'#8a79aa','--primary-soft':'#ede7f4','--user-bubble':'#e9e1f3','--assistant-bubble':'#f8f6fa','--bubble-user':'#e9e1f3','--bubble-assistant':'#f8f6fa'},
-  paper:{'--page-bg':'#ded6c9','--surface':'#f5f0e6','--surface-elevated':'#fffdf9','--card':'#eee8dc','--field':'#faf6ef','--line':'#ddd5c7','--divider':'#e6ded1','--border-subtle':'#e6ded1','--muted':'#81786d','--ink':'#403b35','--text-primary':'#403b35','--text-secondary':'#81786d','--accent':'#9b7b64','--primary':'#9b7b64','--primary-soft':'#ede3d5','--user-bubble':'#e7dfd1','--assistant-bubble':'#f6f1e7','--bubble-user':'#e7dfd1','--bubble-assistant':'#f6f1e7'},
-  forest:{'--page-bg':'#dbe5dd','--surface':'#f0f5ef','--surface-elevated':'#ffffff','--card':'#dce9df','--field':'#f9fcf9','--line':'#d3e2d6','--divider':'#e0ebe2','--border-subtle':'#e0ebe2','--muted':'#667a6a','--ink':'#334a3a','--text-primary':'#334a3a','--text-secondary':'#667a6a','--accent':'#4e7863','--primary':'#4e7863','--primary-soft':'#dcecdf','--user-bubble':'#d4e8d9','--assistant-bubble':'#f1f7f2','--bubble-user':'#d4e8d9','--bubble-assistant':'#f1f7f2'},
-  night:{'--page-bg':'#171b27','--surface':'#222735','--surface-elevated':'#2b3142','--card':'#333a4e','--field':'#2c3344','--line':'#414a61','--divider':'#3a4358','--border-subtle':'#3a4358','--muted':'#b6b6c9','--ink':'#f0eef7','--text-primary':'#f0eef7','--text-secondary':'#b6b6c9','--accent':'#a8a3d9','--primary':'#a8a3d9','--primary-soft':'#343049','--user-bubble':'#444668','--assistant-bubble':'#2c3344','--bubble-user':'#444668','--bubble-assistant':'#2c3344'}
+  lavender:{'--accent-contrast':'#ffffff','--page-bg':'#f3f0f4','--surface':'#ffffff','--surface-elevated':'#ffffff','--card':'#faf8fc','--field':'#f7f4fa','--line':'#e8e2ee','--divider':'#eee9f1','--border-subtle':'#eee9f1','--muted':'#8b8494','--ink':'#302c37','--text-primary':'#302c37','--text-secondary':'#8b8494','--accent':'#8a79aa','--primary':'#8a79aa','--primary-soft':'#ede7f4','--user-bubble':'#e9e1f3','--assistant-bubble':'#f8f6fa','--bubble-user':'#e9e1f3','--bubble-assistant':'#f8f6fa'},
+  paper:{'--accent-contrast':'#ffffff','--page-bg':'#ded6c9','--surface':'#f5f0e6','--surface-elevated':'#fffdf9','--card':'#eee8dc','--field':'#faf6ef','--line':'#ddd5c7','--divider':'#e6ded1','--border-subtle':'#e6ded1','--muted':'#81786d','--ink':'#403b35','--text-primary':'#403b35','--text-secondary':'#81786d','--accent':'#9b7b64','--primary':'#9b7b64','--primary-soft':'#ede3d5','--user-bubble':'#e7dfd1','--assistant-bubble':'#f6f1e7','--bubble-user':'#e7dfd1','--bubble-assistant':'#f6f1e7'},
+  forest:{'--accent-contrast':'#ffffff','--page-bg':'#dbe5dd','--surface':'#f0f5ef','--surface-elevated':'#ffffff','--card':'#dce9df','--field':'#f9fcf9','--line':'#d3e2d6','--divider':'#e0ebe2','--border-subtle':'#e0ebe2','--muted':'#667a6a','--ink':'#334a3a','--text-primary':'#334a3a','--text-secondary':'#667a6a','--accent':'#4e7863','--primary':'#4e7863','--primary-soft':'#dcecdf','--user-bubble':'#d4e8d9','--assistant-bubble':'#f1f7f2','--bubble-user':'#d4e8d9','--bubble-assistant':'#f1f7f2'},
+  night:{'--accent-contrast':'#1b1a25','--page-bg':'#171b27','--surface':'#222735','--surface-elevated':'#2b3142','--card':'#333a4e','--field':'#2c3344','--line':'#414a61','--divider':'#3a4358','--border-subtle':'#3a4358','--muted':'#b6b6c9','--ink':'#f0eef7','--text-primary':'#f0eef7','--text-secondary':'#b6b6c9','--accent':'#a8a3d9','--primary':'#a8a3d9','--primary-soft':'#343049','--user-bubble':'#444668','--assistant-bubble':'#2c3344','--bubble-user':'#444668','--bubble-assistant':'#2c3344'}
  }
  return {
-  ...themes[p.theme], ...semantics, ...TYPOGRAPHY_TOKENS, ...SHAPE_TOKENS,
+  ...themes[p.theme], ...semantics, ...uiSemantics, ...TYPOGRAPHY_TOKENS, ...SHAPE_TOKENS,
   '--font-family':p.font==='custom'?'"CustomUpload","Noto Serif SC","Songti SC",serif':p.font==='serif'?'"Noto Serif SC","Songti SC",serif':'system-ui,"Noto Sans SC",sans-serif',
   '--font-scale':String(p.scale/100),'--radius':p.radius+'px',
  }
