@@ -3461,7 +3461,7 @@ function Chat(p: any) {
             </details>:null}
           {m.role==='assistant'&&shownContent
             ? <RichText text={shownContent}/>
-            : (shownContent || (p.sending&&isLast?'正在思考……':''))}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><IconWarning size={14}/> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span><IconFile size={18}/></span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+            : (shownContent || (p.sending&&isLast?'正在思考……':''))}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><IconWarning size={14}/> {a.preview?'图片已失效':'图片 '+a.name}</span>}</div>:<div className="sent-file"><span><IconFile size={18}/></span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
           {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
         </div>
           </>}
@@ -3563,7 +3563,7 @@ function Chat(p: any) {
       </div>
       <div className="cw-row">
         <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型"><IconSparkles className="ui-icon-inline" size={14}/> {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span><IconChevronDown size={13}/></span></button>
-        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}>☺</button>
+        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><IconEmoji size={17}/></button>
         <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><IconPlus size={17}/></button>
         <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
         {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
@@ -3889,7 +3889,7 @@ function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
                     <ModelChips spec={e.spec}/>
                     <em className="catalog-vendor">{e.vendorName}</em>
                   </span>
-                  <span className="vendor-kelivo-provider-caret" aria-hidden="true">›</span>
+                  <span className="vendor-kelivo-provider-caret" aria-hidden="true"><IconChevronRight size={14}/></span>
                 </div>})}
             </div>
           })}
