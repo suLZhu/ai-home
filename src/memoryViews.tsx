@@ -2,7 +2,7 @@
 // 只负责画和点开详情；状态变更仍交给 MemoryGovernancePanel 的 transition。
 import { useMemo, useState } from 'react'
 import './MemoryViews.css'
-import { IconStar, IconFlower, IconBook, IconList, type IconComponent } from './icons'
+import { IconStar, IconFlower, IconBook, IconList, IconClose, type IconComponent } from './icons'
 import {
   MEMORY_VIEWS, normalizeMemoryView, starLayout, gardenLayout, groupMemoriesByDay, categoryColor,
 } from './memoryVisuals.mjs'
