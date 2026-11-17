@@ -3876,3 +3876,202 @@ body.has-pack .shell .ap-avatar-bar button{background:transparent!important;bord
   margin-top:var(--page-top-inset)!important;
   margin-bottom:8px!important;
 }
+
+
+/* ── 5.0 全局手机主题层 ──────────────────────────────────────────────
+   背景 / surface / 控件 / 按钮 / 图标 / 字体全部从同一组语义 token 取值。
+   页面只负责结构；换主题时不再逐页覆盖颜色。 */
+.shell{
+  min-height:100dvh;
+  color:var(--ink,#302c37);
+  background:var(--app-bg,var(--page-bg,#f3f0f4));
+  font-family:var(--theme-font-family,var(--font-family,system-ui,"Noto Sans SC",sans-serif));
+  isolation:isolate;
+}
+.shell::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background:var(--wallpaper,var(--page-bg,#f3f0f4)) center/cover no-repeat;
+  opacity:var(--wallpaper-opacity,1);
+}
+
+/* 一级页面共用同一张主题底板。聊天选择独立自定义背景时仍可覆盖。 */
+.shell .screen,
+.shell .home-screen,
+.shell .room-screen,
+.shell .fun-screen,
+.shell .settings-screen,
+.shell .settings-detail{
+  background:transparent!important;
+}
+.shell.chatbg-theme .fullscreen-chat,
+.shell:not(.chatbg-image):not(.chatbg-custom1):not(.chatbg-custom2) .fullscreen-chat{
+  background:transparent!important;
+}
+
+/* 字体是主题的一部分：表单、按钮、弹层都继承全局字体。 */
+.shell button,
+.shell input,
+.shell textarea,
+.shell select{
+  font-family:inherit;
+}
+.shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+.shell textarea,
+.shell select{
+  color:var(--ink,#302c37);
+  background:var(--field,#f7f4fa);
+  border-color:var(--control-border,var(--line,#e8e2ee));
+}
+.shell input::placeholder,
+.shell textarea::placeholder{
+  color:var(--muted,#8b8494);
+}
+
+/* 功能图标固定线性 SVG；主题只改语义色，不替换图形。 */
+.shell svg{color:currentColor}
+.ui-icon-inline{display:inline-block;vertical-align:-.17em;flex:0 0 auto}
+.shell .settings-row-icon,
+.shell .sidebar-logo,
+.shell .vendor-kelivo-provider-icon,
+.shell .model-sheet-route-toggle,
+.shell .compose-tray-config{
+  color:var(--icon-accent,var(--accent,#8a79aa));
+}
+.shell .settings-row-chev,
+.shell .vendor-kelivo-provider-caret,
+.shell .room-widget-go,
+.shell .fold-chevron,
+.shell .soft-select-trigger i{
+  color:var(--icon-muted,var(--muted,#8b8494));
+}
+.shell .message-action,
+.shell .btn-icon,
+.shell .cw-circle,
+.shell .settings-back,
+.shell .worldbook-back,
+.shell .fun-back,
+.shell .web-browser-close,
+.shell .theme-pack-del{
+  color:var(--icon-muted,var(--muted,#8b8494));
+}
+.shell .message-action:hover:not(:disabled),
+.shell .btn-icon:hover:not(:disabled),
+.shell .cw-circle.active,
+.shell .settings-row:active .settings-row-icon{
+  color:var(--icon-accent,var(--accent,#8a79aa));
+}
+.shell .danger:not(.armed) svg,
+.shell button.danger svg,
+.shell .widget-delete svg,
+.shell .theme-pack-del:hover svg{
+  color:var(--icon-danger,var(--danger,#ac5f68));
+}
+.shell .ok svg,
+.shell .success svg,
+.shell .done svg,
+.shell .account-login-btn.done svg{
+  color:var(--icon-ok,var(--ok,#4f7d62));
+}
+.shell .warning svg,
+.shell .warn svg,
+.shell .pending-card-warn svg{
+  color:var(--icon-warning,var(--warning,#a87935));
+}
+
+/* 控件底板统一：图标按钮仍可保持透明，普通按钮按 secondary token。 */
+.shell .settings-back,
+.shell .worldbook-back,
+.shell .fun-back,
+.shell .theme-reset,
+.shell .theme-pack-actions button,
+.shell .vendor-kelivo-floating-actions button,
+.shell .vendor-kelivo-bottomdock button,
+.shell .account-login-btn,
+.shell .widget-sheet-actions button,
+.shell .web-browser-inapp,
+.shell .web-browser-external{
+  background:var(--button-secondary-bg,var(--field,#f7f4fa));
+  color:var(--button-secondary-fg,var(--ink,#302c37));
+  border-color:var(--button-secondary-border,var(--line,#e8e2ee));
+}
+.shell .primary,
+.shell .vendor-submit,
+.shell .ledger-add,
+.shell .widget-save,
+.shell .theme-pack-import,
+.shell .mep-save,
+.shell .cw-circle.send{
+  background:var(--button-primary-bg,var(--accent,#8a79aa))!important;
+  color:var(--button-primary-fg,var(--accent-contrast,#fff))!important;
+  border-color:var(--button-primary-bg,var(--accent,#8a79aa))!important;
+}
+.shell button.danger,
+.shell .widget-delete,
+.shell .message-action.danger.armed{
+  background:var(--button-danger-bg,var(--danger-soft,#f4dee1));
+  color:var(--button-danger-fg,var(--danger,#ac5f68));
+  border-color:color-mix(in srgb,var(--button-danger-fg,var(--danger,#ac5f68)) 35%,transparent);
+}
+
+/* 常用 surface/card 统一吃主题层级，消灭各页残留的固定白/灰底。 */
+.shell .setting-card,
+.shell .settings-inner-card,
+.shell .theme-tab-panel,
+.shell .theme-pack-block,
+.shell .theme-fontctl,
+.shell .vendor-card,
+.shell .vendor-model-card,
+.shell .account-row,
+.shell .model-sheet,
+.shell .widget-sheet,
+.shell .tool-panel,
+.shell .memory-panel{
+  color:var(--ink,#302c37);
+  border-color:var(--line,#e8e2ee);
+}
+.shell .theme-tab-panel,
+.shell .theme-pack-block,
+.shell .theme-fontctl,
+.shell .vendor-card,
+.shell .model-sheet,
+.shell .widget-sheet{
+  background:color-mix(in srgb,var(--surface,#fff) 94%,transparent);
+}
+.shell .vendor-model-card,
+.shell .account-row{
+  background:color-mix(in srgb,var(--card,var(--surface,#fff)) 94%,transparent);
+}
+
+/* 美化包背景现在是整 App 壁纸，不再只限聊天页。 */
+body.has-pack{
+  background:var(--app-bg,var(--page-bg,#f3f0f4));
+  font-family:var(--theme-font-family,var(--pack-font-family,var(--font-family,system-ui,sans-serif)));
+}
+body.has-pack .shell::before{
+  background:var(--wallpaper,var(--pack-chat-bg,var(--page-bg,#f3f0f4))) center/cover no-repeat!important;
+  opacity:var(--wallpaper-opacity,var(--pack-bg-opacity,1))!important;
+}
+body.has-pack .shell,
+body.has-pack .screen,
+body.has-pack .home-screen,
+body.has-pack .room-screen,
+body.has-pack .fun-screen,
+body.has-pack .settings-screen{
+  background-color:transparent!important;
+}
+
+/* 模型能力胶囊里的新线性图标保持小尺寸且与文字同色。 */
+.model-chip-modalities{display:inline-flex;align-items:center;gap:3px}
+.model-chip-modalities svg,.model-chip svg{flex:0 0 auto}
+.model-chip-textmod{font-size:10px;line-height:1;font-weight:600}
+
+/* 图标按钮统一点击区域，不靠字体 glyph 撑尺寸。 */
+.cp-ico svg{width:20px;height:20px}
+.emoji-tabs svg{width:16px;height:16px}
+.settings-row-icon svg{width:19px;height:19px}
+.vendor-model-brand svg{width:16px;height:16px}
+.message-action-icon{width:15px!important;height:15px!important;display:block;pointer-events:none}
