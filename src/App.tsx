@@ -2950,10 +2950,10 @@ function Chat(p: any) {
  const chatDisplay = useChatDisplay()
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
-  const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
+  const [tray,setTray]=useState<''|'model'|'world'|'mcp'|'tools'>('')
   const [bindOpen,setBindOpen]=useState(false)
   const formRef=useRef<HTMLFormElement>(null)
-  const openTray=(id:''|'model'|'bind'|'tools')=>{
+  const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{
     // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
     if(id==='model'){const active=document.activeElement;if(active instanceof HTMLElement)active.blur()}
     setTray(t=>t===id?'':id);setEmojiOpen(false);setAttachOpen(false)
@@ -3008,7 +3008,15 @@ function Chat(p: any) {
   const [newCustom,setNewCustom]=useState('')
   const [attachOpen,setAttachOpen]=useState(false)
   const [plusOpen,setPlusOpen]=useState(false)
-  void openTray
+  useEffect(() => {
+    if (!plusOpen) return
+    const closeOutside = (event:PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && !target.closest('.compose-plus-panel,.cw-circle[aria-label="更多"]')) setPlusOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [plusOpen])
   // 点输入栏图标时浮出一条文字说明（1.4s 自动消失），图标本身只留图形。
   const [toolHint,setToolHint]=useState('')
   const hintTimerRef=useRef<number|undefined>(undefined)
@@ -3551,20 +3559,20 @@ function Chat(p: any) {
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}><IconSettings size={15}/></button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}><IconClose size={15}/></button></div>
+      <div className="compose-tray-head"><b>{tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{(tray==='world'||tray==='mcp')&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}><IconSettings size={15}/></button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}><IconClose size={15}/></button></div>
       <div className="compose-tray-body">
-        {tray==='bind'&&<>
-          <div className="tray-section">
+        {(tray==='world'||tray==='mcp')&&<>
+          {tray==='mcp'&&<div className="tray-section">
             <b className="tray-section-title">MCP</b>
             {quickMcp.error&&<p className="mcp-error">{quickMcp.error}</p>}
             {trayMcp.length===0&&<p className="muted tray-empty">还没有 MCP 服务，到设置里添加。</p>}
             {trayMcp.map(c=><label className="tray-option tray-switch-row" key={c.id}><span><i className="tray-no">{mcpNo(c.id)}</i> {c.name}<small>{c.url}</small></span><input type="checkbox" className="tray-switch" checked={(quickBinding.mcpIds===null?mcpAll:quickBinding.mcpIds).includes(c.id)} onChange={v=>patchBinding(toggleMcpId(quickBinding,c.id,v.target.checked,mcpAll))}/></label>)}
-          </div>
-          <div className="tray-section">
+          </div>}
+          {tray==='world'&&<div className="tray-section">
             <b className="tray-section-title">世界书</b>
             {trayWorld.length===0&&<p className="muted tray-empty">还没有世界书条目。</p>}
             {trayWorld.map(e=><label className="tray-option tray-switch-row" key={e.id}><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span><input type="checkbox" className="tray-switch" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/></label>)}
-          </div>
+          </div>}
         </>}
         {tray==='tools'&&<div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>}
       </div>
@@ -3590,8 +3598,8 @@ function Chat(p: any) {
       {plusOpen&&<div className="compose-plus-panel" role="dialog" aria-label="更多功能">
         <div className="cp-grid">
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);cameraInput.current?.click()}}><span className="cp-ico"><IconPhoto size={18}/></span><small>拍照</small></button>
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">▣</span><small>世界书</small></button>
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">⌘</span><small>MCP</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('world')}}><span className="cp-ico">▣</span><small>世界书</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('mcp')}}><span className="cp-ico">⌘</span><small>MCP</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setAttachOpen(true)}}><span className="cp-ico"><IconFile size={18}/></span><small>文件</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('tools')}}><span className="cp-ico"><IconSettings size={18}/></span><small>工具</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true)}}><span className="cp-ico"><IconSearch size={18}/></span><small>查找聊天记录</small></button>
@@ -4876,7 +4884,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         <form className="resource-form" onSubmit={addMcp}>
           <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
           <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
-          <label>Token（可选）<span className="mcp-token-field"><input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type={mcpShowToken ? "text" : "password"} autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/><button type="button" className="mcp-token-eye" aria-label={mcpShowToken?'隐藏 Token':'显示 Token'} onClick={()=>setMcpShowToken(v=>!v)}>{mcpShowToken?'隐藏':'显示'}</button></span></label>
+          <label>Token（可选）<span className="mcp-token-field"><input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="text" autoComplete="off" inputMode="text" spellCheck={false} style={!mcpShowToken?{WebkitTextSecurity:'disc'} as React.CSSProperties:undefined} placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/><button type="button" className="mcp-token-eye" aria-label={mcpShowToken?'隐藏 Token':'显示 Token'} onClick={()=>setMcpShowToken(v=>!v)}>{mcpShowToken?'隐藏':'显示'}</button></span></label>
           <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button></div>
           {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?<IconCheck className="ui-icon-inline" size={13}/>:<IconClose className="ui-icon-inline" size={13}/>} {mcpTest.message}</small>}
           <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
