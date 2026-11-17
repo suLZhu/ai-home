@@ -6,6 +6,7 @@ import {
   RUN_STATUS_LABEL, RUN_SOURCE_LABEL, isRunActive, type AgentRun,
 } from './agentRuns'
 import { MemoryGovernancePanel } from './MemoryGovernancePanel'
+import { IconChevronDown, IconChevronUp } from './icons'
 // P1-8：权限页面显示中文化；内部 mode / 工具 ID 不变。
 import { POLICY_MODES, policyLabel, POLICY_HELP, toolPurpose } from './toolPolicyLabels.mjs'
 
@@ -318,7 +319,7 @@ export function ToolDashboard({ person, personLabel, onJumpToSource }: {
           </div>
           <p className="tool-dash-args">参数：{brief(log.arguments)}</p>
           {!isActive && <p className={'tool-dash-result' + (log.status === 'failed' || log.status === 'timed_out' ? ' is-error' : '')}>结果：{log.errorMessage ? log.errorMessage : brief(log.resultSummary)}</p>}
-          <button type="button" className="tool-dash-expand" aria-expanded={open} onClick={() => setExpanded(old => open ? old.filter(x => x !== log.id) : [...old, log.id])}>{open ? '收起详情 ↑' : '展开详情 ↓'}</button>
+          <button type="button" className="tool-dash-expand" aria-expanded={open} onClick={() => setExpanded(old => open ? old.filter(x => x !== log.id) : [...old, log.id])}>{open ? <>收起详情 <IconChevronUp className="ui-icon-inline" size={13}/></> : <>展开详情 <IconChevronDown className="ui-icon-inline" size={13}/></>}</button>
           {open && <pre className="tool-dash-detail">{JSON.stringify({ 参数: log.arguments, 结果: log.resultSummary, ...(log.errorMessage ? { 错误: log.errorMessage } : {}), ...(log.errorCode ? { 错误码: log.errorCode } : {}), 服务: log.serverName || '—', 会话: log.conversationId || '—', 开始时间: log.startedAt, 结束时间: log.finishedAt || '—' }, null, 2)}</pre>}
         </li>
       })}</ul>}
@@ -351,7 +352,7 @@ function RunCard({ run, personLabel, open, onToggle, onCancel }: {
       {usage.calls ? <span>{usage.promptTokens || 0}+{usage.completionTokens || 0} tokens</span> : null}
       {run.finishedAt && <span>耗时 {formatDuration(Date.parse(run.finishedAt) - Date.parse(run.createdAt))}</span>}
     </div>
-    <button type="button" className="tool-dash-expand" aria-expanded={open} onClick={onToggle}>{open ? '收起详情 ↑' : '展开详情 ↓'}</button>
+    <button type="button" className="tool-dash-expand" aria-expanded={open} onClick={onToggle}>{open ? <>收起详情 <IconChevronUp className="ui-icon-inline" size={13}/></> : <>展开详情 <IconChevronDown className="ui-icon-inline" size={13}/></>}</button>
     {open && <div className="tool-dash-run-detail">
       {loading && <p className="tool-dash-note">正在读取工具时间线…</p>}
       {!loading && logs.length === 0 && <p className="tool-dash-note">这次运行没有调用工具（模型直接回答）。</p>}
