@@ -3767,3 +3767,13 @@ body.has-pack .shell .home-status,body.has-pack .shell .home-today-list,body.has
 }
 body.has-pack .shell .home-status{border-bottom:1px solid var(--line,#d7c4a9)!important;padding:14px 4px!important;margin:0!important}
 body.has-pack .shell .home-today-list{gap:0!important}
+/* 助手档案页同样平铺 */
+body.has-pack .shell .assistant-profile,
+body.has-pack .shell .ap-body,
+body.has-pack .shell .ap-head,
+body.has-pack .shell .ap-avatar-bar{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+body.has-pack .shell .ap-body{border-top:1px solid var(--line,#d7c4a9)!important;padding:14px 2px!important}
+body.has-pack .shell .ap-tabs{gap:0!important}
+body.has-pack .shell .ap-tabs button{background:transparent!important;border:0!important;border-bottom:1px solid var(--line,#d7c4a9)!important;border-radius:0!important;box-shadow:none!important}
+body.has-pack .shell .ap-tabs button.active{color:var(--accent,#80604b)!important;border-bottom:2px solid var(--accent,#80604b)!important;background:transparent!important}
+body.has-pack .shell .ap-avatar-bar button{background:transparent!important;border:1px solid var(--line,#d7c4a9)!important;border-radius:10px!important}
