@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { pushBackHandler } from './backStack.mjs'
 import {
-import { IconClose, IconPlus, IconTrash } from './icons'
+import { IconCheck, IconClose, IconPlus, IconTrash } from './icons'
   MODEL_TYPES, INPUT_MODALITIES, OUTPUT_MODALITIES, MODEL_ABILITIES,
   normalizeModelSpec, type ModelSpec, type ResolvedModelSpec,
 } from './modelSpecs.mjs'
@@ -65,7 +65,7 @@ export function ModelSpecPage({ vendorName, modelId, spec, onSave, onClose }: Pr
     <header className="mep-head">
       <button type="button" className="mep-close" aria-label="关闭" onClick={onClose}><IconClose size={15}/></button>
       <b>编辑模型</b>
-      <button type="button" className="mep-save" aria-label="保存" onClick={() => onSave(normalizeModelSpec(draft))}>✓</button>
+      <button type="button" className="mep-save" aria-label="保存" onClick={() => onSave(normalizeModelSpec(draft))}><IconCheck size={15}/></button>
     </header>
 
     <div className="mep-tabs" role="tablist" aria-label="模型设置分组">
@@ -94,19 +94,19 @@ export function ModelSpecPage({ vendorName, modelId, spec, onSave, onClose }: Pr
 
         <Card label="输入模态" tag="推断">
           <div className="mep-seg wrap">
-            {INPUT_MODALITIES.map(m => <button type="button" key={m.id} className={draft.input.includes(m.id) ? 'active' : ''} onClick={() => patch({ input: toggle(draft.input, m.id) })}>{draft.input.includes(m.id) ? '✓ ' : ''}{m.label}</button>)}
+            {INPUT_MODALITIES.map(m => <button type="button" key={m.id} className={draft.input.includes(m.id) ? 'active' : ''} onClick={() => patch({ input: toggle(draft.input, m.id) })}>{draft.input.includes(m.id) ? <IconCheck className="ui-icon-inline" size={12}/> : null}{m.label}</button>)}
           </div>
         </Card>
 
         <Card label="输出模态" tag="推断">
           <div className="mep-seg wrap">
-            {OUTPUT_MODALITIES.map(m => <button type="button" key={m.id} className={draft.output.includes(m.id) ? 'active' : ''} onClick={() => patch({ output: toggle(draft.output, m.id) })}>{draft.output.includes(m.id) ? '✓ ' : ''}{m.label}</button>)}
+            {OUTPUT_MODALITIES.map(m => <button type="button" key={m.id} className={draft.output.includes(m.id) ? 'active' : ''} onClick={() => patch({ output: toggle(draft.output, m.id) })}>{draft.output.includes(m.id) ? <IconCheck className="ui-icon-inline" size={12}/> : null}{m.label}</button>)}
           </div>
         </Card>
 
         <Card label="能力" tag="推断">
           <div className="mep-seg wrap">
-            {MODEL_ABILITIES.map(a => <button type="button" key={a.id} className={draft.abilities.includes(a.id) ? 'active' : ''} onClick={() => patch({ abilities: toggle(draft.abilities, a.id) })}>{draft.abilities.includes(a.id) ? '✓ ' : ''}{a.label}</button>)}
+            {MODEL_ABILITIES.map(a => <button type="button" key={a.id} className={draft.abilities.includes(a.id) ? 'active' : ''} onClick={() => patch({ abilities: toggle(draft.abilities, a.id) })}>{draft.abilities.includes(a.id) ? <IconCheck className="ui-icon-inline" size={12}/> : null}{a.label}</button>)}
           </div>
         </Card>
 
