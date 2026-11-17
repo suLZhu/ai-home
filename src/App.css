@@ -4251,3 +4251,21 @@ body.has-pack .settings-screen{
 .shell .model-sheet .model-vendor-heading small{color:var(--muted,#888)!important;font-weight:400!important}
 .shell .model-sheet .model-sheet-main{min-width:0!important}
 .shell .model-sheet .model-sheet-pick .model-sheet-main b{white-space:normal;overflow-wrap:anywhere}
+
+/* 5.0 Android: make assistant switch reliably touchable, not just visually large. */
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions {
+  position:relative!important;z-index:5!important;gap:4px!important;overflow:visible!important;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant {
+  position:relative!important;z-index:6!important;display:grid!important;place-items:center!important;
+  flex:0 0 48px!important;width:48px!important;min-width:48px!important;
+  height:48px!important;min-height:48px!important;padding:0!important;margin:0!important;
+  border:0!important;border-radius:50%!important;
+  touch-action:manipulation!important;-webkit-tap-highlight-color:transparent;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant svg {
+  display:block!important;pointer-events:none!important;width:23px!important;height:23px!important;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant::after {
+  content:none!important;pointer-events:none!important;
+}
