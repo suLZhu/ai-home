@@ -74,6 +74,18 @@ export function diagnoseChatHttpError(status, detail, { toolsEnabled = false, el
   const time = Number.isFinite(Number(elapsedMs)) && Number(elapsedMs) >= 1000
     ? ' · 已等待 ' + Math.round(Number(elapsedMs) / 1000) + ' 秒' : ''
   const http = Number(status)
+  // Many upstream proxies overload HTTP 429 for billing, account suspension or
+  // insufficient credit. Give their explicit account error priority over rate limiting.
+  // Examine the bounded text only for classification; never print raw JSON or secrets.
+  if ((http === 429 || http === 402 || http === 403) && /your account is not active|account (?:is )?(?:inactive|disabled|suspended|not active)|账户(?:未激活|已停用|被冻结)|账号(?:未激活|已停用|被冻结)/i.test(text)) {
+    return '中转账户未激活或被停用（HTTP ' + http + time + '）：上游要求检查账户或账单状态。请到供应商后台核实账号状态、订阅与结算信息；这不是普通的请求频率限制。'
+  }
+  if ((http === 429 || http === 402 || http === 403) && /insufficient (?:balance|credit|quota)|(?:out of|no) (?:credit|balance)|billing (?:issue|details|problem)|payment required|账户余额不足|余额不足|欠费|额度不足|余额已用尽/i.test(text)) {
+    return '中转账户余额或计费异常（HTTP ' + http + time + '）：上游提示可能需要充值、检查余额或账单。不是单纯的请求过快。'
+  }
+  if (http === 429 && /rate.?limit|too many requests|requests? per (?:minute|second)|频率限制|请求过于频繁|限流/i.test(text)) {
+    return '请求触发上游限流（HTTP 429' + time + '）：可以稍后重试或切换线路。'
+  }
   if ((http === 400 || http === 422) && /unknown name|invalid json payload|dependentrequired|dependentschemas|additionalproperties|function.?declaration|tool.?schema|invalid.*(tool|function|parameter)|unsupported.*(tool|function)/i.test(text)) {
     return '工具参数兼容性错误（HTTP ' + http + time + '）：模型接口不接受部分工具定义字段。'
       + (toolsEnabled ? '建议临时关闭此模型的工具后重试；其他模型的 MCP 配置不需要改。' : '请检查中转接口要求的请求格式。')
