@@ -711,3 +711,105 @@ body.has-pack .shell::before{display:none!important}
 html,body{
   scroll-padding-top:0!important;
 }
+
+
+/* 6.3 首页菜单与侧边栏紧凑化。 */
+.shell .ui-icon-image{
+  display:inline-block!important;
+  position:relative!important;
+  overflow:hidden!important;
+  flex:0 0 auto!important;
+  vertical-align:-.16em!important;
+  line-height:0!important;
+}
+.shell .ui-icon-image>img{
+  display:block!important;
+  max-width:none!important;
+  max-height:none!important;
+  opacity:1!important;
+  visibility:visible!important;
+  filter:none!important;
+  pointer-events:none!important;
+}
+
+/* 首页给菜单独立留出一整行，时钟绝不再钻到按钮下面。 */
+.shell .mobile-menu-toggle:not(.sidebar-edge-handle){
+  position:absolute!important;
+  top:calc(var(--app-safe-top,0px) + 8px)!important;
+  left:16px!important;
+  z-index:18!important;
+  height:36px!important;
+  min-width:70px!important;
+  padding:0 10px!important;
+  border:1px solid var(--minimal-line-strong)!important;
+  border-radius:6px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.shell .home-screen.home-today{
+  padding-top:calc(var(--app-safe-top,0px) + 58px)!important;
+}
+.shell .home-today .home-hero{
+  padding-top:0!important;
+}
+
+/* 内页只留一条很窄的边缘把手。 */
+.shell .mobile-menu-toggle.sidebar-edge-handle{
+  width:10px!important;
+  min-width:10px!important;
+  height:54px!important;
+  padding:0!important;
+  opacity:.38!important;
+  border:0!important;
+  border-radius:0 5px 5px 0!important;
+  background:#ededed!important;
+  box-shadow:none!important;
+}
+.shell .mobile-menu-toggle.sidebar-edge-handle .ui-icon-image{
+  display:none!important;
+}
+
+/* 抽屉整体和前三个导航都收窄，不再横跨整块侧栏。 */
+@media(max-width:700px){
+  .shell .app-sidebar{
+    width:min(252px,72vw)!important;
+    padding:calc(var(--app-safe-top,0px) + 10px) 12px 12px!important;
+  }
+}
+.shell .sidebar-nav{
+  width:calc(100% - 20px)!important;
+  margin:0 10px 8px!important;
+  gap:0!important;
+}
+.shell .sidebar-nav-row{
+  display:grid!important;
+  grid-template-columns:18px minmax(0,1fr) auto!important;
+  align-items:center!important;
+  gap:7px!important;
+  width:100%!important;
+  height:40px!important;
+  min-height:40px!important;
+  padding:0 2px!important;
+  border:0!important;
+  border-bottom:1px solid var(--minimal-line)!important;
+  border-radius:0!important;
+  background:#fff!important;
+}
+.shell .sidebar-nav-row b{
+  margin:0!important;
+  font-size:12.5px!important;
+  line-height:1!important;
+}
+.shell .sidebar-nav-row small{
+  margin:0!important;
+  font-size:9px!important;
+  line-height:1!important;
+  color:var(--minimal-muted)!important;
+  white-space:nowrap!important;
+}
+.shell .sidebar-nav-row.active{
+  background:#fff!important;
+  color:#000!important;
+}
