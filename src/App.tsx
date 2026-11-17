@@ -25,7 +25,7 @@ import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, t
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, type IconComponent } from './icons'
+import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
@@ -2118,7 +2118,7 @@ export default function App() {
     {/* 全面屏：主页显示完整「菜单」胶囊；进入房间/会话等页面自动收成贴边细把手，点一下才滑出。 */}
     {page!=='settings'&&(()=>{
       const edge=page!=='home'
-      return <button type="button" className={'mobile-menu-toggle'+(edge?' sidebar-edge-handle':'')+(edge&&sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起菜单':'打开菜单'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true">☰</span>{edge?null:<b>菜单</b>}</button>
+      return <button type="button" className={'mobile-menu-toggle'+(edge?' sidebar-edge-handle':'')+(edge&&sidebarOpen?' moved':'')} aria-label={sidebarOpen?'收起菜单':'打开菜单'} aria-expanded={sidebarOpen} onClick={()=>setSidebarOpen(v=>!v)}><span aria-hidden="true"><IconMenu size={17}/></span>{edge?null:<b>菜单</b>}</button>
     })()}
     {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
@@ -2152,7 +2152,7 @@ export default function App() {
             </div>
           </div>
         </section>
-        {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}>← 返回房间</button>}
+        {chatOpen&&<button type="button" className="sidebar-back-room" onClick={drawerBackToRoom}><IconBack className="ui-icon-inline" size={14}/> 返回房间</button>}
       </div>
         <button type="button" className="sidebar-settings" onClick={()=>{pageBeforeSettings.current=page;setSidebarOpen(false);navigate('settings')}}><IconSettings size={16}/><b>设置</b></button>
       <div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 侧边栏{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div>
@@ -2440,7 +2440,7 @@ function Room(props: {
   if (props.activeTool) return <div className="room-screen room-tool-screen">
     {/* 工具 / 档案页不再重复房间头部的头像与名字：整屏只留档案里那一份改名入口。 */}
     <header className="room-tool-header">
-      <button className="settings-back" onClick={() => {const backToChat=props.profileFromChat&&props.activeTool==='助手档案';props.setActiveTool('');if(backToChat){props.setProfileFromChat(false);props.setChatOpen(true)}}}>{props.profileFromChat&&props.activeTool==='助手档案'?'← 返回聊天':'← 工作区'}</button>
+      <button className="settings-back" onClick={() => {const backToChat=props.profileFromChat&&props.activeTool==='助手档案';props.setActiveTool('');if(backToChat){props.setProfileFromChat(false);props.setChatOpen(true)}}}>{props.profileFromChat&&props.activeTool==='助手档案'?<><IconBack className="ui-icon-inline" size={14}/> 返回聊天</>:<><IconBack className="ui-icon-inline" size={14}/> 工作区</>}</button>
       <b className="room-tool-title">{props.activeTool}</b>
       {personSwitcher&&<div className="room-person-switch" aria-label="切换助手">{personSwitcher}</div>}
     </header>
@@ -3926,7 +3926,7 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
   }
   const current=profiles.find(p=>p.id===defaultModelId)
   return <section className="vendor-page default-model-page">
-    <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
+    <button type="button" className="settings-back" onClick={onBack}><IconBack className="ui-icon-inline" size={14}/> 供应商</button>
     <div className="vendor-card open">
       <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconStar size={16}/></span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
