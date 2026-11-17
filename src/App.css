@@ -3576,3 +3576,20 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-card-body{padding:8px 0 10px!important}
 .vendor-config-menu .vendor-config-info{padding-top:6px!important;padding-bottom:6px!important}
 .vendor-inline-keys{margin:2px 0 4px!important;padding-top:6px!important}
+
+/* 供应商页：去掉卡片边框，tab 固定屏幕底部 */
+.vendor-card,.vendor-card.open{border:0!important;box-shadow:none!important;background:transparent!important;border-radius:0!important}
+.vendor-page,.vendor-center{background:transparent!important;border:0!important;box-shadow:none!important}
+.vendor-kelivo-model-page,.vendor-config-kelivo{padding:0 2px 8px!important}
+.vendor-model-cards{border:0!important;background:transparent!important;border-radius:0!important}
+.vendor-model-card{border:0!important;border-bottom:1px solid var(--line,#eee7dc)!important;border-radius:0!important;padding:7px 2px!important}
+.vendor-tabs{position:fixed!important;left:12px!important;right:12px!important;bottom:calc(6px + var(--app-safe-bottom,0px))!important;z-index:40;border:0!important;border-radius:14px!important;background:var(--surface,#fffdf9)!important;box-shadow:0 6px 20px rgba(40,30,20,.10)!important;padding:4px!important;margin:0!important}
+.vendor-tabs button{padding:9px 6px!important;border:0!important;border-radius:10px!important;background:transparent!important;color:var(--muted,#8a7d6d)!important}
+.vendor-tabs button.active{color:var(--accent,#7b6389)!important;font-weight:600;box-shadow:inset 0 -2px 0 var(--accent,#7b6389)}
+.vendor-page{padding-bottom:70px!important}
+/* 配置页更紧凑 */
+.vendor-inline-keys .vendor-key-manager-row{padding:7px!important;margin-bottom:5px!important}
+.vendor-inline-keys .vendor-key-manager-row-head{gap:6px!important;margin-bottom:4px!important}
+.vendor-inline-keys .vendor-key-add-card.inline{padding:7px!important}
+.vendor-config-hero{padding:2px 0 6px!important}
+.vendor-config-menu .vendor-config-info{padding-top:5px!important;padding-bottom:5px!important}
