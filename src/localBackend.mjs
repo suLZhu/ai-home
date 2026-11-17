@@ -478,16 +478,40 @@ async function handleModels(init) {
 // ── 本地 MCP 客户端：JSON-RPC over Streamable HTTP ─────────────────────────
 // WebView 里直接 fetch 会被远端 CORS 拦，所以优先走 Android 原生桥 AiHomeSystem.httpPost；
 // 浏览器里退回 fetch（能否连通取决于对方是否允许跨域）。
+let mcpRequestSequence = 0
+const mcpPending = new Map()
+if (typeof window !== 'undefined') {
+  window.__aihomeMcpHttpDone = (id, raw) => {
+    const pending = mcpPending.get(id)
+    if (!pending) return
+    mcpPending.delete(id)
+    clearTimeout(pending.timer)
+    try { pending.resolve(JSON.parse(raw)) }
+    catch { pending.reject(new Error('原生网络桥返回异常')) }
+  }
+}
 function mcpHttp(url, headers, body) {
   const sys = typeof window !== 'undefined' ? window.AiHomeSystem : null
-  if (sys && typeof sys.httpPost === 'function') {
-    const raw = sys.httpPost(url, JSON.stringify(headers || {}), body)
-    let parsed
-    try { parsed = JSON.parse(raw) } catch { throw new Error('原生网络桥返回异常') }
-    if (parsed.error) throw new Error(parsed.error)
-    return parsed
+  if (sys && typeof sys.httpPostAsync === 'function') {
+    return new Promise((resolve, reject) => {
+      const id = 'mcp-' + (++mcpRequestSequence)
+      const timer = setTimeout(() => {
+        mcpPending.delete(id)
+        reject(new Error('MCP 请求超时，可稍后重试'))
+      }, 45000)
+      mcpPending.set(id, { resolve, reject, timer })
+      try { sys.httpPostAsync(id, url, JSON.stringify(headers || {}), body) }
+      catch (error) { clearTimeout(timer); mcpPending.delete(id); reject(error) }
+    }).then(parsed => {
+      if (parsed.error) throw new Error(parsed.error)
+      return parsed
+    })
   }
-  return fetch(url, { method: 'POST', headers, body }).then(async (res) => {
+  // 旧版 Android 原生桥没有异步接口时，拒绝同步网络调用，避免整页冻结。
+  if (sys && typeof sys.httpPost === 'function') {
+    return Promise.reject(new Error('当前安装包不支持异步 MCP，请升级栖间'))
+  }
+  return fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(45000) }).then(async (res) => {
     const text = await res.text()
     const hs = {}
     res.headers.forEach((v, k) => { hs[k.toLowerCase()] = v })
