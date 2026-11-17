@@ -62,6 +62,7 @@ import { ROUTE_STATE_KEY, normalizeRouteState, activeLogicalId, fixedRouteId, ty
 import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
+import { sanitizeGeminiTools } from './geminiToolSchema.mjs'
 import { ModelPickerSheet } from './ModelPickerSheet'
 import { ModelSpecPage } from './ModelSpecPage'
 import { ModelChips } from './ModelChips'
@@ -1568,7 +1569,7 @@ export default function App() {
       } catch { /* MCP is optional; continue with normal model chat. */ }
       for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
-        if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
+        if(openAITools.length){requestBody.tools=/gemini|gemma/i.test(activeModel.model)?sanitizeGeminiTools(openAITools):openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
         let response=await chatProxy()
         if(!response.ok){
