@@ -672,16 +672,19 @@ export async function localHandle(path, init) {
       const duplicate = all.find(r => r && r.person === person && r.title === title && r.content === content)
       if (duplicate) return json(200, { record: duplicate, duplicate: true })
       const ts = nowISO()
+      // 本地自动整理会以 candidate（或直接 active）+ createdBy:'model' 写入，语义与服务端一致。
+      const lifecycle = b.lifecycle === 'candidate' ? 'candidate' : 'active'
+      const createdBy = b.createdBy === 'model' ? 'model' : 'user'
       const record = {
         id: uuid(), person,
         scope: ['world', 'private', 'ops'].includes(b.scope) ? b.scope : 'private',
-        lifecycle: 'active', // 用户亲手创建即生效，跳过候选队列（与服务端一致）
+        lifecycle, // 用户亲手创建即生效；模型提议默认进候选区
         title, content,
         keywords: String(b.keywords || '').slice(0, 500),
         category: String(b.category || '其他').slice(0, 40),
         sourceConversationId: String(b.sourceConversationId || '').slice(0, 120),
         sourceMessageIds: Array.isArray(b.sourceMessageIds) ? b.sourceMessageIds.slice(0, 50) : [],
-        createdBy: 'user', recallCount: 0, createdAt: ts, updatedAt: ts,
+        createdBy, recallCount: 0, createdAt: ts, updatedAt: ts,
       }
       all.unshift(record)
       try { writeJSON(K.memoryRecords, all.slice(0, 2000)) } catch { return json(500, { error: '本地存储写入失败' }) }

@@ -3,12 +3,13 @@
 // 把原先埋在「工具调用看板」里的记忆治理搬到助手自己的长期记忆入口，
 // 并接上服务端每 5 分钟一次的自动整理：这里只负责展示和手动触发，
 // 「要不要整理」由服务端规则决定，避免模型自己决定何时记忆。
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './ToolDashboard.css'
 import './MemoryPanel.css'
 import { isLocalMode } from './apiBase.mjs'
 import { MemoryGovernancePanel } from './MemoryGovernancePanel'
 import { saveAutoOrganize, runAutoOrganize, useAutoOrganize, type AutoOrganizeStatus } from './memoryGovernance'
+import { localTrigger, pendingStats, readLocalAuto, writeLocalAuto, type LocalAuto } from './memoryLocalOrganize.mjs'
 
 const RUN_STATUS_TEXT: Record<string, string> = {
   running: '进行中', succeeded: '已完成', failed: '失败', cancelled: '已取消', timed_out: '超时',
@@ -178,10 +179,124 @@ function AutoOrganizeCard({ person }: { person: string }) {
   </section>
 }
 
-export function MemoryPanel({ person, personLabel, onJumpToSource }: {
+// 本地模式的自动整理：没有服务器，就在这台设备上用当前模型跑一次。
+// 交互和服务器版保持一致（阈值 / 自动生效 / 规则 / 立即整理），只是调度换成「打开面板时触发」。
+function LocalAutoCard({ personMessages, onRun }: {
+  personMessages: unknown[]
+  onRun?: (cfg: LocalAuto) => Promise<{ created: number; scanned: number; duplicate: number }>
+}) {
+  const [cfg, setCfg] = useState<LocalAuto>(() => readLocalAuto())
+  const [busy, setBusy] = useState('')
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const autoRan = useRef(false)
+  const stats = pendingStats(personMessages, cfg.lastRunAt)
+  const trigger = localTrigger(cfg, stats)
+  const patch = (next: Partial<LocalAuto>) => setCfg(old => ({ ...old, ...next }))
+
+  async function run(current: LocalAuto) {
+    if (!onRun || busy) return
+    setBusy('run'); setError(''); setNotice('')
+    try {
+      const result = await onRun(current)
+      setCfg(readLocalAuto())
+      setNotice(result.scanned === 0
+        ? '上次整理之后没有新的对话。'
+        : `看了 ${result.scanned} 条对话，新增 ${result.created} 条记忆${result.duplicate ? `（${result.duplicate} 条重复已跳过）` : ''}。`)
+    } catch (e) { setError(e instanceof Error ? e.message : '整理失败') }
+    finally { setBusy('') }
+  }
+
+  // 打开面板时如果已经攒够，就自动跑一次；每个挂载周期只跑一次，避免反复请求模型。
+  useEffect(() => {
+    if (autoRan.current || !onRun || busy) return
+    if (trigger === 'messages' || trigger === 'chars' || trigger === 'days') {
+      autoRan.current = true
+      void run(cfg)
+    }
+  }, [trigger])
+
+  const pending = trigger === 'disabled' ? '自动整理已关闭，仍可手动整理。'
+    : busy === 'run' ? '正在整理，稍等…'
+    : trigger === 'no_new_messages' ? '上次整理之后还没有新对话。'
+    : trigger === 'messages' || trigger === 'chars' || trigger === 'days' ? '已经攒够，打开记忆面板会自动整理；也可以点「立即整理」。'
+    : `再攒够任意一项就会整理：${Math.max(0, cfg.minMessages - stats.pendingMessages)} 条对话 / ${Math.max(0, cfg.minChars - stats.pendingChars)} 字 / ${Math.max(0, cfg.minDays - stats.daysSinceLast).toFixed(1)} 天`
+
+  return <section className="memory-auto" aria-label="自动整理">
+    <div className="memory-auto-head">
+      <div>
+        <b>自动整理</b>
+        <small>本地模式：打开记忆面板且攒够条件时，用当前模型把新对话整理成记忆。只在本机执行，不上传。</small>
+      </div>
+      <label className="memory-auto-switch">
+        <span className="memory-auto-state">{cfg.enabled ? '已开启' : '已关闭'}</span>
+        <input type="checkbox" checked={cfg.enabled} onChange={() => patch({ enabled: !cfg.enabled })} aria-label="自动整理开关" />
+        <span aria-hidden="true" />
+      </label>
+    </div>
+
+    {error && <p className="tool-dash-error" role="alert">{error}</p>}
+    {notice && <p className="tool-dash-note" role="status">{notice}</p>}
+
+    <div className="memory-auto-fields">
+      <label className="memory-auto-field">轮数
+        <input type="number" inputMode="numeric" min={2} max={500} value={cfg.minMessages}
+          onChange={e => patch({ minMessages: Math.round(Number(e.target.value)) || 0 })} aria-label="最少对话轮数" />
+        <span>攒够 N 条对话</span>
+      </label>
+      <label className="memory-auto-field">字数
+        <input type="number" inputMode="numeric" min={100} max={200000} value={cfg.minChars}
+          onChange={e => patch({ minChars: Math.round(Number(e.target.value)) || 0 })} aria-label="最少字数" />
+        <span>攒够 N 个字</span>
+      </label>
+      <label className="memory-auto-field">天数
+        <input type="number" inputMode="numeric" min={1} max={365} value={cfg.minDays}
+          onChange={e => patch({ minDays: Math.round(Number(e.target.value)) || 0 })} aria-label="最少天数" />
+        <span>每 N 天至少一次</span>
+      </label>
+    </div>
+
+    <label className="memory-auto-option">
+      <span className="memory-auto-option-text">
+        <b>整理后自动生效</b>
+        <small>打开后整理出的记忆直接生效；关掉则先进候选区，由你逐条确认。</small>
+      </span>
+      <span className="memory-auto-switch">
+        <span className="memory-auto-state">{cfg.autoConfirm ? '已开启' : '已关闭'}</span>
+        <input type="checkbox" checked={cfg.autoConfirm} onChange={() => patch({ autoConfirm: !cfg.autoConfirm })} aria-label="整理后自动生效" />
+        <span aria-hidden="true" />
+      </span>
+    </label>
+
+    <label className="memory-auto-rules">整理规则（可选）
+      <textarea rows={2} maxLength={500} value={cfg.rules} onChange={e => patch({ rules: e.target.value })}
+        placeholder="例如：只记约定和偏好，不记日常寒暄；提到的人名一定要记。" />
+      <span>{cfg.rules.length}/500</span>
+    </label>
+
+    <div className="memory-auto-status">
+      <b>待整理 {stats.pendingMessages} 条 · {stats.pendingChars} 字</b>
+      <small>{pending}</small>
+      {cfg.lastRun?.finishedAt
+        ? <small>上次整理：{formatWhen(cfg.lastRun.finishedAt)}{cfg.lastRun.error ? '（' + cfg.lastRun.error + '）' : cfg.lastRun.created != null ? ` · 新增 ${cfg.lastRun.created} 条` : ''}</small>
+        : <small>还没有整理过。</small>}
+    </div>
+
+    <div className="memory-auto-actions">
+      <button type="button" onClick={() => { writeLocalAuto(cfg); setCfg(readLocalAuto()); setNotice('策略已保存。') }}>{busy === 'save' ? '保存中…' : '保存策略'}</button>
+      <button type="button" className="memory-auto-run" onClick={() => void run(cfg)} disabled={!!busy || !onRun}>
+        {busy === 'run' ? '整理中…' : '立即整理'}
+      </button>
+    </div>
+  </section>
+}
+
+export function MemoryPanel({ person, personLabel, onJumpToSource, personMessages, onRunOrganize }: {
   person: string
   personLabel?: string
   onJumpToSource?: (conversationId: string, messageId?: string) => void
+  personMessages?: unknown[]
+  onRunOrganize?: (cfg: LocalAuto) => Promise<{ created: number; scanned: number; duplicate: number }>
 }) {
   return <div className="memory-panel">
     <header className="memory-panel-head">
@@ -189,7 +304,7 @@ export function MemoryPanel({ person, personLabel, onJumpToSource }: {
       <p>助手记下来的事默认先进候选区；打开「整理后自动生效」后会直接进入记忆库。你随时可以归档或拒绝，拒绝过的内容会留下墓碑，不会再被重复提议。</p>
     </header>
     {isLocalMode()
-      ? <p className="tool-dash-note">本地模式没有后台调度器：自动整理只在连接服务器后生效。下面仍可查看、确认和手动新增记忆。</p>
+      ? <LocalAutoCard personMessages={personMessages || []} onRun={onRunOrganize} />
       : <AutoOrganizeCard person={person} />}
     <MemoryGovernancePanel person={person} onJumpToSource={onJumpToSource} />
   </div>

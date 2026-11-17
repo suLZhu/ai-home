@@ -11,6 +11,7 @@ import { WorldbookEditor, type WorldEntry } from './WorldbookEditor'
 import { enabledSkillsBlock, loadSkills, parseSkillMarkdown } from './skills.mjs'
 import { ToolDashboard } from './ToolDashboard'
 import { MemoryPanel } from './MemoryPanel'
+import { runLocalOrganize } from './memoryLocalOrganize.mjs'
 import { RichText } from './RichText.tsx'
 import { UiDialogHost } from './UiDialogHost'
 import { SystemSetupSheet } from './SystemSetupSheet'
@@ -2574,7 +2575,13 @@ function ToolPanel(p: any) {
   if (t === 'SKILL 技能库') return <SkillWorkbench person={p.person} personLabel={p.displayName}/>
   if (t === 'MCP') return <MCPSettings person={p.person} personLabel={p.displayName}/>
   if (t === '工具调用看板') return <ToolDashboard person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)}/>
-  if (t === '记忆面板') return <MemoryPanel person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)}/>
+  if (t === '记忆面板') return <MemoryPanel person={p.person} personLabel={p.displayName?p.displayName(p.person):p.person} onJumpToSource={(conversationId:string,messageId?:string)=>jumpToSource(p,conversationId,messageId)} personMessages={p.messages?.[p.person]||[]} onRunOrganize={async (cfg: any) => {
+    const profileId = p.bindings?.[p.person]?.modelProfileId || p.defaultModelId || ''
+    const active = resolveModelConfig(profileId, p.modelProfiles || [], p.modelConfig)
+    const vendor = (p.vendors || []).find((v: Vendor) => v.id === active.vendorId)
+    const apiKey = resolveKeyCandidates(p.vendors || [], p.bindings?.[p.person]?.keyId || '', p.apiKey || '', active.vendorId || '')[0] || ''
+    return runLocalOrganize({ person: p.person, messages: p.messages?.[p.person] || [], endpoint: vendor?.endpoint || '', apiKey, chatUrl: vendor ? chatRequestUrl(vendor) : '', model: active.model || '', cfg })
+  }}/>
   if (t === '模型设置') return <ModelSettings value={p.modelConfig} onChange={p.setModelConfig} apiKey={p.apiKey} setApiKey={p.setApiKey}/>
   if (t === '工作流') return <TaskManager person={p.person} personLabel={p.displayName}/>
   if (t === '自主生活') return <ProactivePanel person={p.person} personLabel={p.displayName}/>
