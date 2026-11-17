@@ -3857,15 +3857,39 @@ function useMcpLibrary() {
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
 function groupModelsByName(ids: string[]): { id: string; label: string; models: string[] }[] {
-  const map = new Map<string, string[]>()
-  for (const id of ids) {
-    const raw = String(id || '').trim()
-    const ch = raw ? raw[0].toUpperCase() : '#'
-    const key = /[A-Z]/.test(ch) ? ch : '#'
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(id)
+  const FAMILY_ORDER = ['claude','gpt','grok','gemini','deepseek','qwen','kimi','glm','llama','mistral','doubao','yi','cohere','other'] as const
+  const FAMILY_LABEL: Record<string,string> = {
+    claude:'Claude', gpt:'GPT / OpenAI', grok:'Grok', gemini:'Gemini', deepseek:'DeepSeek',
+    qwen:'Qwen', kimi:'Kimi', glm:'GLM', llama:'Llama / Meta', mistral:'Mistral',
+    doubao:'Doubao', yi:'Yi', cohere:'Cohere', other:'其他',
   }
-  return [...map.entries()].sort((a, b) => a[0] === '#' ? 1 : b[0] === '#' ? -1 : a[0].localeCompare(b[0])).map(([label, models]) => ({ id: 'letter-' + label, label, models }))
+  const familyOf=(value:string)=>{
+    const s=String(value||'').trim().toLowerCase()
+    if(/claude|sonnet|opus|haiku|anthropic/.test(s)) return 'claude'
+    if(/(?:^|[/._-])(gpt|chatgpt|o[1-9]|openai)(?:$|[/._-])|gpt-|chatgpt-|openai/.test(s)) return 'gpt'
+    if(/grok|xai|x-ai/.test(s)) return 'grok'
+    if(/gemini|gemma/.test(s)) return 'gemini'
+    if(/deepseek/.test(s)) return 'deepseek'
+    if(/qwen|qwq/.test(s)) return 'qwen'
+    if(/kimi|moonshot/.test(s)) return 'kimi'
+    if(/glm|zhipu|chatglm/.test(s)) return 'glm'
+    if(/llama|meta-llama/.test(s)) return 'llama'
+    if(/mistral|mixtral/.test(s)) return 'mistral'
+    if(/doubao|豆包/.test(s)) return 'doubao'
+    if(/(?:^|[/._-])yi(?:$|[/._-])|01-ai/.test(s)) return 'yi'
+    if(/command-r|cohere/.test(s)) return 'cohere'
+    return 'other'
+  }
+  const map = new Map<string,string[]>()
+  for(const id of ids){
+    const key=familyOf(id)
+    const list=map.get(key)||[]
+    list.push(id)
+    map.set(key,list)
+  }
+  return FAMILY_ORDER
+    .filter(key=>map.has(key))
+    .map(key=>({id:'family-'+key,label:FAMILY_LABEL[key],models:(map.get(key)||[]).sort((x,y)=>x.localeCompare(y))}))
 }
 
 function brandOf(modelId:string):{icon:IconComponent;cls:string}{
