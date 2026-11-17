@@ -4212,8 +4212,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <SoftSelect className="vendor-key-role" ariaLabel="新 Key 角色" value={keyDraftRole} onChange={v=>setKeyDraftRole(v as 'primary'|'backup')} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/>
         </div>
         <div className="key-input-row vendor-managed-key-input">
-          <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="粘贴 API Key"/>
-          <PasteButton onPaste={value=>setKeyDraft(v=>({...v,value}))}/>
+          <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
+          <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
         </div>
         <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
         <small>Key 只保存在本机配置中；输入框使用普通文本键盘，不启用密码/安全键盘。</small>
@@ -4262,7 +4262,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={newEnabled} onChange={e=>setNewEnabled(e.target.checked)}/></label>
           {addTab==='openai'&&<label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={newResponseApi} onChange={e=>setNewResponseApi(e.target.checked)}/></label>}
           <label className="vendor-field">名称<input aria-label="供应商名称" value={newName} onChange={e=>setNewName(e.target.value)} placeholder="例如 OpenAI"/></label>
-          <label className="vendor-field">API Key <div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="例如 sk-…"/><PasteButton onPaste={setNewKey}/></div></label>
+          <label className="vendor-field">API Key <div className="key-input-row"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="例如 sk-…"/></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" value={newEndpoint} onChange={e=>setNewEndpoint(e.target.value)} placeholder="https://…/v1"/></label>
           <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
           <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
@@ -4304,7 +4304,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 <SoftSelect className="vendor-key-role" ariaLabel="Key 角色" value={k.role||'backup'} onChange={v=>setManagedKeyRole(k.id,v as 'primary'|'backup')} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/>
               </div>
               <div className="key-input-row vendor-managed-key-input">
-                <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="粘贴 API Key"/>
+                <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="输入 API Key"/>
                 <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
                 <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
               </div>
@@ -4316,8 +4316,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 <SoftSelect className="vendor-key-role" ariaLabel="新 Key 角色" value={keyDraftRole} onChange={v=>setKeyDraftRole(v as 'primary'|'backup')} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/>
               </div>
               <div className="key-input-row vendor-managed-key-input">
-                <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="粘贴 API Key"/>
-                <PasteButton onPaste={value=>setKeyDraft(v=>({...v,value}))}/>
+                <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
+                <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
               </div>
               <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
             </form>
@@ -4336,7 +4336,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
           <datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist>
 
-          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="粘贴 API Key"/><PasteButton onPaste={setPrimary}/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
+          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
           <p className="vendor-url-hint">实际聊天请求地址 <b>{chatUrl||'填写 Base URL 后显示'}</b></p>
