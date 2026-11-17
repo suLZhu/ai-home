@@ -54,19 +54,18 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
     if (activeId === id) applyPack(null)
   }
 
-  return <section className="theme-settings">
-    <h3>主题</h3>
-    <p className="muted">全局主题会同时应用到主页、房间、聊天、设置、供应商、记忆和工具页；背景、按钮、线条图标、字体与聊天气泡会作为一整套一起变化。</p>
-
+  return <section className="theme-settings" aria-label="全局外观设置">
     <div className="theme-tab-panel">
-      <label>字体
-        <select value={value.font || 'serif'} onChange={e => update({ font: e.target.value as ThemePrefs['font'] })}>
+      <label>界面字体
+        <select aria-label="界面字体" value={value.font || 'serif'} onChange={e => update({ font: e.target.value as ThemePrefs['font'] })}>
           <option value="serif">书页宋体</option>
           <option value="sans">简洁无衬线</option>
         </select>
       </label>
-      <label>圆角大小 <strong>{value.radius}px</strong>
-        <input type="range" min="4" max="24" step="2" value={value.radius} onChange={e => update({ radius: Number(e.target.value) })}/>
+      <label className="theme-radius-setting">
+        <span className="theme-control-title">按钮与输入框圆角 <strong>{value.radius}px</strong></span>
+        <small className="theme-control-hint">只调整常用按钮、输入框和下拉框的边角；列表分隔线与头像不变。</small>
+        <input type="range" min="4" max="24" step="2" value={value.radius} aria-label="按钮与输入框圆角" onChange={e => update({ radius: Number(e.target.value) })}/>
       </label>
     </div>
 
@@ -89,7 +88,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
       </div>
       {error && <p className="theme-pack-error">{error}</p>}
       {notice && <p className="theme-pack-notice">{notice}</p>}
-      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包可含全局 tokens、整 App background、bubble 与 font。旧包里的 icons 仍兼容读取，但系统功能图标固定使用统一线性 SVG，只随主题色变化。</p>
+      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包可含全局 tokens、整 App background、bubble 与 font。系统功能图标使用统一的本地图片资源，当前极简白底模式下不随主题变色。</p>
     </div>
 
     <div className="theme-fontctl">
