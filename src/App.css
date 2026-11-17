@@ -4316,3 +4316,17 @@ body.has-pack .settings-screen{
 .shell #subscription-accounts .account-usage-bar i{display:block;height:100%;border-radius:9px;background:var(--accent,#8874a7)}
 .shell #subscription-accounts .account-usage-window small,.shell #subscription-accounts .account-usage-panel>small{font-size:10px;color:var(--muted,#888)}
 .shell #subscription-accounts .account-usage-error{font-size:11px;line-height:1.5;color:var(--danger,#af656a);margin:0}
+
+/* Requested 5.0: collapsible request usage with approximate breakdown. */
+.request-stats-list details.request-stats-row{display:block}
+.request-stats-list details.request-stats-row>summary{cursor:pointer;list-style:none;min-height:36px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.request-stats-list details.request-stats-row>summary::-webkit-details-marker{display:none}
+.request-stats-list details.request-stats-row>summary::after{content:"⌄";color:var(--muted,#888);font-size:15px;transition:transform .16s}
+.request-stats-list details.request-stats-row[open]>summary::after{transform:rotate(180deg)}
+.request-token-breakdown{margin-top:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;border-radius:12px;background:var(--field,#f8f7fa)}
+.request-token-breakdown>div:not(:first-child){display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.request-token-breakdown>div strong{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.request-token-breakdown>div:first-child{display:flex;flex-direction:column;gap:3px}
+.request-token-breakdown small{font-size:10px;color:var(--muted,#888);line-height:1.4}
+/* Existing workspace widgets now share the room page without overlaying navigation. */
+.room-screen>.room-widgets,.room-screen>.room-widgets-empty{position:relative;z-index:2;margin:10px 12px 18px}
