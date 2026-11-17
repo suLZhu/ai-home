@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { pushBackHandler } from './backStack.mjs'
-import {
 import { IconCheck, IconClose, IconPlus, IconTrash } from './icons'
+import {
   MODEL_TYPES, INPUT_MODALITIES, OUTPUT_MODALITIES, MODEL_ABILITIES,
   normalizeModelSpec, type ModelSpec, type ResolvedModelSpec,
 } from './modelSpecs.mjs'
