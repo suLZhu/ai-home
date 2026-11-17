@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { SoftSelect, type SoftOption } from './SoftSelect'
 import type { ModelRoute } from './modelRoutes.mjs'
 import type { Vendor } from './vendors.mjs'
+import { IconPlus } from './icons'
 
 // 模型面板里的线路编辑区：和「选择模型 / 账号登录」同一套半屏视觉，
 // 不新造弹窗。用户在这里看线路、设主线路、手动固定、启用/停用、增删线路。
@@ -90,7 +91,7 @@ export function ModelRoutesPanel({ logicalId, defaultModel, routes, vendors, fix
       </div>
       <div className="route-add-foot">
         <small>API Key 只保存在这台设备，不进云端快照、不写入仓库。</small>
-        <button type="button" className="route-add-btn" onClick={submit}>＋ 添加线路</button>
+        <button type="button" className="route-add-btn" onClick={submit}><IconPlus className="ui-icon-inline" size={14}/> 添加线路</button>
       </div>
       {error && <p className="route-error">{error}</p>}
     </div>
