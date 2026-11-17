@@ -1,7 +1,7 @@
 import { readZip, bytesToDataUrl } from './zip.mjs'
-// 美化包（Theme Pack）格式 v1。
-// 一个包就是一份 JSON：名字、色调 tokens、聊天气泡、背景、可选图标。
-// 用户在 设置 → 外观与聊天 → 主题 → 美化包 里导入 .json 即可切换。
+// 美化包（Theme Pack）格式 v1（向后兼容，现已升级为全局主题）。
+// 一个包可统一控制整 App 壁纸 / 页面背景 / surface / 控件 / 按钮 / 图标语义色 / 字体 / 聊天气泡。
+// 旧包仍可继续导入；未提供的新 token 会从 accent / surface / field 等基础色自动继承。
 //
 // 示例：
 // {
@@ -9,11 +9,12 @@ import { readZip, bytesToDataUrl } from './zip.mjs'
 //   "version": 1,
 //   "name": "海盐",
 //   "author": "you",
-//   "tokens": { "accent": "#5b8fb9", "surface": "#f4f8fb", "field": "#fffdf9",
-//               "ink": "#33414d", "line": "#dbe6ee", "accentSoft": "#e3f0f8" },
+//   "tokens": { "accent": "#5b8fb9", "pageBg": "#edf3f6", "surface": "#f8fbfc",
+//               "field": "#eef4f7", "ink": "#33414d", "line": "#dbe6ee",
+//               "iconAccent": "#5b8fb9", "buttonPrimary": "#5b8fb9" },
 //   "background": { "image": "https://…/bg.jpg", "opacity": 0.9 },
-//   "bubble": { "style": "soft", "radius": 16 },
-//   "icons": { "world": "📚", "chat": "💬", "mcp": "🔌", "skill": "🗂", "memory": "🧠", "settings": "⚙" }
+//   "font": { "family": "system-ui, sans-serif" },
+//   "bubble": { "style": "soft", "radius": 16 }
 // }
 
 export const PACK_FORMAT = 'qijian-theme-pack'
@@ -21,7 +22,12 @@ export const PACK_VERSION = 1
 export const PACKS_KEY = 'ai-home.themePacks'
 export const ACTIVE_PACK_KEY = 'ai-home.themePackActive'
 
-export const PACK_TOKEN_KEYS = ['accent', 'accentSoft', 'surface', 'field', 'ink', 'muted', 'line', 'danger', 'ok']
+export const PACK_TOKEN_KEYS = [
+  'accent','accentSoft','accentContrast','pageBg','surface','surfaceElevated','card','field','ink','muted','line',
+  'ok','warning','danger','control','controlHover','controlBorder',
+  'icon','iconMuted','iconAccent','iconOk','iconWarning','iconDanger',
+  'buttonPrimary','buttonPrimaryText','buttonSecondary','buttonSecondaryText','buttonSecondaryBorder','buttonDanger','buttonDangerText',
+]
 export const PACK_ICON_KEYS = ['world', 'chat', 'mcp', 'skill', 'memory', 'settings', 'assistant', 'models', 'appearance', 'workspace', 'system']
 export const PACK_BUBBLE_STYLES = ['soft', 'outlined', 'bare', 'letter', 'frame', 'glass', 'comic', 'note', 'quill', 'pixel']
 
@@ -126,19 +132,48 @@ export function setActivePack(id, storage = globalThis.localStorage) {
 export function packCssVars(pack) {
   if (!pack) return {}
   const vars = {}
-  const map = { accent: '--accent', accentSoft: '--accent-soft', surface: '--surface', field: '--field', ink: '--ink', muted: '--muted', line: '--line', danger: '--danger', ok: '--ok' }
+  const map = {
+    accent:'--accent', accentSoft:'--accent-soft', accentContrast:'--accent-contrast',
+    pageBg:'--page-bg', surface:'--surface', surfaceElevated:'--surface-elevated', card:'--card', field:'--field',
+    ink:'--ink', muted:'--muted', line:'--line', ok:'--ok', warning:'--warning', danger:'--danger',
+    control:'--control-bg', controlHover:'--control-bg-hover', controlBorder:'--control-border',
+    icon:'--icon', iconMuted:'--icon-muted', iconAccent:'--icon-accent', iconOk:'--icon-ok', iconWarning:'--icon-warning', iconDanger:'--icon-danger',
+    buttonPrimary:'--button-primary-bg', buttonPrimaryText:'--button-primary-fg',
+    buttonSecondary:'--button-secondary-bg', buttonSecondaryText:'--button-secondary-fg', buttonSecondaryBorder:'--button-secondary-border',
+    buttonDanger:'--button-danger-bg', buttonDangerText:'--button-danger-fg',
+  }
   for (const [key, cssVar] of Object.entries(map)) if (pack.tokens[key]) vars[cssVar] = pack.tokens[key]
   if (pack.tokens.accent) vars['--accent-ink'] = pack.tokens.accent
-  if (pack.background?.image) vars['--pack-chat-bg'] = `url(${pack.background.image})`
-  else if (pack.background?.color) vars['--pack-chat-bg'] = pack.background.color
-  if (pack.background?.opacity) vars['--pack-bg-opacity'] = String(pack.background.opacity)
-  if (pack.font?.family || pack.font?.src) vars['--pack-font-family'] = pack.font.src ? 'pack-' + pack.id : pack.font.family
+  if (pack.tokens.pageBg) vars['--app-bg'] = pack.tokens.pageBg
+  if (pack.background?.image) {
+    vars['--wallpaper'] = `url(${pack.background.image})`
+    vars['--pack-chat-bg'] = `url(${pack.background.image})`
+  } else if (pack.background?.color) {
+    vars['--wallpaper'] = pack.background.color
+    vars['--pack-chat-bg'] = pack.background.color
+  }
+  if (pack.background?.opacity) {
+    vars['--wallpaper-opacity'] = String(pack.background.opacity)
+    vars['--pack-bg-opacity'] = String(pack.background.opacity)
+  }
+  if (pack.font?.family || pack.font?.src) {
+    const family = pack.font.src ? 'pack-' + pack.id : pack.font.family
+    vars['--theme-font-family'] = family
+    vars['--pack-font-family'] = family
+  }
   if (pack.bubble?.me) vars['--bubble-me-bg'] = pack.bubble.me
   if (pack.bubble?.ai) vars['--bubble-ai-bg'] = pack.bubble.ai
   return vars
 }
 
-const PACK_VAR_NAMES=['--accent','--accent-soft','--surface','--field','--ink','--muted','--line','--danger','--ok','--accent-ink','--pack-chat-bg','--pack-bg-opacity','--bubble-me-bg','--bubble-ai-bg']
+const PACK_VAR_NAMES=[
+  '--accent','--accent-soft','--accent-contrast','--accent-ink','--page-bg','--app-bg','--surface','--surface-elevated','--card','--field',
+  '--ink','--muted','--line','--ok','--warning','--danger',
+  '--control-bg','--control-bg-hover','--control-border',
+  '--icon','--icon-muted','--icon-accent','--icon-ok','--icon-warning','--icon-danger',
+  '--button-primary-bg','--button-primary-fg','--button-secondary-bg','--button-secondary-fg','--button-secondary-border','--button-danger-bg','--button-danger-fg',
+  '--wallpaper','--wallpaper-opacity','--theme-font-family','--pack-chat-bg','--pack-bg-opacity','--pack-font-family','--bubble-me-bg','--bubble-ai-bg',
+]
 export function applyPackVars(pack){
   const root=globalThis.document?.documentElement
   if(!root)return
@@ -215,7 +250,12 @@ export function paletteFromRgb(r, g, b) {
       mode: 'dark',
       '--accent': hsl(h, s * 1.1 + 0.18, 0.62),
       '--accent-soft': hsl(h, 0.32, 0.26),
+      '--accent-contrast': hsl(h, 0.12, 0.12),
+      '--page-bg': hsl(h, 0.14, 0.10),
+      '--app-bg': hsl(h, 0.14, 0.10),
       '--surface': hsl(h, 0.16, 0.14),
+      '--surface-elevated': hsl(h, 0.16, 0.18),
+      '--card': hsl(h, 0.15, 0.16),
       '--field': hsl(h, 0.14, 0.2),
       '--ink': hsl(h, 0.1, 0.93),
       '--muted': hsl(h, 0.08, 0.68),
@@ -226,7 +266,12 @@ export function paletteFromRgb(r, g, b) {
     mode: 'light',
     '--accent': hsl(h, s * 1.1 + 0.18, 0.4),
     '--accent-soft': hsl(h, s * 0.8, 0.9),
+    '--accent-contrast': '#ffffff',
+    '--page-bg': hsl(h, s * 0.22, 0.94),
+    '--app-bg': hsl(h, s * 0.22, 0.94),
     '--surface': hsl(h, s * 0.35, 0.97),
+    '--surface-elevated': hsl(h, s * 0.28, 0.99),
+    '--card': hsl(h, s * 0.28, 0.96),
     '--field': hsl(h, s * 0.3, 0.93),
     '--ink': hsl(h, s * 0.25, 0.2),
     '--muted': hsl(h, s * 0.18, 0.45),
