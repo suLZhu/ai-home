@@ -3777,3 +3777,102 @@ body.has-pack .shell .ap-tabs{gap:0!important}
 body.has-pack .shell .ap-tabs button{background:transparent!important;border:0!important;border-bottom:1px solid var(--line,#d7c4a9)!important;border-radius:0!important;box-shadow:none!important}
 body.has-pack .shell .ap-tabs button.active{color:var(--accent,#80604b)!important;border-bottom:2px solid var(--accent,#80604b)!important;background:transparent!important}
 body.has-pack .shell .ap-avatar-bar button{background:transparent!important;border:1px solid var(--line,#d7c4a9)!important;border-radius:10px!important}
+
+
+/* ── 4.9 页面顶部坐标系统一 ──────────────────────────────────────────
+   页面层级不再各自决定离系统状态栏多远。
+   所有普通一级/二级/三级页面共用同一 top inset 与 header slot；
+   聊天页保持自己的沉浸式顶栏，仅对设置/房间工具/供应商/账号等普通页面生效。 */
+:root{
+  --page-top-inset:calc(var(--app-safe-top,0px) + 46px);
+  --page-header-height:54px;
+  --page-header-control:34px;
+}
+
+/* 普通页面统一从同一条水平线开始。 */
+.shell .settings-screen,
+.shell .fun-screen{
+  padding-top:var(--page-top-inset)!important;
+}
+
+/* 设置一级页标题、设置二级/三级返回区、供应商/模型/Key、订阅账号等都占同一页头槽位。 */
+.shell .settings-heading,
+.shell .settings-detail>.settings-back,
+.shell .vendor-account-back,
+.shell .vendor-center .vendor-kelivo-page-head,
+.shell #subscription-accounts .account-page-head{
+  box-sizing:border-box;
+  min-height:var(--page-header-height)!important;
+}
+
+/* 一级设置页：返回按钮 + 标题在固定槽内排布，不再靠额外 margin 撑高度。 */
+.shell .settings-heading{
+  display:flex!important;
+  flex-direction:column;
+  justify-content:center;
+  padding:0 2px!important;
+  margin:0 0 8px!important;
+}
+.shell .settings-heading .settings-back-room{
+  align-self:flex-start;
+  flex:0 0 auto;
+  height:28px!important;
+  min-height:28px!important;
+  margin:0 0 2px!important;
+}
+.shell .settings-heading h2{
+  flex:0 0 auto;
+  margin:0!important;
+  line-height:1.18!important;
+}
+
+/* 二级/三级页顶部返回入口也使用固定槽；按钮本身仍保持紧凑。 */
+.shell .settings-detail>.settings-back,
+.shell .vendor-account-back{
+  display:flex;
+  align-items:center;
+  margin:0 0 8px!important;
+}
+.shell .settings-detail>.settings-back{
+  justify-self:stretch!important;
+  width:100%;
+  border:0!important;
+  background:transparent!important;
+  padding:0 2px!important;
+  height:var(--page-header-height)!important;
+  min-height:var(--page-header-height)!important;
+  border-radius:0!important;
+  justify-content:flex-start;
+  font-size:12px!important;
+}
+.shell .vendor-account-back>.settings-back{
+  height:var(--page-header-control)!important;
+  min-height:var(--page-header-control)!important;
+  margin:0!important;
+}
+
+/* 供应商/模型/Key 页面统一固定页头高度。 */
+.shell .vendor-center .vendor-kelivo-page-head{
+  height:var(--page-header-height)!important;
+  min-height:var(--page-header-height)!important;
+  padding:0 2px!important;
+  margin:0!important;
+}
+.shell .vendor-center .vendor-kelivo-page-head>.vendor-kelivo-back{
+  height:var(--page-header-control)!important;
+  min-height:var(--page-header-control)!important;
+}
+
+/* 订阅账号不再自己用内容高度当页头高度。 */
+.shell #subscription-accounts .account-page-head{
+  justify-content:center;
+  margin:0 0 8px!important;
+}
+
+/* 房间工具页与普通页面使用同一顶部基线；聊天本身仍走沉浸式 safe-area 顶栏。 */
+.shell .room-tool-header{
+  min-height:var(--page-header-height)!important;
+  padding-top:0!important;
+  margin-top:var(--page-top-inset)!important;
+  margin-bottom:8px!important;
+}
