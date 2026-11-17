@@ -76,7 +76,7 @@ function MemoryRecordSheet({ record, onClose, onTransition }: {
     <div className="memory-sheet" role="dialog" aria-modal="true" aria-label={record.title} onClick={event => event.stopPropagation()}>
       <div className="memory-sheet-head">
         <span className={'memory-sheet-badge ' + record.lifecycle}>{LIFECYCLE_LABEL[record.lifecycle]}</span>
-        <button type="button" className="memory-sheet-close" onClick={onClose} aria-label="关闭">×</button>
+        <button type="button" className="memory-sheet-close" onClick={onClose} aria-label="关闭"><IconClose size={15}/></button>
       </div>
       <b className="memory-sheet-title">{record.title}</b>
       <p className="memory-sheet-meta">{SCOPE_LABEL[record.scope]} · {record.category} · {record.createdBy === 'model' ? '助手提议' : '手动记录'}</p>
