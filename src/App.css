@@ -4330,3 +4330,19 @@ body.has-pack .settings-screen{
 .request-token-breakdown small{font-size:10px;color:var(--muted,#888);line-height:1.4}
 /* Existing workspace widgets now share the room page without overlaying navigation. */
 .room-screen>.room-widgets,.room-screen>.room-widgets-empty{position:relative;z-index:2;margin:10px 12px 18px}
+
+/* Assistant workspace widgets are interactive objects in the room scene. */
+.shell .room-screen .room-illustration .room-scene-widgets{
+ position:absolute;left:9px;right:9px;bottom:10px;z-index:10;
+ max-height:35%;overflow-y:auto;overscroll-behavior:contain;
+ border-radius:15px;pointer-events:auto;scrollbar-width:thin;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets{
+ margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:6px;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets-empty{display:none}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card{
+ padding:7px!important;min-height:42px!important;background:color-mix(in srgb,var(--card,#fff) 88%,transparent)!important;
+ backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:11px!important;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-text small{font-size:9px}
