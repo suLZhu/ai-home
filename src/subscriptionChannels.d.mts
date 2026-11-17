@@ -24,6 +24,8 @@ export type SubscriptionAccount = {
   loginPath: string
   tokenPath: string
   tokenSource: string
+  refreshToken?: string
+  tokenExpiresAt?: string
   vendorId: string
   vendorKeyId: string
   loggedIn: boolean
