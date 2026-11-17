@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import './RoomWidgets.css'
 import { apiFetch } from './apiBase.mjs'
 import { confirmDialog } from './uiDialog'
+import { IconCheck, IconChevronRight, IconClose, IconEdit, IconGrid, IconLedger, IconMinus, IconPlus, IconSparkles, IconTrash, type IconComponent } from './icons'
 
 export type WidgetType = 'custom' | 'ledger' | 'checklist' | 'note' | 'counter'
 export type RoomWidget = {
@@ -16,12 +17,12 @@ export type RoomWidget = {
   updatedAt: string
 }
 
-const TYPE_META: Record<WidgetType, { icon: string; label: string }> = {
-  custom: { icon: '✦', label: 'AI 小组件' },
-  ledger: { icon: '¥', label: '记账本' },
-  checklist: { icon: '✓', label: '清单' },
-  note: { icon: '✎', label: '便签' },
-  counter: { icon: '#', label: '计数器' },
+const TYPE_META: Record<WidgetType, { icon: IconComponent; label: string }> = {
+  custom: { icon: IconSparkles, label: 'AI 小组件' },
+  ledger: { icon: IconLedger, label: '记账本' },
+  checklist: { icon: IconCheck, label: '清单' },
+  note: { icon: IconEdit, label: '便签' },
+  counter: { icon: IconGrid, label: '计数器' },
 }
 
 function money(value: number): string {
@@ -79,20 +80,22 @@ export function RoomWidgets({ person }: { person: string }) {
   }, [refresh])
 
   if (!widgets.length && !error) return <div className="room-widgets-empty">
-    <span aria-hidden="true">◫</span>
+    <span aria-hidden="true"><IconGrid size={18}/></span>
     <small>还没有小组件。在聊天里说「给我建一个记账本」，它会一直留在这里。</small>
   </div>
 
   return <div className="room-widgets">
     {error && <p className="room-widgets-error" role="alert">{error}</p>}
-    {widgets.map(widget => <button type="button" className={'room-widget-card type-' + widget.type} key={widget.id} onClick={() => setOpen(widget)}>
-      <span className="room-widget-icon" aria-hidden="true">{TYPE_META[widget.type]?.icon || '◫'}</span>
+    {widgets.map(widget => {
+      const WidgetIcon = TYPE_META[widget.type]?.icon || IconGrid
+      return <button type="button" className={'room-widget-card type-' + widget.type} key={widget.id} onClick={() => setOpen(widget)}>
+      <span className="room-widget-icon" aria-hidden="true"><WidgetIcon size={18}/></span>
       <span className="room-widget-text">
         <b>{widget.title}</b>
         <small>{summary(widget)}</small>
       </span>
-      <span className="room-widget-go" aria-hidden="true">›</span>
-    </button>)}
+      <span className="room-widget-go" aria-hidden="true"><IconChevronRight size={14}/></span>
+    </button>})}
     {open && <WidgetSheet widget={open} onClose={() => setOpen(null)} onSaved={() => { void refresh() }} />}
   </div>
 }
@@ -250,7 +253,7 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
     <div className="widget-sheet" role="dialog" aria-modal="true" aria-label={current.title} onClick={event => event.stopPropagation()}>
       <div className="widget-sheet-head">
         <span className="widget-sheet-type">{TYPE_META[current.type]?.label || '小组件'}</span>
-        <button type="button" className="widget-sheet-close" onClick={onClose} aria-label="关闭">×</button>
+        <button type="button" className="widget-sheet-close" onClick={onClose} aria-label="关闭"><IconClose size={15}/></button>
       </div>
       <input className="widget-title-input" value={title} onChange={event => setTitle(event.target.value)} onBlur={() => void rename()} aria-label="小组件名称" />
       {error && <p className="widget-error" role="alert">{error}</p>}
@@ -277,7 +280,7 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
             <div className="widget-entry" key={entry.id}>
               <span className="widget-entry-main"><b>{entry.note || (entry.kind === 'income' ? '收入' : '支出')}</b><small>{new Date(entry.at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</small></span>
               <span className={'widget-entry-amount ' + (entry.kind === 'income' ? 'income' : '')}>{entry.kind === 'income' ? '+' : '-'}{money(entry.amount)}</span>
-              <button type="button" className="widget-entry-delete" aria-label="删除这笔" onClick={() => void removeEntry(entry.id)}>×</button>
+              <button type="button" className="widget-entry-delete" aria-label="删除这笔" onClick={() => void removeEntry(entry.id)}><IconTrash size={14}/></button>
             </div>)}
         </div>
       </>}
@@ -290,9 +293,9 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
         <div className="widget-checklist">
           {(Array.isArray(current.config?.items) ? current.config.items : []).map((entry: any) =>
             <div className={'widget-check-item' + (entry.done ? ' done' : '')} key={entry.id}>
-              <button type="button" className="widget-check-box" aria-label={entry.done ? '标记未完成' : '标记完成'} onClick={() => void toggleItem(entry.id)}>{entry.done ? '✓' : ''}</button>
+              <button type="button" className="widget-check-box" aria-label={entry.done ? '标记未完成' : '标记完成'} onClick={() => void toggleItem(entry.id)}>{entry.done ? <IconCheck size={13}/> : ''}</button>
               <span>{entry.text}</span>
-              <button type="button" className="widget-entry-delete" aria-label="删除" onClick={() => void removeItem(entry.id)}>×</button>
+              <button type="button" className="widget-entry-delete" aria-label="删除" onClick={() => void removeItem(entry.id)}><IconTrash size={14}/></button>
             </div>)}
           {(!current.config?.items || current.config.items.length === 0) && <p className="widget-empty">还没有条目。</p>}
         </div>
@@ -304,9 +307,9 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
       </>}
 
       {current.type === 'counter' && <div className="widget-counter">
-        <button type="button" onClick={() => void bump(-(Number(current.config?.step) || 1))}>−</button>
+        <button type="button" onClick={() => void bump(-(Number(current.config?.step) || 1))}><IconMinus size={16}/></button>
         <b>{Number(current.config?.count) || 0}</b>
-        <button type="button" onClick={() => void bump(Number(current.config?.step) || 1)}>＋</button>
+        <button type="button" onClick={() => void bump(Number(current.config?.step) || 1)}><IconPlus size={16}/></button>
         <button type="button" className="widget-counter-reset" onClick={() => void save({ config: { ...current.config, count: 0 } })}>归零</button>
       </div>}
 
