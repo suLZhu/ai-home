@@ -4230,3 +4230,24 @@ body.has-pack .settings-screen{
 .shell .vendor-kelivo-provider-status.off,
 .shell .vendor-cap-state.fail,
 .shell .mcp-test.bad{color:var(--icon-danger,var(--danger,#ac5f68))!important}
+
+/* 5.0 stabilization: consistent neutral icon buttons and flat chat model headings. */
+.shell .message-action.danger:not(.armed),
+.shell button.message-action.danger:not(.armed) {
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  color:var(--muted,#777)!important;
+}
+.shell .message-action.danger:not(.armed):hover,
+.shell .message-action.danger:not(.armed):active {background:transparent!important;color:var(--danger,#ac5f68)!important}
+.shell .mcp-tool-picker .mcp-card-edit{
+  box-sizing:border-box!important;flex:0 0 28px!important;width:28px!important;height:28px!important;
+  min-width:28px!important;min-height:28px!important;aspect-ratio:1!important;border-radius:50%!important;
+}
+.shell .mcp-tool-picker .mcp-card-edit svg{width:14px!important;height:14px!important;flex-shrink:0!important}
+.shell .model-sheet .model-vendor-heading:not(.static){
+  width:100%;border:0!important;border-radius:0!important;background:transparent!important;
+  box-shadow:none!important;outline:0!important;padding:9px 8px!important;
+}
+.shell .model-sheet .model-vendor-heading small{color:var(--muted,#888)!important;font-weight:400!important}
+.shell .model-sheet .model-sheet-main{min-width:0!important}
+.shell .model-sheet .model-sheet-pick .model-sheet-main b{white-space:normal;overflow-wrap:anywhere}
