@@ -5,8 +5,8 @@ import './ThemeSettings.css'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { IconTrash } from './icons'
 
-// 主题系统：一套默认外观 + 字体/圆角/字号 + 可导入的「美化包」。
-// 美化包一次性替换色调、聊天背景、气泡颜色；之后会扩展图标。
+// 主题系统：像手机主题一样统一整 App 的背景、surface、控件、按钮、线性图标语义色、字体与聊天气泡。
+// 功能图标的形状固定为同一套线性 SVG，主题只负责颜色与状态，不再替换成 emoji。
 export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange: (v: ThemePrefs) => void }) {
   const [packs, setPacks] = useState<ThemePack[]>(() => [...BUILTIN_THEME_PACKS, ...loadThemePacks().filter(p => !BUILTIN_THEME_PACKS.some(b => b.id === p.id))])
   const [activeId, setActiveId] = useState<string>(() => getActivePackId())
@@ -56,7 +56,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
 
   return <section className="theme-settings">
     <h3>主题</h3>
-    <p className="muted">默认一套外观；字体、圆角和字号可调。下面可以导入美化包，一次性换掉色调、聊天背景和气泡。</p>
+    <p className="muted">全局主题会同时应用到主页、房间、聊天、设置、供应商、记忆和工具页；背景、按钮、线条图标、字体与聊天气泡会作为一整套一起变化。</p>
 
     <div className="theme-tab-panel">
       <label>字体
@@ -89,7 +89,7 @@ export function ThemeSettings({ value, onChange }: { value: ThemePrefs; onChange
       </div>
       {error && <p className="theme-pack-error">{error}</p>}
       {notice && <p className="theme-pack-notice">{notice}</p>}
-      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包可含 tokens、background、bubble、font（系统字体或内嵌字体）和 icons（emoji）。</p>
+      <p className="muted theme-pack-hint">格式见「设置 → 系统与权限 → 说明」；一个包可含全局 tokens、整 App background、bubble 与 font。旧包里的 icons 仍兼容读取，但系统功能图标固定使用统一线性 SVG，只随主题色变化。</p>
     </div>
 
     <div className="theme-fontctl">
