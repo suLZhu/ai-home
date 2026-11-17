@@ -4269,3 +4269,22 @@ body.has-pack .settings-screen{
 .shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant::after {
   content:none!important;pointer-events:none!important;
 }
+
+/* Conversation archive is a non-destructive action, separate from delete. */
+.shell .app-sidebar .sidebar-conv-archive-tab{
+  flex:0 0 auto!important;max-width:none!important;min-height:26px!important;height:26px!important;
+  border:0!important;border-radius:8px!important;background:transparent!important;
+  color:var(--muted,#8b8494)!important;padding:2px 6px!important;font-size:11px!important;
+  white-space:nowrap!important;cursor:pointer!important;
+}
+.shell .app-sidebar .sidebar-conv-archive-tab[aria-pressed="true"]{color:var(--accent,#8a79aa)!important}
+.shell .app-sidebar .sidebar-conv-archive-action{
+  flex:0 0 auto!important;min-width:36px!important;height:26px!important;min-height:26px!important;
+  padding:0 3px!important;background:transparent!important;border:0!important;box-shadow:none!important;
+  color:var(--muted,#8b8494)!important;font-size:11px!important;white-space:nowrap!important;
+  cursor:pointer!important;touch-action:manipulation!important;
+}
+.shell .app-sidebar .sidebar-conv-archive-action:active{color:var(--accent,#8a79aa)!important}
+.shell .app-sidebar .sidebar-conv-row{min-height:32px!important;height:auto!important}
+.shell .app-sidebar .sidebar-conv-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .app-sidebar .sidebar-archive-empty{margin:8px 6px;color:var(--muted,#8b8494);font-size:11px}
