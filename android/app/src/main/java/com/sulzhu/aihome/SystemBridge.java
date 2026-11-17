@@ -271,6 +271,24 @@ final class SystemBridge {
         } catch (Exception ignored) { }
     }
 
+    /** Async HTTPS GET, for subscription quota queries without blocking WebView clicks. */
+    @JavascriptInterface
+    public void httpGetAsync(String requestId, String url, String headersJson) {
+        if (requestId == null || requestId.isEmpty()) return;
+        new Thread(() -> {
+            String result = httpGet(url, headersJson);
+            try {
+                if (activity.getBridge() == null || activity.getBridge().getWebView() == null) return;
+                android.webkit.WebView webView = activity.getBridge().getWebView();
+                String js = "window.__aihomeAsyncGetDone && window.__aihomeAsyncGetDone("
+                    + JSONObject.quote(requestId) + "," + JSONObject.quote(result) + ")";
+                webView.post(() -> webView.evaluateJavascript(js, null));
+            } catch (Exception e) {
+                Log.w("AiHomeSystem", "Async GET result dispatch failed", e);
+            }
+        }, "qijian-quota-get").start();
+    }
+
     /** 原生 HTTPS GET：给订阅账号拉 Codex 模型目录用（WebView 直连会被 CORS 拦）。 */
     @JavascriptInterface
     public String httpGet(String url, String headersJson) {
