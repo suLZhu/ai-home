@@ -3854,6 +3854,9 @@ function useMcpLibrary() {
   return { connections, error, setError, refresh }
 }
 
+// MCP 状态在资源页卸载后保留，避免切换世界书时重新握手并冻结界面。
+const mcpProbeCache = new Map<string, { ok: boolean; count?: number }>()
+const mcpProbeInflight = new Map<string, Promise<{ ok: boolean; count?: number }>>()
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
 function groupModelsByName(ids: string[]): { id: string; label: string; models: string[] }[] {
@@ -4712,32 +4715,45 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     }
     return [...map.values()]
   }, [mcp.connections])
-  // 列表不再展开：进入 MCP tab 时后台探一次工具数/连通状态，小横条也能显示。
+  // 已连接服务直接使用本次启动的状态缓存；切换世界书不重复初始化 MCP。
   useEffect(() => {
     if (tab !== 'mcp') return
     let cancelled = false
-    const load = async () => {
-      const pending = mcpGroups.filter(group => !mcpStatusLoadedRef.current.has(group.key))
-      for (const group of pending) mcpStatusLoadedRef.current.add(group.key)
-      // 并行探测：4 个服务不用排队等，切到 MCP 页更快出状态。
-      await Promise.all(pending.map(async group => {
-        const connection = group.items[0]
-        if (!connection) return
-        try {
-          const response = await apiFetch('/api/mcp/' + encodeURIComponent(connection.id) + '/tools', {
-            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ person: connection.person }),
-          })
-          const data = await response.json().catch(() => ({}))
-          if (cancelled) return
-          setMcpStatus(old => ({ ...old, [group.key]: response.ok ? 'ok' : 'fail' }))
-          if (response.ok && Array.isArray(data.tools)) setMcpCounts(old => ({ ...old, [group.key]: data.tools.length }))
-        } catch {
-          if (!cancelled) setMcpStatus(old => ({ ...old, [group.key]: 'fail' }))
-        }
-      }))
+    for (const group of mcpGroups) {
+      const cached = mcpProbeCache.get(group.key)
+      if (cached) {
+        setMcpStatus(old => ({ ...old, [group.key]: cached.ok ? 'ok' : 'fail' }))
+        if (cached.count !== undefined) setMcpCounts(old => ({ ...old, [group.key]: cached.count }))
+        continue
+      }
+      const connection = group.items[0]
+      if (!connection) continue
+      let pending = mcpProbeInflight.get(group.key)
+      if (!pending) {
+        pending = (async () => {
+          try {
+            const response = await apiFetch('/api/mcp/' + encodeURIComponent(connection.id) + '/tools', {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ person: connection.person }),
+            })
+            const data = await response.json().catch(() => ({}))
+            const result = { ok: response.ok, count: response.ok && Array.isArray(data.tools) ? data.tools.length : undefined }
+            mcpProbeCache.set(group.key, result)
+            return result
+          } catch {
+            const result = { ok: false }
+            mcpProbeCache.set(group.key, result)
+            return result
+          } finally { mcpProbeInflight.delete(group.key) }
+        })()
+        mcpProbeInflight.set(group.key, pending)
+      }
+      void pending.then(result => {
+        if (cancelled) return
+        setMcpStatus(old => ({ ...old, [group.key]: result.ok ? 'ok' : 'fail' }))
+        if (result.count !== undefined) setMcpCounts(old => ({ ...old, [group.key]: result.count }))
+      })
     }
-    void load()
     return () => { cancelled = true }
   }, [tab, mcpGroups])
 
@@ -4786,6 +4802,11 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
       setMcpTest({ busy: false, message: '' })
       setMcpFormOpen(false)
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      mcpStatusLoadedRef.current.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
     finally { setMcpBusy(false) }
@@ -4807,6 +4828,11 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         const data = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(data.error || '更新 MCP 失败')
       }
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      mcpStatusLoadedRef.current.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (error) {
       mcp.setError(error instanceof Error ? error.message : String(error))
@@ -4821,6 +4847,11 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         const r = await apiFetch('/api/mcp/' + c.id, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
         if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '移除失败') }
       }
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      mcpStatusLoadedRef.current.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
   }
