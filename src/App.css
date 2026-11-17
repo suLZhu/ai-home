@@ -4075,3 +4075,158 @@ body.has-pack .settings-screen{
 .settings-row-icon svg{width:19px;height:19px}
 .vendor-model-brand svg{width:16px;height:16px}
 .message-action-icon{width:15px!important;height:15px!important;display:block;pointer-events:none}
+
+
+/* ── 5.1 旧组件主题收口 ──────────────────────────────────────────────
+   把历史上写死的米白/绿/紫色重新接回全局主题 token。 */
+.shell .mobile-menu-toggle{
+  background:color-mix(in srgb,var(--surface,#fff) 92%,transparent)!important;
+  border-color:var(--line,#e8e2ee)!important;
+  color:var(--icon,var(--ink,#302c37))!important;
+  box-shadow:var(--shadow-sm)!important;
+}
+.shell .app-sidebar{
+  background:color-mix(in srgb,var(--surface,#fff) 96%,transparent)!important;
+  border-right-color:var(--line,#e8e2ee)!important;
+  color:var(--ink,#302c37)!important;
+}
+.shell .sidebar-brand small,
+.shell .sidebar-caption,
+.shell .sidebar-footer,
+.shell .sidebar-nav-row small,
+.shell .sidebar-conv-row small{
+  color:var(--muted,#8b8494)!important;
+}
+.shell .sidebar-nav-row,
+.shell .sidebar-conv-row{
+  color:var(--ink,#302c37)!important;
+}
+.shell .sidebar-nav-row.active,
+.shell .sidebar-conv-row.active{
+  background:var(--accent-soft,#ede7f4)!important;
+  color:var(--accent,#8a79aa)!important;
+}
+
+/* 娱乐房：模块卡、图标与文案全部跟主题走。 */
+.shell .fun-eyebrow{color:var(--icon-accent,var(--accent,#8a79aa))!important}
+.shell .fun-heading h2{color:var(--ink,#302c37)!important}
+.shell .fun-heading p,
+.shell .fun-module-card>small{color:var(--muted,#8b8494)!important}
+.shell .fun-module-card{
+  background:color-mix(in srgb,var(--surface,#fff) 94%,transparent)!important;
+  color:var(--ink,#302c37)!important;
+  border-color:var(--line,#e8e2ee)!important;
+  box-shadow:var(--shadow-sm)!important;
+}
+.shell .fun-module-card:hover{
+  border-color:color-mix(in srgb,var(--accent,#8a79aa) 40%,var(--line,#e8e2ee))!important;
+}
+.shell .fun-module-icon,
+.shell .module-icon-1,
+.shell .module-icon-2,
+.shell .module-icon-3,
+.shell .module-icon-4,
+.shell .module-icon-5,
+.shell .module-icon-6,
+.shell .module-icon-7{
+  background:var(--accent-soft,#ede7f4)!important;
+  color:var(--icon-accent,var(--accent,#8a79aa))!important;
+}
+.shell .fun-module-arrow{color:var(--accent,#8a79aa)!important}
+
+/* 房间与助手档案：所有历史硬编码卡片统一 surface / line。 */
+.shell .room-screen .room-session-switch,
+.shell .room-screen button.workspace-card,
+.shell .room-screen button.assistant-dock-row,
+.shell .room-screen button.workspace-applet,
+.shell .room-screen button.ap-tab,
+.shell .room-screen button.room-name-avatar,
+.shell .room-screen button.ap-avatar-button,
+.shell .room-screen .ap-avatar-bar>button{
+  background:color-mix(in srgb,var(--card,var(--surface,#fff)) 94%,transparent)!important;
+  border-color:var(--line,#e8e2ee)!important;
+  color:var(--ink,#302c37)!important;
+  box-shadow:none!important;
+}
+.shell .room-screen button.workspace-card:hover,
+.shell .room-screen button.assistant-dock-row.current,
+.shell .room-screen button.ap-tab.active{
+  background:var(--accent-soft,#ede7f4)!important;
+  border-color:color-mix(in srgb,var(--accent,#8a79aa) 42%,var(--line,#e8e2ee))!important;
+  color:var(--accent,#8a79aa)!important;
+}
+.shell .room-screen .room-session-heading-side button{
+  background:var(--button-secondary-bg,var(--field,#f7f4fa))!important;
+  border-color:var(--button-secondary-border,var(--line,#e8e2ee))!important;
+  color:var(--button-secondary-fg,var(--ink,#302c37))!important;
+}
+.shell .room-screen .room-session-delete{
+  color:var(--icon-muted,var(--muted,#8b8494))!important;
+}
+.shell .room-screen .room-session-delete:hover{
+  background:var(--danger-soft,#f4dee1)!important;
+  color:var(--icon-danger,var(--danger,#ac5f68))!important;
+}
+.shell .room-screen .room-illustration:not(.free-bg){
+  background:linear-gradient(180deg,
+    color-mix(in srgb,var(--surface,#fff) 92%,var(--accent-soft,#ede7f4)) 0%,
+    color-mix(in srgb,var(--surface,#fff) 78%,var(--accent-soft,#ede7f4)) 58%,
+    color-mix(in srgb,var(--field,#f7f4fa) 88%,var(--accent,#8a79aa)) 58%,
+    color-mix(in srgb,var(--field,#f7f4fa) 78%,var(--accent,#8a79aa)) 100%)!important;
+}
+.shell .room-screen .room-illustration .ri-tag{
+  color:var(--ink,#302c37)!important;
+  text-shadow:none!important;
+}
+
+/* 聊天：顶栏与输入区像系统组件一样从当前主题取色。 */
+.shell .fullscreen-chat .chat-header{
+  background:color-mix(in srgb,var(--surface,#fff) 76%,transparent)!important;
+  border-bottom-color:var(--line,#e8e2ee)!important;
+  color:var(--ink,#302c37)!important;
+}
+.shell .fullscreen-chat .compose.compose-box,
+.shell .fullscreen-chat .compose.compose-box.compose-wechat{
+  background:color-mix(in srgb,var(--card,var(--surface,#fff)) 96%,transparent)!important;
+  border-color:var(--line,#e8e2ee)!important;
+}
+.shell .fullscreen-chat .compose-plus-panel,
+.shell .fullscreen-chat .emoji-panel,
+.shell .fullscreen-chat .compose-tray{
+  background:color-mix(in srgb,var(--surface,#fff) 96%,transparent)!important;
+  border-color:var(--line,#e8e2ee)!important;
+}
+.shell .fullscreen-chat .compose-box .send-button,
+.shell .fullscreen-chat .cw-row .cw-circle.send{
+  background:var(--button-primary-bg,var(--accent,#8a79aa))!important;
+  color:var(--button-primary-fg,var(--accent-contrast,#fff))!important;
+}
+.shell .fullscreen-chat .compose-box .send-button.stop{
+  background:var(--button-danger-bg,var(--danger,#ac5f68))!important;
+  color:var(--button-danger-fg,#fff)!important;
+}
+
+/* 设置/供应商/模型：状态色只从主题语义色取，不固定品牌色。 */
+.shell .vendor-model-brand{
+  background:var(--accent-soft,#ede7f4)!important;
+  color:var(--icon-accent,var(--accent,#8a79aa))!important;
+}
+.shell .vendor-model-brand.brand-gpt,
+.shell .vendor-model-brand.brand-claude,
+.shell .vendor-model-brand.brand-gemini,
+.shell .vendor-model-brand.brand-glm,
+.shell .vendor-model-brand.brand-ds,
+.shell .vendor-model-brand.brand-qwen,
+.shell .vendor-model-brand.brand-kimi,
+.shell .vendor-model-brand.brand-grok{
+  background:var(--accent-soft,#ede7f4)!important;
+  color:var(--icon-accent,var(--accent,#8a79aa))!important;
+}
+.shell .vendor-kelivo-provider-status.on,
+.shell .account-login-btn.done,
+.shell .vendor-cap-state.ok{color:var(--icon-ok,var(--ok,#4f7d62))!important}
+.shell .vendor-kelivo-provider-status.warn,
+.shell .vendor-cap-state.run{color:var(--icon-warning,var(--warning,#a87935))!important}
+.shell .vendor-kelivo-provider-status.off,
+.shell .vendor-cap-state.fail,
+.shell .mcp-test.bad{color:var(--icon-danger,var(--danger,#ac5f68))!important}
