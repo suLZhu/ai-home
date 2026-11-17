@@ -20,7 +20,7 @@ export type ModelReasoning = {
   replayField: string
 }
 
-export type ModelBuiltinTools = { codeInterpreter: boolean; imageGeneration: boolean }
+export type ModelBuiltinTools = { codeInterpreter: boolean; imageGeneration: boolean; search?: boolean; urlContext?: boolean }
 export type ModelKeyValue = { key: string; value: string }
 
 export type ModelSpec = {

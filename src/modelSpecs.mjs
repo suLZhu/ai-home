@@ -81,7 +81,7 @@ export function emptyModelSpec() {
       dialect: '', levels: ['low', 'medium', 'high'], canDisable: true,
       defaultLevel: 'auto', sampling: true, replay: 'all', replayField: 'reasoning_content',
     },
-    builtinTools: { codeInterpreter: false, imageGeneration: false },
+    builtinTools: { codeInterpreter: false, imageGeneration: false, search: false, urlContext: false },
     headers: [],
     body: [],
   }
@@ -222,7 +222,7 @@ export function normalizeModelSpec(raw) {
     replayField: str(r.replayField) || 'reasoning_content',
   }
   const bt = raw.builtinTools && typeof raw.builtinTools === 'object' ? raw.builtinTools : {}
-  base.builtinTools = { codeInterpreter: bt.codeInterpreter === true, imageGeneration: bt.imageGeneration === true }
+  base.builtinTools = { codeInterpreter: bt.codeInterpreter === true, imageGeneration: bt.imageGeneration === true, search: bt.search === true, urlContext: bt.urlContext === true }
   base.headers = normalizePairs(raw.headers)
   base.body = normalizePairs(raw.body)
   return base
