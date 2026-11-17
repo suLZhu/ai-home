@@ -114,3 +114,42 @@ export const IconList: IconComponent = props => <Icon {...props}>
   <path d="M8 6h12M8 12h12M8 18h12" />
   <path d="M4 6h.01M4 12h.01M4 18h.01" />
 </Icon>
+
+// 设置列表与工具入口用的几个（同一套 24×24 描边，风格与上面一致）。
+export const IconPalette: IconComponent = props => <Icon {...props}>
+  <path d="M12 21a9 9 0 1 1 9-9c0 2-1.8 3.2-3.8 3.2h-1.4a1.8 1.8 0 0 0-1.4 2.9 1.6 1.6 0 0 1-1.3 2.5Z" />
+  <circle cx="13.6" cy="7" r=".9" />
+  <circle cx="17.4" cy="10.4" r=".9" />
+  <circle cx="7" cy="11.4" r=".9" />
+  <circle cx="9" cy="7.2" r=".9" />
+</Icon>
+
+export const IconPlug: IconComponent = props => <Icon {...props}>
+  <path d="M12 21v-4.2" />
+  <path d="M9 8V3.5M15 8V3.5" />
+  <path d="M17 8.5v3.4a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V8.5Z" />
+</Icon>
+
+export const IconChart: IconComponent = props => <Icon {...props}>
+  <path d="M4 4v15.5h16" />
+  <path d="M8 16.5v-3M12.5 16.5V8M17 16.5v-5.5" />
+</Icon>
+
+export const IconSparkles: IconComponent = props => <Icon {...props}>
+  <path d="M12 4.2 13.3 8.7l4.5 1.3-4.5 1.3L12 15.8l-1.3-4.5L6.2 10l4.5-1.3Z" />
+  <path d="M18.6 15.4v3.2M17 17h3.2" />
+</Icon>
+
+export const IconFolder: IconComponent = props => <Icon {...props}>
+  <path d="M4 7.2A1.7 1.7 0 0 1 5.7 5.5h3.6l1.8 2h6.2A1.7 1.7 0 0 1 19 9.2v7.6a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 16.8Z" />
+</Icon>
+
+export const IconShield: IconComponent = props => <Icon {...props}>
+  <path d="M12 3.6 19 6v5.6c0 4-2.9 6.9-7 8.4-4.1-1.5-7-4.4-7-8.4V6Z" />
+  <path d="m9 11.6 2 2 4-4" />
+</Icon>
+
+export const IconInfo: IconComponent = props => <Icon {...props}>
+  <circle cx="12" cy="12" r="8.2" />
+  <path d="M12 11v5M12 8.2h.01" />
+</Icon>

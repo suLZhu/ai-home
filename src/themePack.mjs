@@ -145,8 +145,13 @@ export function applyPackVars(pack){
   for(const n of PACK_VAR_NAMES)root.style.removeProperty(n)
   applyPackFont(pack)
   const vars=packCssVars(pack)
-  for(const [k,v] of Object.entries(vars))root.style.setProperty(k,v)
+  // React 每次渲染会把主题内联变量写回 .shell，包里的颜色必须用 important 才盖得住，
+  // 否则「美化包」只改了背景、颜色仍是被选中的内置主题。
+  const shellEl=globalThis.document?.querySelector('.shell')
+  for(const [k,v] of Object.entries(vars)){root.style.setProperty(k,v);if(shellEl?.style)shellEl.style.setProperty(k,v,'important')}
   globalThis.document.body?.classList.toggle('has-pack',!!pack)
+  // 背景取色是异步的（图片要解码），先铺包自带的 token，取完再覆盖成「跟壁纸走」的配色。
+  if(pack) void applyDerivedPalette(pack)
 }
 
 const FONT_STYLE_ID='qijian-pack-font'
@@ -181,4 +186,102 @@ export async function packFromZip(buffer) {
   if (raw.icons && typeof raw.icons === 'object') for (const key of Object.keys(raw.icons)) raw.icons[key] = resolve(raw.icons[key])
   if (raw.font && typeof raw.font === 'object') raw.font.src = resolve(raw.font.src)
   return normalizeThemePack(raw)
+}
+
+// ── 从背景取色：手机主题那种「跟着壁纸走」的配色 ─────────────────────
+// 背景是纯色就直接转 HSL；是图片就缩到 24×24 取平均色。再按明暗推导一整套 token。
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  let h = 0, s = 0
+  const l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+    else if (max === g) h = ((b - r) / d + 2) / 6
+    else h = ((r - g) / d + 4) / 6
+  }
+  return [h * 360, s, l]
+}
+
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
+const hsl = (h, s, l) => 'hsl(' + Math.round(h) + ' ' + Math.round(clamp(s, 0, 1) * 100) + '% ' + Math.round(clamp(l, 0, 1) * 100) + '%)'
+
+export function paletteFromRgb(r, g, b) {
+  const [h, s, l] = rgbToHsl(r, g, b)
+  if (l < 0.48) {
+    return {
+      mode: 'dark',
+      '--accent': hsl(h, s * 1.1 + 0.18, 0.62),
+      '--accent-soft': hsl(h, 0.32, 0.26),
+      '--surface': hsl(h, 0.16, 0.14),
+      '--field': hsl(h, 0.14, 0.2),
+      '--ink': hsl(h, 0.1, 0.93),
+      '--muted': hsl(h, 0.08, 0.68),
+      '--line': hsl(h, 0.12, 0.34),
+    }
+  }
+  return {
+    mode: 'light',
+    '--accent': hsl(h, s * 1.1 + 0.18, 0.4),
+    '--accent-soft': hsl(h, s * 0.8, 0.9),
+    '--surface': hsl(h, s * 0.35, 0.97),
+    '--field': hsl(h, s * 0.3, 0.93),
+    '--ink': hsl(h, s * 0.25, 0.2),
+    '--muted': hsl(h, s * 0.18, 0.45),
+    '--line': hsl(h, s * 0.3, 0.8),
+  }
+}
+
+function colorToRgb(color) {
+  const doc = globalThis.document
+  if (!doc) return null
+  const probe = doc.createElement('div')
+  probe.style.color = color
+  doc.body.appendChild(probe)
+  const computed = getComputedStyle(probe).color
+  probe.remove()
+  const m = computed.match(/\d+/g)
+  return m ? [+m[0], +m[1], +m[2]] : null
+}
+
+async function imageAverageRgb(src) {
+  const doc = globalThis.document
+  if (!doc || typeof Image === 'undefined') return null
+  try {
+    const img = new Image()
+    img.src = src
+    await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject })
+    const canvas = doc.createElement('canvas')
+    canvas.width = 24; canvas.height = 24
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0, 24, 24)
+    const { data } = ctx.getImageData(0, 0, 24, 24)
+    let r = 0, g = 0, b = 0, n = 0
+    for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n++ }
+    return n ? [r / n, g / n, b / n] : null
+  } catch { return null } // 跨域图片会画不进去，退回包里的 token
+}
+
+let paletteSeq = 0
+export async function applyDerivedPalette(pack) {
+  const seq = ++paletteSeq
+  const bg = pack?.background
+  if (!bg) return null
+  let rgb = null
+  if (bg.color) rgb = colorToRgb(bg.color)
+  else if (bg.image) rgb = await imageAverageRgb(bg.image)
+  if (!rgb || seq !== paletteSeq) return null
+  const palette = paletteFromRgb(rgb[0], rgb[1], rgb[2])
+  const root = globalThis.document?.documentElement
+  if (!root) return null
+  const shell = globalThis.document.querySelector('.shell')
+  for (const [k, v] of Object.entries(palette)) if (k !== 'mode') {
+    root.style.setProperty(k, v)
+    // React 每次渲染都会把主题变量以内联样式写回 .shell，这里用 important 优先级盖住它。
+    if (shell && shell.style) shell.style.setProperty(k, v, 'important')
+  }
+  globalThis.document.body?.classList.toggle('pack-dark', palette.mode === 'dark')
+  return palette
 }

@@ -3705,3 +3705,16 @@ body.has-pack .settings-back{background:transparent!important;border-color:var(-
 .shell:has(.app-sidebar.sidebar-open) .mobile-menu-toggle{opacity:0;pointer-events:none;transition:opacity .18s ease}
 /* 统一页顶：标题不再叠加自己的上边距，所有一级页面都从 safe+46 开始 */
 .shell .settings-heading{padding-top:0!important}
+/* 美化包：列表行改成「气泡描边 + 间隔」的独立卡片 */
+body.has-pack .shell .settings-screen .settings-flat-list .settings-row-list{background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;gap:0!important}
+body.has-pack .shell .settings-screen .settings-flat-list .settings-row{background:transparent!important;border:1.5px solid var(--line,#d9cbb2)!important;border-radius:18px!important;border-bottom:1.5px solid var(--line,#d9cbb2)!important;padding:14px 15px!important;margin-bottom:10px!important;box-shadow:none!important}
+body.has-pack .shell .settings-row-icon{background:transparent!important;color:var(--accent,#8a5a3b)!important}
+body.has-pack .shell .settings-row-chev{color:var(--accent,#8a5a3b)!important;opacity:.75!important}
+body.has-pack .shell .settings-row-text b{color:var(--ink,#3a2f24)!important}
+body.has-pack .shell .settings-row-text small{color:var(--muted,#8a7660)!important}
+body.has-pack .shell .settings-back{background:transparent!important;border:1px solid var(--line,#d9cbb2)!important;color:var(--ink,#3a2f24)!important}
+/* 深色包：卡片与顶栏用深色玻璃，文字自动转浅 */
+body.has-pack.pack-dark .settings-row{background:rgba(255,255,255,.04)!important}
+body.has-pack.pack-dark .chat-header{background:rgba(20,18,16,.55)!important}
+body.has-pack.pack-dark .compose-box{background:rgba(20,18,16,.6)!important}
+body.has-pack.pack-dark .settings-heading h2{color:var(--ink,#f2ece1)!important}
