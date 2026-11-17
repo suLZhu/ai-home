@@ -6,6 +6,7 @@ import {
 } from './nativeSystem.mjs'
 import { notificationPayload } from './notificationDispatch.mjs'
 import { readNotificationPrefs, saveNotificationPrefs } from './notificationPreferences.mjs'
+import { IconChevronRight } from './icons'
 
 /**
  * 「Android 系统能力」设置页：只有标题 + 真实状态 + 一行点击。
@@ -85,7 +86,7 @@ export function AndroidSystemSettings({
         <button type="button" className="syscap-row" onClick={() => openRow(row)} aria-label={row.label + '：' + row.status}>
           <span className="syscap-label">{row.label}</span>
           <span className={'syscap-status ' + (caps.available ? (row.ok ? 'ok' : 'bad') : 'idle')}>{row.status}</span>
-          <span className="syscap-chevron" aria-hidden="true">›</span>
+          <span className="syscap-chevron" aria-hidden="true"><IconChevronRight size={14}/></span>
         </button>
         {caps.available && !row.ok && row.hint && <p className="syscap-hint">{row.hint}</p>}
       </div>)}
