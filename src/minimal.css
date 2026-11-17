@@ -1161,3 +1161,86 @@ html,body{
   min-width:0!important;
   box-sizing:border-box!important;
 }
+
+
+/* 6.6 模型页验收修正：独立编辑页不再重复吃全局顶部高度。 */
+.shell .model-edit-page{
+  top:0!important;
+  padding-top:0!important;
+}
+.shell .model-edit-page .mep-head{
+  box-sizing:border-box!important;
+  height:calc(var(--app-safe-top,0px) + 52px)!important;
+  min-height:calc(var(--app-safe-top,0px) + 52px)!important;
+  padding:var(--app-safe-top,0px) 18px 0!important;
+  margin:0!important;
+  align-items:center!important;
+  background:#fff!important;
+  border-bottom:1px solid var(--minimal-line)!important;
+}
+.shell .model-edit-page .mep-head .mep-save{
+  width:36px!important;
+  min-width:36px!important;
+  height:36px!important;
+  min-height:36px!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:#fff!important;
+  color:#222!important;
+  display:grid!important;
+  place-items:center!important;
+}
+.shell .model-edit-page .mep-head .mep-close{
+  width:36px!important;
+  min-width:36px!important;
+  height:36px!important;
+  min-height:36px!important;
+  padding:0!important;
+  border:0!important;
+  background:#fff!important;
+  display:grid!important;
+  place-items:center!important;
+}
+
+/* 供应商模型左侧图标：只约束裁剪窗口，不再强行压缩整张 sprite 图片。 */
+.shell .vendor-model-brand{
+  flex:0 0 24px!important;
+  width:24px!important;
+  height:24px!important;
+  min-width:24px!important;
+  display:grid!important;
+  place-items:center!important;
+  background:#fff!important;
+}
+.shell .vendor-model-brand .ui-icon-image{
+  width:16px!important;
+  height:16px!important;
+}
+.shell .vendor-model-brand .ui-icon-image>img{
+  max-width:none!important;
+  max-height:none!important;
+  width:auto!important;
+  height:16px!important;
+}
+.shell .vendor-model-card{
+  gap:7px!important;
+}
+.shell .vendor-model-card-main{
+  min-width:0!important;
+}
+
+/* 删除旧规则造成的额外左侧色块/底座感。 */
+.shell .vendor-model-brand.brand-gpt,
+.shell .vendor-model-brand.brand-claude,
+.shell .vendor-model-brand.brand-gemini,
+.shell .vendor-model-brand.brand-glm,
+.shell .vendor-model-brand.brand-ds,
+.shell .vendor-model-brand.brand-qwen,
+.shell .vendor-model-brand.brand-kimi,
+.shell .vendor-model-brand.brand-grok,
+.shell .vendor-model-brand.brand-other{
+  background:#fff!important;
+  border:0!important;
+  border-radius:0!important;
+}
