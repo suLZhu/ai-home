@@ -4084,22 +4084,25 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const query=modelQuery.trim().toLowerCase()
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
+  const [showHidden,setShowHidden]=useState(false)
   const isList=!showNew&&!showDefault&&!showCatalog&&!showKeyManager&&!active
   return <div className="vendor-center">
     {isList&&<>
       <div className="vendor-kelivo-list-head">
         <b>供应商</b>
-        <div className="vendor-kelivo-head-actions">          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><span aria-hidden="true">＋</span><em>添加</em></button>
+        <div className="vendor-kelivo-head-actions">
+          <button type="button" className="vendor-head-tab" onClick={()=>onSection('vendor:account')}>订阅账号</button>
+          <button type="button" className="vendor-head-add" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}>＋ 添加</button>
+          <button type="button" className={'vendor-head-hide'+(showHidden?' on':'')} aria-pressed={showHidden} onClick={()=>setShowHidden(v=>!v)}>隐藏</button>
         </div>
       </div>
       <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
-      {(()=>{const def=modelProfiles.find(p=>p.id===defaultModelId);return <button type="button" className="vendor-default-row" onClick={()=>onSection('vendor:default')}><span aria-hidden="true">★</span><b>默认模型</b><small>{def?def.name:'未设置'}</small><span className="vendor-kelivo-provider-caret">›</span></button>})()}
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
         {(()=>{
           const q=vendorQuery.trim().toLowerCase()
           const match=(v:Vendor)=>!q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)
-          const visibleVendors=vendors.filter(match).filter(v=>!v.hidden)
-          const hiddenVendors=vendors.filter(match).filter(v=>v.hidden)
+          const visibleVendors=showHidden?[]:vendors.filter(match).filter(v=>!v.hidden)
+          const hiddenVendors=showHidden?vendors.filter(match).filter(v=>v.hidden):[]
           const map=new Map<string,Vendor[]>()
           for(const v of visibleVendors){const key=v.group||'';if(!map.has(key))map.set(key,[]);map.get(key)!.push(v)}
           const entries=[...map.entries()].sort((a,b)=>!a[0]?1:!b[0]?-1:0)
@@ -4130,9 +4133,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             </button>
           }
           return <>
-            {hiddenVendors.length>0&&<div className="vendor-kelivo-provider-group vendor-hidden-group">
-              <button type="button" className="vendor-kelivo-provider-group-head" aria-expanded={providerGroupOpen._hidden!==true} onClick={()=>setProviderGroupOpen(v=>({...v,_hidden:v._hidden!==true}))}><span>{providerGroupOpen._hidden!==true?'⌄':'›'}</span><b>隐藏</b><small>{hiddenVendors.length}</small></button>
-              {providerGroupOpen._hidden!==true&&hiddenVendors.map(row)}
+            {showHidden&&<div className="vendor-kelivo-provider-group vendor-hidden-group">
+              {hiddenVendors.length===0?<p className="muted vendor-kelivo-empty-hint">还没有隐藏的供应商。进入某家供应商详情，打开「隐藏」后就会出现在这里。</p>:hiddenVendors.map(row)}
             </div>}
             {entries.map(([group,list])=>{
               const key=group||'_ungrouped'
@@ -4169,11 +4171,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         }}>确定</button>
         <button type="button" onClick={()=>setGroupPrompt(false)}>取消</button>
       </div>}
-      <div className="vendor-kelivo-extra">
-        <button type="button" onClick={()=>onSection('vendor:default')}><span aria-hidden="true">★</span><b>默认模型</b><em>{(()=>{const p=modelProfiles.find(x=>x.id===defaultModelId);return p?(p.name||p.model):'未设置'})()}</em><i aria-hidden="true">›</i></button>
-        <button type="button" onClick={()=>onSection('vendor:account')}><span aria-hidden="true">☁</span><b>订阅账号</b><i aria-hidden="true">›</i></button>
-        <button type="button" onClick={()=>setSortMode(v=>!v)}><span aria-hidden="true">⇅</span><b>排序</b><em>{sortMode?'进行中':'调整分组内顺序'}</em><i aria-hidden="true">›</i></button>
-      </div>
+
     </>}
 
     {showCatalog&&<ModelCatalogPage vendors={vendors} onBack={backToList} onOpenVendor={id=>{setTab('model');openVendorPage(id)}}/>}
