@@ -25,7 +25,7 @@ import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, t
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, type IconComponent } from './icons'
+import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, type IconComponent } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
@@ -2115,12 +2115,12 @@ export default function App() {
     })()}
     {sidebarOpen&&<button type="button" className="sidebar-scrim" aria-label="关闭侧边栏" onClick={()=>setSidebarOpen(false)}/>}
     <aside className={"app-sidebar"+(sidebarOpen?' sidebar-open':'')} aria-hidden={!sidebarOpen}>
-      <div className="sidebar-brand"><div className="sidebar-logo">✿</div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}>×</button></div>
+      <div className="sidebar-brand"><div className="sidebar-logo"><IconFlower size={17}/></div><div><b>侧边栏</b><small>HISTORY &amp; TOOLS</small></div><button className="sidebar-close" aria-label="收起侧边栏" onClick={()=>setSidebarOpen(false)}><IconClose size={15}/></button></div>
       <div className="sidebar-scroll">
         <section className="sidebar-section sidebar-nav">
           <button type="button" className={'sidebar-nav-row'+(page==='home'?' active':'')} onClick={()=>{setSidebarOpen(false);navigate('home')}}><IconHome size={16}/><b>主页</b><small>概览 / 未读</small></button>
           <button type="button" className={'sidebar-nav-row'+(page==='room'?' active':'')} onClick={()=>{setSidebarOpen(false);setPage('room');setActiveTool('');setChatOpen(false)}}><IconChat size={16}/><b>房间</b><small>聊天与工具</small></button>
-          <button type="button" className="sidebar-nav-row" onClick={()=>{setSidebarOpen(false);setPage('room');setChatOpen(false);setActiveTool('记忆面板')}}><span aria-hidden="true">◉</span><b>记忆库</b><small>{displayName(person)}</small></button>
+          <button type="button" className="sidebar-nav-row" onClick={()=>{setSidebarOpen(false);setPage('room');setChatOpen(false);setActiveTool('记忆面板')}}><span aria-hidden="true"><IconMemory size={17}/></span><b>记忆库</b><small>{displayName(person)}</small></button>
         </section>
         <section className="sidebar-section sidebar-combined">
           <div className="sidebar-combined-card">
@@ -2131,12 +2131,12 @@ export default function App() {
                   {drawerRenameId===c.id
                     ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
                     : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
-                  <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}>✎</button>
-                  <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>void drawerDelete(c.id)}>×</button>
+                  <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}><IconEdit size={14}/></button>
+                  <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>void drawerDelete(c.id)}><IconClose size={15}/></button>
                 </div>
               ))}
             </div>
-            <button type="button" className="sidebar-conv-new" onClick={drawerCreate}>＋ 新建对话</button>
+            <button type="button" className="sidebar-conv-new" onClick={drawerCreate}><IconPlus className="ui-icon-inline" size={14}/> 新建对话</button>
             <div className="sidebar-combined-sep" aria-hidden="true"/>
             <div className="sidebar-combined-head"><b>助手工具</b><small>{displayName(person)}</small></div>
             <div className="sidebar-assistant-card">
@@ -2150,7 +2150,7 @@ export default function App() {
         <button type="button" className="sidebar-settings" onClick={()=>{pageBeforeSettings.current=page;setSidebarOpen(false);navigate('settings')}}><IconSettings size={16}/><b>设置</b></button>
       <div className="sidebar-footer"><span className="sidebar-status-dot"/><span>小家 · 侧边栏{inbox.filter(m=>!m.read_at).length?' · 未读 ' + inbox.filter(m=>!m.read_at).length:''}</span></div>
     </aside>
-    {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b>💌 {displayName(toast.person)} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}>×</button></div>})()}
+    {toast&&(()=>{const env=toast.kind==='task_result'?parseTaskEnvelope(toast.content):null;return <div className="inbox-toast" role="status"><button type="button" className="inbox-toast-main" onClick={()=>openInboxMessage(toast)}><b><IconMail className="ui-icon-inline" size={14}/> {displayName(toast.person)} · {env?'定时任务结果':toast.kind==='test'?'通知测试':'新消息'}</b><span>{env?env.answer||'（任务已完成，无文字总结）':toast.content}</span><small>{env?'点击查看结果会话':'点击打开聊天'}</small></button><button type="button" aria-label="收起消息" className="inbox-toast-dismiss" onClick={()=>setToast(null)}><IconClose size={15}/></button></div>})()}
     <section className="screen">
       {page === 'home' && <Home onPerson={openPerson} onOpenMemory={(target) => openToolFor(target, '记忆面板')} onOpenCalendar={() => openToolFor(person, '工作流')} time={time} today={todayLabel} displayName={displayName} characters={characters} conversations={conversations} inbox={inbox} />}
       {page === 'room' && <Room person={person} setPerson={setPerson} displayName={displayName} roomName={roomName} chatOpen={chatOpen} setChatOpen={setChatOpen} assistants={assistants} setAssistants={setAssistants}
@@ -2549,7 +2549,7 @@ function AssistantProfile(p: any) {
   }
   return <div className="assistant-profile">
     <div className="ap-head">
-      <button type="button" className="ap-avatar ap-avatar-button" title="更换当前助手的头像" aria-label="更换当前助手的头像" onClick={()=>fileRef.current?.click()}><img src={card.avatar||DEFAULT_AVATAR} alt=""/><span className="ap-avatar-pen" aria-hidden="true">✎</span></button>
+      <button type="button" className="ap-avatar ap-avatar-button" title="更换当前助手的头像" aria-label="更换当前助手的头像" onClick={()=>fileRef.current?.click()}><img src={card.avatar||DEFAULT_AVATAR} alt=""/><span className="ap-avatar-pen" aria-hidden="true"><IconEdit size={12}/></span></button>
       <div className="ap-head-text"><input className="ap-name-input" aria-label="助手名称" title="直接改助手名称" maxLength={32} value={nameDraft} onChange={e=>rename(e.target.value)} onBlur={()=>{if(!nameDraft.trim())setNameDraft(String(p.displayName(person)||''))}}/><small>名称可直接修改 · 点头像换头像</small></div>
     </div>
     <div className="ap-avatar-bar"><button type="button" onClick={()=>fileRef.current?.click()}>更换头像</button>{!!card.avatar&&<button type="button" onClick={resetAvatar}>恢复默认</button>}<small>只改当前助手，另一位不受影响</small></div>
@@ -2772,7 +2772,7 @@ function MCPSettings({person,personLabel}:{person:Person;personLabel?:(p:Person)
     {error&&<p className="mcp-error">{error}</p>}{notice&&<p className="mcp-notice">{notice}</p>}
     {connections.length===0&&<p className="muted">还没有为{person}绑定 MCP 服务。</p>}
     {connections.map(c=><section className="mcp-connection-card" key={c.id}><div className="mcp-connection"><div className="mcp-connection-info"><b>{c.name}</b><small>{c.url}</small><span>绑定人物：{personLabel?personLabel(c.person):c.person} · {c.transport==='httpStream'?'Streamable HTTP':'其他'}</span></div><button type="button" className="mcp-action" disabled={busy} onClick={()=>loadTools(c)}>连接 / 获取工具</button><button type="button" className="mcp-remove" onClick={()=>remove(c)}>移除</button></div>
-      {(tools[c.id]||[]).length>0&&<button type="button" className="mcp-tools-toggle" aria-expanded={!!expandedTools[c.id]} onClick={()=>setExpandedTools(old=>({...old,[c.id]:!old[c.id]}))}><span>{expandedTools[c.id]?'收起工具列表':'展开工具列表'}</span><span className="mcp-tools-count">{tools[c.id].length} 个工具</span><span className="mcp-tools-chevron">{expandedTools[c.id]?'−':'＋'}</span></button>}
+      {(tools[c.id]||[]).length>0&&<button type="button" className="mcp-tools-toggle" aria-expanded={!!expandedTools[c.id]} onClick={()=>setExpandedTools(old=>({...old,[c.id]:!old[c.id]}))}><span>{expandedTools[c.id]?'收起工具列表':'展开工具列表'}</span><span className="mcp-tools-count">{tools[c.id].length} 个工具</span><span className="mcp-tools-chevron">{expandedTools[c.id]?<IconChevronUp size={14}/>:<IconChevronDown size={14}/>}</span></button>}
       {expandedTools[c.id]&&(tools[c.id]||[]).map(t=><div className="mcp-tool" key={t.name}><b>{t.name}</b>{t.description&&<p>{t.description}</p>}<label>调用参数（JSON）<textarea value={args[c.id+':'+t.name]??'{}'} onChange={e=>setArgs(old=>({...old,[c.id+':'+t.name]:e.target.value}))} rows={3}/></label><button type="button" className="mcp-action" disabled={busy} onClick={()=>callTool(c,t)}>调用工具</button>{results[c.id+':'+t.name]&&<pre>{results[c.id+':'+t.name]}</pre>}</div>)}
     </section>)}
     <form className="mcp-add-form" onSubmit={add}><h4>添加远程 MCP</h4><label>服务名称<input value={name} onChange={e=>setName(e.target.value)} placeholder="例如：huayuan-小晏" required/></label><label>主机地址<input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/mcp" type="url" required/></label><label>Token（可选）<input value={token} onChange={e=>setToken(e.target.value)} type="text" style={{WebkitTextSecurity:"disc"} as any} autoComplete="new-password" placeholder="在这里粘贴新生成的 Token"/></label><button type="submit" disabled={busy}>{busy?'请稍候…':'安全保存并绑定到'+person}</button></form><small>连接使用 HTTPS；保存后点击“连接 / 获取工具”验证服务。实际工具执行前会再次检查当前人物绑定。只支持 Streamable HTTP，不支持旧式 SSE 或 stdio。</small></div>
@@ -2857,7 +2857,7 @@ function MessageToolCalls({messageId}:{messageId:string}) {
     <button type="button" className="msg-tool-calls-head" aria-expanded={open} onClick={()=>setOpen(v=>!v)}>
       <span className="msg-tool-calls-icon" aria-hidden="true">{group.icon}</span>
       <b>工具调用（{group.total}）</b><small>{group.active?'执行中':group.failed?`${group.failed} 次失败`:'已完成'}</small>
-      <span className="msg-tool-calls-chevron">{open?'收起':'›'}</span>
+      <span className="msg-tool-calls-chevron">{open?'收起':<IconChevronRight size={13}/>}</span>
     </button>
     {open&&<ul className="msg-tool-calls-list">{group.items.map(c=><li key={c.key} className={'msg-tool-call status-'+c.status}>
       <div className="msg-tool-call-top"><b>{c.status==='succeeded'?'✓ ':['failed','timed_out','cancelled'].includes(c.status)?'× ':'↻ '}{c.label}</b><span className={'msg-tool-outcome '+c.status}>{c.outcome}</span>{c.durationMs!=null&&<small>{formatDuration(c.durationMs)}</small>}</div>
@@ -3450,7 +3450,7 @@ function Chat(p: any) {
               onClick={e=>bubbleClick(e,m)}
               onPointerDown={e=>bubblePointerDown(e,m)} onPointerUp={bubblePointerEnd} onPointerLeave={bubblePointerEnd} onPointerCancel={bubblePointerEnd} onPointerMove={bubblePointerEnd}>
           {chatDisplay.showReasoning&&shownReasoning?<details className="reasoning" onToggle={e=>{if(e.currentTarget.open&&chatDisplay.autoTranslateReasoning&&needsChineseTranslation(shownReasoning)&&m.id&&!translations[m.id]&&!translatingId)void doTranslate(m)}}>
-              <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{chatDisplay.showReasoningDuration&&m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true">›</span></summary>
+              <summary>{(p.sending&&isLast&&!shownContent)?'思考中……':'思考过程'}{chatDisplay.showReasoningDuration&&m.usage?.elapsedMs!==undefined?' · '+formatDuration(m.usage.elapsedMs):''}<span className="fold-chevron" aria-hidden="true"><IconChevronRight size={13}/></span></summary>
               <div className="reasoning-body">
                 <div className="reasoning-original">{shownReasoning}</div>
                 {needsChineseTranslation(shownReasoning)&&m.id&&<div className="reasoning-translate">
@@ -3461,7 +3461,7 @@ function Chat(p: any) {
             </details>:null}
           {m.role==='assistant'&&shownContent
             ? <RichText text={shownContent}/>
-            : (shownContent || (p.sending&&isLast?'正在思考……':''))}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><span aria-hidden="true">⚠</span> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span>▤</span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+            : (shownContent || (p.sending&&isLast?'正在思考……':''))}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><IconWarning size={14}/> {a.preview?'图片已失效':'🖼 '+a.name}</span>}</div>:<div className="sent-file"><span><IconFile size={18}/></span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
           {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
         </div>
           </>}
@@ -3488,11 +3488,11 @@ function Chat(p: any) {
   }
   return <div className="fullscreen-chat">
     {/* 全面屏顶栏：不铺返回/会话控件。历史会话从左侧抽屉点选，返回房间走系统返回手势或抽屉底部入口。 */}
-    <header className="chat-header chat-header-simple"><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}>＋</button><button type="button" className="btn-icon" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}>⇄</button></span></header>
-    {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}>↑</button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}>↓</button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
+    <header className="chat-header chat-header-simple"><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}><IconPlus size={16}/></button><button type="button" className="btn-icon" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}><IconSwitch size={16}/></button></span></header>
+    {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}><IconArrowUp size={15}/></button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}><IconArrowDown size={15}/></button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}
-    {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}>×</button></div>}
+    {p.chatError&&<div className="chat-error"><span>{p.chatError}</span><button onClick={()=>p.setChatError('')}><IconClose size={15}/></button></div>}
     <ToolCallLiveBar conversationId={p.activeConversationIds?.[chatPerson]||''}/>
     <div className="chat-body" ref={chatBodyRef}>
       {summaryConversation?.summary&&<button type="button" className="chat-summary-chip" onClick={()=>setSummaryOpen(true)}>前情 · 已压缩 {summaryConversation.summaryThrough||''} 条</button>}
@@ -3501,13 +3501,13 @@ function Chat(p: any) {
     <div className="chat-scroll-indicator" ref={scrollIndicatorRef} aria-hidden="true"/>
     {summaryOpen&&summaryConversation?.summary&&<div className="chat-summary-modal" role="presentation" onClick={()=>setSummaryOpen(false)}>
       <div className="chat-summary-card" role="dialog" aria-modal="true" aria-label="前情提要" onClick={e=>e.stopPropagation()}>
-        <header><b>前情提要</b><button type="button" onClick={()=>setSummaryOpen(false)} aria-label="关闭">×</button></header>
+        <header><b>前情提要</b><button type="button" onClick={()=>setSummaryOpen(false)} aria-label="关闭"><IconClose size={15}/></button></header>
         <div className="chat-summary-text">{summaryConversation.summary}</div>
         <small>原文仍完整保留；需要细节时助手可以用 conversation_search 回顾。</small>
       </div>
     </div>}
-    {!atBottom&&<button type="button" className="chat-jump-bottom" onClick={pinToLatest} aria-label="回到最新消息" title="回到最新">↓</button>}
-    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon">▤</span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}>×</button></div>)}</div>}
+    {!atBottom&&<button type="button" className="chat-jump-bottom" onClick={pinToLatest} aria-label="回到最新消息" title="回到最新"><IconArrowDown size={16}/></button>}
+    {files.length>0&&!selectMode&&<div className="attachment-tray">{files.map((a,i)=><div className="attachment-chip" key={i}>{a.type.startsWith('image/')?<img src={assetUrl(a.preview||a.dataUrl)} alt={a.name}/>:<span className="file-chip-icon"><IconFile size={18}/></span>}<span title={a.name}>{a.name}</span><button type="button" aria-label="移除附件" onClick={()=>removePendingFile(i)}><IconClose size={15}/></button></div>)}</div>}
     {emojiOpen&&<div className="emoji-panel emoji-wechat" aria-label="表情选择"><div className="emoji-body">{emojiTab==='search'&&<><div className="emoji-search-row"><input autoFocus value={emojiQuery} onChange={e=>setEmojiQuery(e.target.value)} placeholder="搜索表情：笑 / 哭 / 心 / 加油…" aria-label="搜索表情"/>{emojiQuery&&<button type="button" onClick={()=>setEmojiQuery('')}>清除</button>}</div>{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).length?<div className="emoji-grid">{STICKERS.filter(e=>matchEmoji(e,emojiQuery.trim())).map((e,i)=><button type="button" key={'s'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">没有找到匹配的表情，换个关键词试试。</p>}</>}{emojiTab==='emoji'&&<>{recentEmojis.length>0&&<div className="emoji-section"><h4>最近使用</h4><div className="emoji-grid">{recentEmojis.map((e,i)=><button type="button" key={'r'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div>}<div className="emoji-section"><h4>所有表情</h4><div className="emoji-grid">{STICKERS.map((e,i)=><button type="button" key={'a'+i} onClick={()=>pickEmoji(e)}>{e}</button>)}</div></div></>}{emojiTab==='fav'&&<div className="emoji-section"><h4>图片表情包</h4>{imageStickers.length?<div className="emoji-grid sticker-grid">{imageStickers.map((u,i)=><button type="button" key={'k'+i} title="点击发送这张表情包" onClick={()=>sendImageSticker(u)}><img className="sticker-thumb" src={u} alt=""/></button>)}</div>:<p className="emoji-empty">还没有图片表情包，可以上传图片，或粘贴图床直链。</p>}<div className="sticker-actions"><button type="button" onClick={()=>stickerInput.current?.click()}>🖼 上传表情包</button><button type="button" disabled={!imageStickers.length} onClick={()=>{void confirmDialog({ title:'清空图片表情包', message:'清空全部图片表情包？', confirmLabel:'清空', danger:true }).then(ok=>{if(ok){setImageStickers([]);localStorage.setItem('ai-home.imageStickers','[]')}})}}>清空图片</button><input ref={stickerInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>{void addImageStickers(e.target.files)}}/></div><div className="sticker-link-add"><input value={stickerLink} onChange={e=>{setStickerLink(e.target.value);setStickerLinkError('')}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addImageStickerLink()}}} placeholder="粘贴图床直链，如 https://.../cat.png" aria-label="图片表情链接"/><button type="button" disabled={!stickerLink.trim()} onClick={addImageStickerLink}>添加链接</button></div>{stickerLinkError&&<p className="emoji-empty">{stickerLinkError}</p>}<h4>文字表情</h4>{customEmojis.length?<div className="emoji-grid">{customEmojis.map((e,i)=><button type="button" key={'c'+i} title="点击插入" onClick={()=>pickEmoji(e)}>{e}</button>)}</div>:<p className="emoji-empty">还没有文字表情，输入文字或符号后点「添加」。</p>}<div className="custom-emoji-add"><input value={newCustom} maxLength={24} onChange={e=>setNewCustom(e.target.value)} placeholder="输入文字或符号" aria-label="新自定义表情"/><button type="button" disabled={!newCustom.trim()} onClick={()=>{const v=newCustom.trim();if(!v)return;const next=[...customEmojis.filter(x=>x!==v),v].slice(0,40);setCustomEmojis(next);localStorage.setItem('ai-home.customEmojis',JSON.stringify(next));setNewCustom('')}}>添加</button><button type="button" className="custom-emoji-clear" disabled={!customEmojis.length} onClick={()=>{setCustomEmojis([]);localStorage.setItem('ai-home.customEmojis','[]')}}>清空</button></div></div>}</div><div className="emoji-tabs"><button type="button" aria-label="搜索表情" title="搜索表情" className={emojiTab==='search'?'active':''} onClick={()=>setEmojiTab(emojiTab==='search'?'emoji':'search')}>🔍</button><button type="button" aria-label="表情" title="表情" className={emojiTab==='emoji'?'active':''} onClick={()=>setEmojiTab('emoji')}>☺</button><button type="button" aria-label="自定义表情" title="自定义表情" className={emojiTab==='fav'?'active':''} onClick={()=>setEmojiTab('fav')}>♥</button></div></div>}
     {pendingForScope&&<div className="pending-card" role="status">
       <div className="pending-card-head">
@@ -3532,7 +3532,7 @@ function Chat(p: any) {
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}>×</button></div>
+      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}>⚙</button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}><IconClose size={15}/></button></div>
       <div className="compose-tray-body">
         {tray==='bind'&&<>
           <div className="tray-section">
@@ -3582,7 +3582,7 @@ function Chat(p: any) {
       </div>}
       {statsOpen&&<div className="request-stats-modal" role="presentation" onClick={()=>setStatsOpen(false)}>
         <div className="request-stats-card" role="dialog" aria-modal="true" aria-label="最近的请求" onClick={e=>e.stopPropagation()}>
-          <header><b>最近的请求</b><button type="button" onClick={()=>setStatsOpen(false)} aria-label="关闭">×</button></header>
+          <header><b>最近的请求</b><button type="button" onClick={()=>setStatsOpen(false)} aria-label="关闭"><IconClose size={15}/></button></header>
           <RequestStats messages={currentMessages}/>
         </div>
       </div>}
@@ -3594,7 +3594,7 @@ function Chat(p: any) {
       <input ref={imageInput} className="hidden-file-input" type="file" accept="image/*" multiple onChange={e=>loadFiles(e.target.files,true)}/>
       <input ref={fileInput} className="hidden-file-input" type="file" multiple onChange={e=>loadFiles(e.target.files)}/>
     </form>}
-    {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}>×</button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
+    {lightbox&&<div className="image-lightbox" role="dialog" aria-modal="true" aria-label={lightbox.name} onClick={()=>setLightbox(null)}><button type="button" className="lightbox-close" aria-label="关闭图片预览" onClick={()=>setLightbox(null)}><IconClose size={15}/></button><img src={assetUrl(lightbox.src)} alt={lightbox.name} onClick={e=>e.stopPropagation()}/><div>{lightbox.name}</div></div>}
     {tray==='model'&&!selectMode&&<ModelPickerSheet profiles={p.modelProfiles||[]} activeId={quickBinding.modelProfileId} vendorKeys={vendorKeyOptions} binding={quickBinding} onPatchBinding={patchBinding} onPick={id=>{patchBinding({...quickBinding,modelProfileId:id});setTray('')}} onClose={closeModelSheet} subscriptionVendorIds={(p.vendors||[]).filter((v:Vendor)=>v.subscription).map((v:Vendor)=>v.id)} vendors={p.vendors||[]} routeState={p.routeState} setRouteState={p.setRouteState} lastRouteInfo={p.lastRouteInfo||''} person={chatPerson}/>}
     {bindOpen&&<ChatBindPanel person={chatPerson} displayName={p.displayName} worldEntries={p.worldEntries} setWorldEntries={p.setWorldEntries} bindings={p.bindings} setBindings={p.setBindings} onClose={()=>setBindOpen(false)}/>}
   </div>
@@ -3868,15 +3868,15 @@ function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
   return <section className="vendor-page">
     <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
     <div className="vendor-card open">
-      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true">📖</span><b>模型目录</b><span className="vendor-kelivo-provider-meta">{entries.length} 个模型</span></div>
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconBook size={16}/></span><b>模型目录</b><span className="vendor-kelivo-provider-meta">{entries.length} 个模型</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
-        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索模型目录" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}</div>
+        <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索模型目录" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}><IconClose size={15}/></button>}</div>
         <div className="vendor-kelivo-added">
           {filtered.length===0&&<div className="vendor-kelivo-empty"><b>{entries.length?'没有匹配的模型':'还没有模型'}</b><small>{entries.length?'换个关键词试试':'到某家供应商的「模型」里添加'}</small></div>}
           {[...groups.entries()].map(([key,g])=>{
             const collapsed=closed[key]===true
             return <div className="vendor-kelivo-added-group" key={key}>
-              <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={!collapsed} onClick={()=>setClosed(v=>({...v,[key]:!collapsed}))}><span>{collapsed?'›':'⌄'}</span><b>{g.label}</b><small>{g.items.length}</small></button>
+              <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={!collapsed} onClick={()=>setClosed(v=>({...v,[key]:!collapsed}))}><span >{collapsed?<IconChevronRight size={13}/>:<IconChevronDown size={13}/>}</span><b>{g.label}</b><small>{g.items.length}</small></button>
               {!collapsed&&g.items.map(e=>{
                 const brand=brandOf(e.modelId)
                 return <div className="catalog-row" role="button" tabIndex={0} key={e.vendorId+':'+e.modelId}
@@ -3922,7 +3922,7 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
       <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true">★</span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
         <p className="resource-hint">助手没有单独选模型时，聊天用这个兜底；助手自己选过的，仍以助手的为准。</p>
-        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索默认模型" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>}</div>
+        <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索默认模型" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}><IconClose size={15}/></button>}</div>
         <div className="vendor-kelivo-added">
           {rows.length===0&&<div className="vendor-kelivo-empty"><b>还没有可用模型</b><small>到「供应商 → 模型」里勾选模型后再回来</small></div>}
           {[...groups.entries()].map(([vendorId,group])=><div className="vendor-kelivo-added-group" key={vendorId}>
@@ -4227,11 +4227,11 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <button type="button" className="vendor-head-title" onClick={()=>onSection('vendor:account')}>订阅账号</button>
         </div>
         <div className="vendor-kelivo-head-actions">
-          <button type="button" className="vendor-head-add" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}>＋ 添加</button>
+          <button type="button" className="vendor-head-add" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><IconPlus className="ui-icon-inline" size={14}/> 添加</button>
           <button type="button" className={'vendor-head-hide'+(showHidden?' on':'')} aria-pressed={showHidden} onClick={()=>setShowHidden(v=>!v)}>隐藏</button>
         </div>
       </div>
-      <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
+      <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}><IconClose size={15}/></button>}</div>
       <div className="vendor-kelivo-provider-list" aria-label="供应商列表">
         {(()=>{
           const q=vendorQuery.trim().toLowerCase()
@@ -4264,7 +4264,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
               <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
               <span className={'vendor-kelivo-provider-status '+status[1]}>{status[0]}</span>
-              <span className="vendor-kelivo-provider-caret">›</span>
+              <span className="vendor-kelivo-provider-caret"><IconChevronRight size={14}/></span>
             </button>
           }
           return <>
@@ -4275,11 +4275,11 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               const key=group||'_ungrouped'
               const collapsed=providerGroupOpen[key]===true
               return <div className="vendor-kelivo-provider-group" key={key}>
-                {!!group&&<button type="button" className="vendor-kelivo-provider-group-head" aria-expanded={!collapsed} onClick={()=>setProviderGroupOpen(v=>({...v,[key]:!collapsed}))}><span>{collapsed?'›':'⌄'}</span><b>{group}</b><small>{list.length}</small></button>}
+                {!!group&&<button type="button" className="vendor-kelivo-provider-group-head" aria-expanded={!collapsed} onClick={()=>setProviderGroupOpen(v=>({...v,[key]:!collapsed}))}><span >{collapsed?<IconChevronRight size={13}/>:<IconChevronDown size={13}/>}</span><b>{group}</b><small>{list.length}</small></button>}
                 {!collapsed&&list.map(row)}
               </div>
             })}
-            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b></span><span className="vendor-kelivo-provider-caret">›</span></button>
+            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b></span><span className="vendor-kelivo-provider-caret"><IconChevronRight size={14}/></span></button>
           </>
         })()}
       </div>
@@ -4316,7 +4316,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
 
     {showKeyManager&&active&&<section className="vendor-page vendor-key-manager-page">
       <header className="vendor-kelivo-page-head">
-        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商配置" onClick={backToDetail}>‹</button>
+        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商配置" onClick={backToDetail}><IconBack size={18}/></button>
         <span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span>
         <div className="vendor-kelivo-page-title"><b>多 Key 管理</b><small>{active.name} · 备用优先，主号兜底</small></div>
       </header>
@@ -4334,8 +4334,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           </div>
           <div className="key-input-row vendor-managed-key-input">
             <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="API Key"/>
-            <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
-            <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
+            <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button>
+            <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}><IconClose size={15}/></button>
           </div>
         </div>)}
       </div>
@@ -4347,9 +4347,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         </div>
         <div className="key-input-row vendor-managed-key-input">
           <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
-          <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
+          <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button>
         </div>
-        <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
+        <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}><IconPlus className="ui-icon-inline" size={14}/> 添加 Key</button>
         <small>Key 只保存在本机配置中；输入框使用普通文本键盘，不启用密码/安全键盘。</small>
       </form>
     </section>}
@@ -4357,7 +4357,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {importOpen&&<div className="vendor-kelivo-sheet-overlay" role="presentation" onClick={()=>setImportOpen(false)}>
       <section className="vendor-kelivo-sheet vendor-import-sheet" role="dialog" aria-modal="true" aria-label="导入供应商" onClick={e=>e.stopPropagation()}>
         <div className="vendor-kelivo-sheet-grip"/>
-        <header className="vendor-import-head"><b>导入供应商</b><button type="button" aria-label="关闭导入" onClick={()=>setImportOpen(false)}>×</button></header>
+        <header className="vendor-import-head"><b>导入供应商</b><button type="button" aria-label="关闭导入" onClick={()=>setImportOpen(false)}><IconClose size={15}/></button></header>
         <p className="vendor-import-hint">粘贴 Kelivo 导出的模型配置 JSON：数组，每项含 name / apiEndpoint / apiKey / modelName。只迁移地址、Key 与模型名。</p>
         <textarea className="vendor-import-text" aria-label="Kelivo 配置 JSON" placeholder='[{"name":"Aeon AI","apiEndpoint":"https://…/v1","apiKey":"sk-…","modelName":"gpt-5.6,glm-5.2"}]' value={importText} onChange={e=>setImportText(e.target.value)}/>
         {!!importMsg&&<p className="vendor-import-msg" role="status">{importMsg}</p>}
@@ -4379,7 +4379,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {showNew&&<div className="vendor-kelivo-sheet-overlay vendor-add-overlay" role="presentation" onClick={backToList}>
       <section className="vendor-kelivo-sheet vendor-add-sheet" role="dialog" aria-modal="true" aria-label="添加供应商" onClick={e=>e.stopPropagation()}>
         <div className="vendor-kelivo-sheet-grip"/>
-        <header className="vendor-add-head"><button type="button" aria-label="关闭" onClick={backToList}>×</button><b>添加供应商</b><span aria-hidden="true"/></header>
+        <header className="vendor-add-head"><button type="button" aria-label="关闭" onClick={backToList}><IconClose size={15}/></button><b>添加供应商</b><span aria-hidden="true"/></header>
         <div className="vendor-add-tabs" role="tablist" aria-label="供应商类型">
           {([['openai','OpenAI'],['google','Google'],['claude','Claude'],['account','账号登录']] as const).map(([id,label])=>(
             <button type="button" key={id} role="tab" aria-selected={addTab===id} className={addTab===id?'active':''} onClick={()=>{
@@ -4401,22 +4401,22 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <p className="vendor-url-hint">请求地址 <b>{requestUrlPreview||'填写 Base URL 后显示'}</b></p>
           <label className="vendor-field">API 路径<input aria-label="API 路径" value={newApiPath} onChange={e=>setNewApiPath(e.target.value)} placeholder={DEFAULT_API_PATH}/></label>
           <label className="vendor-multi-toggle"><input type="checkbox" checked={newMultiKey} onChange={e=>{setNewMultiKey(e.target.checked);if(e.target.checked&&newExtraKeys.length===0)setNewExtraKeys([{id:crypto.randomUUID(),label:'',value:'',visible:false}])}}/> 启用多 Key 模式</label>
-          {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type="text" inputMode="text" style={{WebkitTextSecurity:k.visible?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))}>{k.visible?'🙈':'👁'}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}>×</button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}>＋</button></div>}
-          <button type="submit" className="vendor-submit">＋ 添加</button>
+          {newMultiKey&&<div className="vendor-new-keys">{newExtraKeys.map((k,i)=><div className="vendor-new-key" key={k.id}><input aria-label={'备用 Key '+(i+1)+' 备注'} value={k.label} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,label:e.target.value}:x))} placeholder="备注"/><input aria-label={'备用 API Key '+(i+1)} type="text" inputMode="text" style={{WebkitTextSecurity:k.visible?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,value:e.target.value}:x))} placeholder="API Key"/><button type="button" aria-label={k.visible?'隐藏 Key':'显示 Key'} onClick={()=>setNewExtraKeys(a=>a.map(x=>x.id===k.id?{...x,visible:!x.visible}:x))} >{k.visible?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button><button type="button" aria-label="删除备用 Key" onClick={()=>setNewExtraKeys(a=>a.filter(x=>x.id!==k.id))}><IconClose size={15}/></button></div>)}<button type="button" className="vendor-add-key" aria-label="添加一把 Key" onClick={()=>setNewExtraKeys(a=>[...a,{id:crypto.randomUUID(),label:'',value:'',visible:false}])}><IconPlus size={15}/></button></div>}
+          <button type="submit" className="vendor-submit"><IconPlus className="ui-icon-inline" size={14}/> 添加</button>
         </form>}
       </section>
     </div>}
 
     {active&&!showKeyManager&&<section className="vendor-page">
       <header className={'vendor-kelivo-page-head'+(tab==='model'?' vendor-head-centered':'')}>
-        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商列表" onClick={backToList}>‹</button>
+        <button type="button" className="vendor-kelivo-back" aria-label="返回供应商列表" onClick={backToList}><IconBack size={18}/></button>
         <span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span>
         <b>{active.name}</b>
         <small className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</small>
         {tab==='config'&&<div className="vendor-kelivo-head-actions">
-          <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}>♥</button>
-          <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}>↗</button>
-          {!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}>▤</button>}
+          <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}><IconTest size={16}/></button>
+          <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}><IconShare size={16}/></button>
+          {!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}><IconTrash size={16}/></button>}
         </div>}
       </header>
       <div className="vendor-card open" key={active.id}>
@@ -4438,8 +4438,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               </div>
               <div className="key-input-row vendor-managed-key-input">
                 <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="输入 API Key"/>
-                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
-                <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
+                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button>
+                <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}><IconClose size={15}/></button>
               </div>
             </div>)}
             <form className="vendor-key-add-card inline" onSubmit={e=>{e.preventDefault();addBackupKey()}}>
@@ -4450,12 +4450,12 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               </div>
               <div className="key-input-row vendor-managed-key-input">
                 <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
-                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
+                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button>
               </div>
               <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
             </form>
           </div>}
-          <button type="button" className="vendor-config-more-head" aria-expanded={showMore} onClick={()=>setShowMore(v=>!v)}>其他设置<span aria-hidden="true">{showMore?'⌃':'⌄'}</span></button>
+          <button type="button" className="vendor-config-more-head" aria-expanded={showMore} onClick={()=>setShowMore(v=>!v)}>其他设置<span aria-hidden="true" >{showMore?<IconChevronUp size={14}/>:<IconChevronDown size={14}/>}</span></button>
           {showMore&&<>
             <label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={!!active.responseApi} onChange={e=>patch(active.id,x=>({...x,responseApi:e.target.checked}))}/></label>
             <label className="vendor-config-info vendor-config-switch"><span>发送会话缓存键 <small>OpenAI prompt_cache_key</small></span><input type="checkbox" checked={!!active.promptCacheKey} onChange={e=>patch(active.id,x=>({...x,promptCacheKey:e.target.checked}))}/></label>
@@ -4469,7 +4469,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
           <datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist>
 
-          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
+          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
         </div>
@@ -4480,14 +4480,14 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <div className="vendor-kelivo-added">
           {pickedModels.length>0&&pickedModels.some(m=>m.hidden)&&<div className="vendor-kelivo-added-group vendor-hidden-models">
             <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen._hidden!==false} onClick={()=>setAddedGroupOpen(v=>({...v,_hidden:v._hidden!==false?false:true}))}>
-              <span>{addedGroupOpen._hidden!==false?'⌄':'›'}</span><b>隐藏模型</b><small>{pickedModels.filter(m=>m.hidden).length}</small>
+              <span >{addedGroupOpen._hidden!==false?<IconChevronDown size={13}/>:<IconChevronRight size={13}/>}</span><b>隐藏模型</b><small>{pickedModels.filter(m=>m.hidden).length}</small>
             </button>
             {addedGroupOpen._hidden!==false&&pickedModels.filter(m=>m.hidden).map(m=>{
               const spec=specForModel(active,m.id); const brand=brandOf(m.id)
               return <div className="vendor-kelivo-added-row hidden-model" key={m.id}>
                 <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
                 <button type="button" className="vendor-kelivo-model-label" onClick={()=>setSpecTarget(m.id)}><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></button>
-                <button type="button" className="vendor-model-hide on" aria-label="取消隐藏" onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:false}:x)}))}>🙈</button>
+                <button type="button" className="vendor-model-hide on" aria-label="取消隐藏" onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:false}:x)}))}><IconEyeOff size={14}/></button>
               </div>
             })}
           </div>}
@@ -4514,16 +4514,16 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           {modelSelectMode?<div className="vendor-kelivo-batchbar">
             <button type="button" onClick={()=>setBatchIds(batchIds.length===pickedModels.length?[]:pickedModels.map(m=>m.id))}>{batchIds.length===pickedModels.length&&pickedModels.length?'全不选':'全选'}</button>
             <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>{setModelSelectMode(false);void runCapTest(active,batchIds)}}>测试</button>
-            <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>🗑</button>
-            <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}>×</button>
+            <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}><IconTrash size={15}/></button>
+            <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}><IconClose size={15}/></button>
           </div>:<div className="vendor-kelivo-floating-actions">
             <button type="button" aria-label="获取模型列表" title="获取模型列表" onClick={()=>{setModelSheetQuery('');setModelSheetOpen(true);if(!remoteIds.length)void fetchRemote(active)}}>▧</button>
-            <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}>＋</button>
+            <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}><IconPlus size={15}/></button>
           </div>}
         </div>
         {capTest&&<div className="vendor-cap-layer" role="presentation" onClick={()=>setCapTest(null)}>
           <section className="vendor-cap-card" role="dialog" aria-label="模型测试" onClick={e=>e.stopPropagation()}>
-            <header className="vendor-cap-head"><b>模型测试</b><button type="button" aria-label="关闭测试" onClick={()=>setCapTest(null)}>×</button></header>
+            <header className="vendor-cap-head"><b>模型测试</b><button type="button" aria-label="关闭测试" onClick={()=>setCapTest(null)}><IconClose size={15}/></button></header>
             {capTest.models.map(id=>{
               const res=capTest.results[id]||{}
               const done=CAP_ROWS.every(([k])=>res[k]&&res[k]!.state!=='run')
@@ -4554,8 +4554,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             {listState.loading&&<p className="muted">正在读取「{active.name}」的模型…</p>}
             <div className="vendor-kelivo-sheet-items">
               {groupModelsByName([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
-                <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span>{sheetGroupOpen[g.id]?'›':'⌄'}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}>＋</span></button>
-                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)}>{added?'−':'＋'}</button></div>})}
+                <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span >{sheetGroupOpen[g.id]?<IconChevronRight size={13}/>:<IconChevronDown size={13}/>}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}><IconPlus size={14}/></span></button>
+                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)} >{added?<IconMinus size={14}/>:<IconPlus size={14}/>}</button></div>})}
               </div>)}
               {!listState.loading&&!remoteIds.length&&<div className="vendor-kelivo-empty"><b>尚未获取模型</b><small>点击右上角刷新，或关闭弹层后手动添加模型</small></div>}
             </div>
@@ -4621,7 +4621,7 @@ function ChatBindPanel({person,displayName,worldEntries,setWorldEntries,bindings
   },[onClose])
   return <div className="chat-config-backdrop" onClick={onClose}>
     <section className="chat-config-panel" role="dialog" aria-label="当前助手的世界书与 MCP" onClick={e=>e.stopPropagation()}>
-      <header className="chat-config-head"><div><b>{displayName(person)} · 世界书 / MCP</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭设置">×</button></header>
+      <header className="chat-config-head"><div><b>{displayName(person)} · 世界书 / MCP</b><small>只影响这位助手，改动会自动保存</small></div><button type="button" onClick={onClose} aria-label="关闭设置"><IconClose size={15}/></button></header>
       <div className="chat-config-body">
         <WorldMcpMatrix mode="bind" person={person} worldEntries={worldEntries} setWorldEntries={setWorldEntries} bindings={bindings} setBindings={setBindings}/>
       </div>
@@ -4806,7 +4806,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
           <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
         </form>
       </> : <>
-        <div className="mcp-list-head"><button type="button" className="worldbook-add-btn" onClick={() => { setMcpFormOpen(true); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}>＋ 添加 MCP 服务</button></div>
+        <div className="mcp-list-head"><button type="button" className="worldbook-add-btn" onClick={() => { setMcpFormOpen(true); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}><IconPlus className="ui-icon-inline" size={14}/> 添加 MCP 服务</button></div>
         <div className="mcp-tool-picker">
           {mcp.error && <p className="mcp-error">{mcp.error}</p>}
           {mcpGroups.length === 0 && <p className="muted mcp-empty">还没有 MCP 服务，点上面的按钮添加。</p>}
@@ -4819,8 +4819,8 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
               <span className="mcp-card-main"><b>{g.name}</b><small>{count === undefined ? '工具 —' : '工具 ' + count + '/' + count} · {host}</small></span>
               <span className={'mcp-card-status' + (status === 'ok' ? ' ok' : status === 'fail' ? ' bad' : '')}>{status === 'ok' ? '已连通' : status === 'fail' ? '未连通' : '未测试'}</span>
               <label className="mcp-card-enable"><span>{enabled ? '启用' : '停用'}</span><input type="checkbox" className="tray-switch mcp-card-switch" checked={enabled} aria-label={enabled ? '停用这个 MCP' : '启用这个 MCP'} onChange={(e) => void toggleGroupEnabled(g, e.target.checked)}/></label>
-              <button type="button" className="mcp-card-edit" aria-label={'编辑 ' + g.name} title="编辑" onClick={() => startEditMcp(g)}>✎</button>
-              <button type="button" className="mcp-card-delete" aria-label={'删除 ' + g.name} title="删除" onClick={() => void removeMcp(g)}>×</button>
+              <button type="button" className="mcp-card-edit" aria-label={'编辑 ' + g.name} title="编辑" onClick={() => startEditMcp(g)}><IconEdit size={14}/></button>
+              <button type="button" className="mcp-card-delete" aria-label={'删除 ' + g.name} title="删除" onClick={() => void removeMcp(g)}><IconClose size={15}/></button>
             </article>
           })}
         </div>
