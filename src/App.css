@@ -3718,3 +3718,52 @@ body.has-pack.pack-dark .settings-row{background:rgba(255,255,255,.04)!important
 body.has-pack.pack-dark .chat-header{background:rgba(20,18,16,.55)!important}
 body.has-pack.pack-dark .compose-box{background:rgba(20,18,16,.6)!important}
 body.has-pack.pack-dark .settings-heading h2{color:var(--ink,#f2ece1)!important}
+/* ── 全平铺：文字直接压在背景上，只用细线分隔，不再有卡片 ── */
+body.has-pack .shell .settings-screen .settings-flat-list .settings-row-list,
+body.has-pack .shell .settings-flat-list,
+body.has-pack .shell .settings-groups,
+body.has-pack .shell .setting-card,
+body.has-pack .shell .settings-inner-card,
+body.has-pack .shell .settings-row,
+body.has-pack .shell .home-person,
+body.has-pack .shell .home-today-row,
+body.has-pack .shell .vendor-kelivo-provider-row,
+body.has-pack .shell .vendor-model-card,
+body.has-pack .shell .usage-card,
+body.has-pack .shell .memory-auto,
+body.has-pack .shell .tool-dash-memory{
+  background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important
+}
+body.has-pack .shell .settings-screen .settings-flat-list .settings-row{
+  border-bottom:1px solid var(--line,#d7c4a9)!important;padding:13px 2px!important;margin:0!important
+}
+body.has-pack .shell .settings-screen .settings-flat-list .settings-row-list{gap:0!important}
+body.has-pack .shell .home-person,body.has-pack .shell .home-today-row{
+  border-bottom:1px solid var(--line,#d7c4a9)!important;padding:14px 4px!important
+}
+body.has-pack .shell .vendor-kelivo-provider-row{border-bottom:1px solid var(--line,#d7c4a9)!important;padding:12px 2px!important}
+/* 侧边栏不要蒙一层白：直接透出背景 */
+body.has-pack .shell .app-sidebar{background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;border-right:1px solid var(--line,#d7c4a9)!important}
+body.has-pack .shell .sidebar-nav-row,body.has-pack .shell .sidebar-combined-card{
+  background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important
+}
+body.has-pack .shell .sidebar-nav-row{border-bottom:1px solid var(--line,#d7c4a9)!important;padding:13px 4px!important}
+body.has-pack .shell .sidebar-nav-row.active{background:transparent!important;color:var(--accent,#80604b)!important;font-weight:600}
+body.has-pack .shell .sidebar-conv-row{border-bottom:1px solid var(--line,#d7c4a9)!important}
+body.has-pack .shell .sidebar-conv-row.active{background:transparent!important;color:var(--accent,#80604b)!important}
+/* 旧书信那种纸感：用渐变叠出纤维纹理，不用额外图片资源 */
+body.has-pack .shell::before{
+  background-image:
+    radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.38), rgba(255,255,255,0) 62%),
+    repeating-linear-gradient(0deg, rgba(120,92,52,.035) 0 1px, rgba(0,0,0,0) 1px 3px),
+    repeating-linear-gradient(90deg, rgba(120,92,52,.028) 0 1px, rgba(0,0,0,0) 1px 4px),
+    var(--pack-chat-bg,#f5ecd9)!important;
+  background-size:cover,auto,auto,cover!important;
+  background-position:center!important;
+}
+/* 首页两张卡同样平铺 */
+body.has-pack .shell .home-status,body.has-pack .shell .home-today-list,body.has-pack .shell .home-today-card{
+  background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important
+}
+body.has-pack .shell .home-status{border-bottom:1px solid var(--line,#d7c4a9)!important;padding:14px 4px!important;margin:0!important}
+body.has-pack .shell .home-today-list{gap:0!important}

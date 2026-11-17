@@ -2102,7 +2102,11 @@ export default function App() {
   // 聊天打开时给整条布局链上锁：shell 用 height 封顶（而非 min-height），
   // 消息列表成为唯一滚动容器，页面整体不再被聊天记录撑长。
   const chatViewportLock=page==='room'&&chatOpen?' shell-chat-lock':''
-  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...themeStyle(themePrefs),...(nativeTextZoomAvailable()?{'--font-scale':'1'}:{}),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as any}>
+  // 美化包激活时颜色变量交给包（写在 :root 上），shell 不再用内置主题色覆盖，否则包只换背景、颜色还是紫的。
+  const themeVars = themeStyle(themePrefs)
+  const packColorKeys = new Set(['--accent','--accent-soft','--accent-ink','--surface','--surface-elevated','--card','--field','--ink','--muted','--line','--divider','--border-subtle','--page-bg'])
+  const shellVars = activePack ? Object.fromEntries(Object.entries(themeVars).filter(([k]) => !packColorKeys.has(k))) : themeVars
+  return <main className={"shell theme-"+themePrefs.theme+" bubble-"+bubbleClass+" chatbg-"+bgClass+chatViewportLock+(beautifyClass?' '+beautifyClass:'')} style={{...shellVars,...(nativeTextZoomAvailable()?{'--font-scale':'1'}:{}),...(bgUrl?{'--chat-bg-image':'url("'+bgUrl+')'}:{}),...(bgClass==='image'?{'--chat-bg-opacity':String((themePrefs.chatBgOpacity??100)/100)}:{}),...(bubbleUrl?{'--bubble-image':'url("'+bubbleUrl+')'}:{})} as any}>
     {/* 全面屏：百宝箱与历史聊天都收进左侧抽屉，默认只露一条贴边细把手，点一下才滑出。 */}
     {/* 全面屏：主页显示完整「菜单」胶囊；进入房间/会话等页面自动收成贴边细把手，点一下才滑出。 */}
     {page!=='settings'&&(()=>{
