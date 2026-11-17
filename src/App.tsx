@@ -4303,7 +4303,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <div className="vendor-config-hero"><b>供应商类型</b><SoftSelect className="vendor-config-select" ariaLabel="供应商类型" value={active.providerType||'openai'} onChange={v=>patch(active.id,x=>({...x,providerType:v as 'openai'|'google'|'claude'}))} options={[{value:'openai',label:'OpenAI 兼容'},{value:'google',label:'Google'},{value:'claude',label:'Claude'}]}/></div>
         <div className="vendor-config-menu">
                     <label className="vendor-config-info vendor-config-switch"><span>隐藏</span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
-<label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+<label className="vendor-config-info vendor-config-switch"><span>启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           {showBackupKeys&&<div className="vendor-inline-keys">
             {active.keys.length===0?<p className="vendor-inline-empty">还没有 API Key，添加后可设置主号与备用。</p>:active.keys.map((k,index)=><div className="vendor-key-manager-row" key={k.id}>
