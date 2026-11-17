@@ -605,6 +605,8 @@ export default function App() {
   // 左侧抽屉默认完全收起：屏幕边缘只留一条细把手，点一下才滑出，再点遮罩 / × / 系统返回手势收起。
   // 不再定时自动收回——用户要在里面翻历史会话、重命名，自动收回会打断操作。
   const [sidebarOpen,setSidebarOpen]=useState(false)
+  // Hooks must run in the same order for checking/signed-out/signed-in renders.
+  const [showArchivedConvs,setShowArchivedConvs]=useState(false)
   // 抽屉里的会话重命名：输入框与草稿只属于抽屉，不占用聊天顶栏。
   const [drawerRenameId,setDrawerRenameId]=useState<string|null>(null)
   const [drawerRenameDraft,setDrawerRenameDraft]=useState('')
@@ -2112,7 +2114,6 @@ export default function App() {
   // 左侧抽屉里的会话操作：和房间页共用 conversations / messages / activeConversationIds，
   // 切换前先把当前聊天视图写回持久化会话，避免刚发出去的消息丢在旧会话里。
   const drawerConvs:Conversation[]=conversations[person]||[]
-  const [showArchivedConvs,setShowArchivedConvs]=useState(false)
   const visibleDrawerConvs=drawerConvs.filter(c=>showArchivedConvs?!!c.archivedAt:!c.archivedAt)
   const archivedDrawerCount=drawerConvs.filter(c=>!!c.archivedAt).length
   const drawerActiveId:string=activeConversationIds[person]||''
