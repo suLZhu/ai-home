@@ -12,6 +12,7 @@ import { backupFilesAvailable, deleteBackupFile, listBackupFiles, readBackupFile
 import { syncVendorProfiles, type Vendor } from './vendors.mjs'
 import { parseKelivoModelConfigs, kelivoConfigsToVendors, kelivoImportSummary } from './kelivoImport.mjs'
 import type { ModelProfile } from './resourceBindings.mjs'
+import { IconTrash } from './icons'
 
 type BackupFile = { name: string; size: number; modifiedAt: number }
 
@@ -261,7 +262,7 @@ export function BackupCenter({ people, vendors, setVendors, setModelProfiles }: 
       {files.slice(0, 12).map(file => <div className="backup-file" key={file.name}>
         <span className="backup-file-text"><b>{file.name}</b><small>{formatDate(file.modifiedAt)} · {formatSize(file.size)}</small></span>
         <button type="button" className="backup-file-restore" disabled={!!busy} onClick={() => void restoreListed(file)}>恢复</button>
-        <button type="button" className="backup-file-delete" aria-label={'删除 ' + file.name} onClick={() => void removeListed(file)}>×</button>
+        <button type="button" className="backup-file-delete" aria-label={'删除 ' + file.name} onClick={() => void removeListed(file)}><IconTrash size={14}/></button>
       </div>)}
     </div>}
     {!native && <p className="backup-hint">当前环境没有本机存储桥：备份会走浏览器下载；恢复请用各分类右侧的「恢复」选文件。</p>}
