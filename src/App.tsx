@@ -3884,6 +3884,13 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
   </section>
 }
 
+// 模型能力测试：三项独立探活，结果给测试小卡片用。
+type CapKey = 'text' | 'image' | 'tool'
+type CapResult = { state: 'run' | 'ok' | 'fail'; note: string }
+const CAP_ROWS: [CapKey, string][] = [['text', '文本'], ['image', '图片'], ['tool', '工具']]
+// 1×1 透明 PNG，用来验证模型是否接受图片输入。
+const CAP_TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+
 function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,modelProfiles,defaultModelId,setDefaultModelId}:{
   vendors:Vendor[]; setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>
   setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>
@@ -3906,11 +3913,11 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const [modelSelectMode,setModelSelectMode]=useState(false)
   const [specTarget,setSpecTarget]=useState('')
   const [addedGroupOpen,setAddedGroupOpen]=useState<Record<string,boolean>>({})
-  const [,setProbe]=useState<Record<string,boolean>>({})
   const [importOpen,setImportOpen]=useState(false)
   const [importText,setImportText]=useState('')
   const [importMsg,setImportMsg]=useState('')
-  const [probeNote,setProbeNote]=useState('')
+  // 模型测试小卡片：按 文本 / 图片 / 工具 逐项探活，结果直接打勾打叉。
+  const [capTest,setCapTest]=useState<{models:string[];results:Record<string,Partial<Record<CapKey,CapResult>>>}|null>(null)
   const [vendorQuery,setVendorQuery]=useState('')
   const [providerGroupOpen,setProviderGroupOpen]=useState<Record<string,boolean>>({})
   const [sortMode,setSortMode]=useState(false)
@@ -4004,7 +4011,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     if(!ok)return
     commit(vendors.filter(x=>x.id!==v.id));backToList()
   }
-  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setCapTest(null);setPickerOpen(false);setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const backToDetail=()=>{resetEditUI();setTab('config');setShowBackupKeys(true);onSection('vendor:'+activeId)}
@@ -4067,32 +4074,69 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       setTestState({busy:false,ok:true,text:'连接成功 · '+cost+' ms · '+count+' 个模型'})
     }catch(e){setTestState({busy:false,ok:false,text:'连接失败：'+(e instanceof Error?e.message:'未知错误')})}
   }
-  // 测试：拿「这一家 /models 现在返回的清单」比对模型，标出哪些上游已经没有了。
-  // 选中了模型就只测选中的那几个；没选就测这一家的全部模型。
-  const probeModels=async(v:Vendor)=>{
-    const scoped=batchIds.filter(id=>v.models.some(m=>m.id===id&&m.selected))
-    const ids=scoped.length?scoped:v.models.filter(m=>m.selected).map(m=>m.id)
-    if(!ids.length){setProbeNote('先选中要测试的模型');return}
-    setProbeNote('正在测试…')
-    const remote=(remoteModels[v.id]||[]).length?remoteModels[v.id]:await fetchRemote(v)
-    if(!remote.length){setProbeNote('测试失败：没有拿到上游模型列表，检查地址与 Key');return}
-    const next:Record<string,boolean>={}
-    for(const id of ids) next[id]=remote.includes(id)
-    setProbe(next)
-    const bad=ids.filter(id=>!remote.includes(id)).length
-    setProbeNote(bad?`测试完成：${ids.length-bad} 个可用，${bad} 个未在上游返回（可能已下线）`:`测试完成：全部 ${ids.length} 个都在上游列表里`)
+  // 模型测试：文本 / 图片 / 工具 三项真打请求，结果进小卡片（✓ / ✗）。
+  const capPatch=(model:string,key:CapKey,value:CapResult)=>setCapTest(old=>{
+    if(!old) return old
+    return {...old,results:{...old.results,[model]:{...(old.results[model]||{}),[key]:value}}}
+  })
+  const capRequest=async(v:Vendor,model:string,extra:Record<string,unknown>)=>{
+    const key=orderedKeys(v.keys).find(k=>k.value)?.value||''
+    if(!v.endpoint.trim()) throw new Error('缺少 API 地址')
+    if(!key) throw new Error('缺少 API Key')
+    const ac=new AbortController()
+    const timer=window.setTimeout(()=>ac.abort(),25000)
+    let r:Response
+    try{
+      r=await apiFetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:JSON.stringify({endpoint:v.endpoint.trim(),apiKey:key,body:{model,stream:false,...extra}})})
+    }catch(e){
+      throw new Error(e instanceof Error&&/abort|中断|超时/.test(e.message)?'超时，没等到响应':(e instanceof Error?e.message:'请求失败'))
+    }finally{window.clearTimeout(timer)}
+    const text=await r.text()
+    if(!r.ok){
+      let msg=text
+      try{const d=JSON.parse(text);msg=(d&&d.error)||text}catch{}
+      throw new Error(String(msg).replace(/^上游返回\s*/,'').slice(0,80))
+    }
+    return text
+  }
+  const capJson=(text:string):any=>{try{return JSON.parse(text)}catch{return null}}
+  const runCapTest=async(v:Vendor,ids:string[])=>{
+    if(!ids.length) return
+    const blank:Record<string,Partial<Record<CapKey,CapResult>>>={}
+    for(const id of ids) blank[id]={text:{state:'run',note:''},image:{state:'run',note:''},tool:{state:'run',note:''}}
+    setCapTest({models:ids,results:blank})
+    for(const id of ids){
+      try{
+        const text=await capRequest(v,id,{messages:[{role:'user',content:'连通性测试，只回复两个字：可用'}],max_tokens:16})
+        const d=capJson(text)
+        if(d&&!Array.isArray(d.choices)&&!d.content) throw new Error('返回格式不认识')
+        if(!d&&!/choices|content/.test(text)) throw new Error('返回格式不认识')
+        capPatch(id,'text',{state:'ok',note:''})
+      }catch(e){capPatch(id,'text',{state:'fail',note:e instanceof Error?e.message:'请求失败'})}
+      try{
+        await capRequest(v,id,{messages:[{role:'user',content:[{type:'text',text:'这张图是什么颜色？用一个词回答'},{type:'image_url',image_url:{url:CAP_TINY_PNG}}]}],max_tokens:24})
+        capPatch(id,'image',{state:'ok',note:''})
+      }catch(e){capPatch(id,'image',{state:'fail',note:e instanceof Error?e.message:'不支持图片输入'})}
+      try{
+        const text=await capRequest(v,id,{messages:[{role:'user',content:'现在几点？必须调用 get_time 工具，不要直接回答。'}],max_tokens:80,tools:[{type:'function',function:{name:'get_time',description:'返回当前时间',parameters:{type:'object',properties:{},required:[]}}}]})
+        const d=capJson(text)
+        const calls=d&&d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.tool_calls
+        if(Array.isArray(calls)&&calls.length) capPatch(id,'tool',{state:'ok',note:''})
+        else capPatch(id,'tool',{state:'fail',note:'未返回工具调用'})
+      }catch(e){capPatch(id,'tool',{state:'fail',note:e instanceof Error?e.message:'请求失败'})}
+    }
   }
   const hideSelected=(v:Vendor)=>{
     if(!batchIds.length) return
     patch(v.id,x=>({...x,models:x.models.map(m=>batchIds.includes(m.id)?{...m,hidden:true}:m)}))
-    setBatchIds([]);setModelSelectMode(false);setProbeNote('')
+    setBatchIds([]);setModelSelectMode(false)
   }
   const removeSelected=async(v:Vendor)=>{
     if(!batchIds.length) return
     const ok=await confirmDialog({title:'删除模型',message:'从「'+v.name+'」移除 '+batchIds.length+' 个模型？之后可以重新获取再添加。',confirmLabel:'删除',danger:true})
     if(!ok) return
     patch(v.id,x=>({...x,models:x.models.filter(m=>!batchIds.includes(m.id))}))
-    setBatchIds([]);setProbeNote('');setProbe({});setModelSelectMode(false)
+    setBatchIds([]);setModelSelectMode(false)
   }
   const remoteIds=active?(remoteModels[active.id]||[]):[]
   const pickedModels=active?active.models.filter(m=>m.selected):[]
@@ -4231,7 +4275,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           </div>
           <div className="key-input-row vendor-managed-key-input">
             <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="API Key"/>
-            <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
+            <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
             <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
           </div>
         </div>)}
@@ -4244,7 +4288,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         </div>
         <div className="key-input-row vendor-managed-key-input">
           <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
-          <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
+          <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
         </div>
         <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
         <small>Key 只保存在本机配置中；输入框使用普通文本键盘，不启用密码/安全键盘。</small>
@@ -4321,8 +4365,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       {tab==='config'&&<div className="vendor-card-body vendor-config-kelivo">
         <div className="vendor-config-hero"><b>供应商类型</b><SoftSelect className="vendor-config-select" ariaLabel="供应商类型" value={active.providerType||'openai'} onChange={v=>patch(active.id,x=>({...x,providerType:v as 'openai'|'google'|'claude'}))} options={[{value:'openai',label:'OpenAI 兼容'},{value:'google',label:'Google'},{value:'claude',label:'Claude'}]}/></div>
         <div className="vendor-config-menu">
-                    <label className="vendor-config-info vendor-config-switch"><span>隐藏</span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
-<label className="vendor-config-info vendor-config-switch"><span>启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+          <div className="vendor-config-pair two">
+            <label className="vendor-config-info vendor-config-switch"><span>隐藏</span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
+            <label className="vendor-config-info vendor-config-switch"><span>启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
+          </div>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           {showBackupKeys&&<div className="vendor-inline-keys">
             {active.keys.length===0?<p className="vendor-inline-empty">还没有 API Key，添加后可设置主号与备用。</p>:active.keys.map((k,index)=><div className="vendor-key-manager-row" key={k.id}>
@@ -4333,7 +4379,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               </div>
               <div className="key-input-row vendor-managed-key-input">
                 <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="输入 API Key"/>
-                <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
+                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
                 <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
               </div>
             </div>)}
@@ -4345,7 +4391,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               </div>
               <div className="key-input-row vendor-managed-key-input">
                 <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
-                <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
+                <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'🙈':'👁'}</button>
               </div>
               <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
             </form>
@@ -4364,7 +4410,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <label className="vendor-field">名称<input aria-label="供应商名称" value={active.name} onChange={e=>patch(active.id,x=>({...x,name:e.target.value}))} placeholder="供应商名称"/></label>
           <datalist id="vendor-group-options">{[...new Set(vendors.map(v=>v.group).filter(Boolean))].map(g=><option key={g} value={g}/>)}</datalist>
 
-          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
+          <label className="vendor-field">API Key <small>普通文本键盘输入，点击眼睛切换显示</small><div className="vendor-key-input"><input aria-label="API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={primary?.value||''} onChange={e=>setPrimary(e.target.value)} placeholder="输入 API Key"/><button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(s=>!s)}>{showKey?'🙈':'👁'}</button></div></label>
           <label className="vendor-field">API Base URL<input aria-label="API Base URL" type="url" autoCapitalize="off" spellCheck={false} value={active.endpoint} onChange={e=>patch(active.id,x=>({...x,endpoint:e.target.value}))} placeholder="https://api.example.com/v1"/></label>
           <label className="vendor-field">API 路径<input aria-label="API 路径" type="text" autoCapitalize="off" spellCheck={false} value={active.apiPath||''} onChange={e=>patch(active.id,x=>({...x,apiPath:e.target.value}))} placeholder={DEFAULT_API_PATH}/></label>
         </div>
@@ -4404,12 +4450,11 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 </div>
               })}
             </div>}
-          {!!probeNote&&<p className="vendor-probe-note" role="status">{probeNote}</p>}
         </div>
         <div className="vendor-kelivo-bottomdock">
           {modelSelectMode?<div className="vendor-kelivo-batchbar">
             <button type="button" onClick={()=>setBatchIds(batchIds.length===pickedModels.length?[]:pickedModels.map(m=>m.id))}>{batchIds.length===pickedModels.length&&pickedModels.length?'全不选':'全选'}</button>
-            <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>void probeModels(active)}>测试</button>
+            <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>{setModelSelectMode(false);void runCapTest(active,batchIds)}}>测试</button>
             <button type="button" disabled={!batchIds.length} onClick={()=>hideSelected(active)}>隐藏</button>
             <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>🗑</button>
             <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}>×</button>
@@ -4418,6 +4463,26 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}>＋</button>
           </div>}
         </div>
+        {capTest&&<div className="vendor-cap-layer" role="presentation" onClick={()=>setCapTest(null)}>
+          <section className="vendor-cap-card" role="dialog" aria-label="模型测试" onClick={e=>e.stopPropagation()}>
+            <header className="vendor-cap-head"><b>模型测试</b><button type="button" aria-label="关闭测试" onClick={()=>setCapTest(null)}>×</button></header>
+            {capTest.models.map(id=>{
+              const res=capTest.results[id]||{}
+              const done=CAP_ROWS.every(([k])=>res[k]&&res[k]!.state!=='run')
+              return <div className="vendor-cap-block" key={id}>
+                <div className="vendor-cap-model"><small>{specForModel(active,id).displayName||id}</small>{done&&<em>完成</em>}</div>
+                {CAP_ROWS.map(([k,label])=>{
+                  const r=res[k]
+                  return <div className="vendor-cap-row" key={k}>
+                    <span className="vendor-cap-label">{label}</span>
+                    {r&&r.note?<small className="vendor-cap-note">{r.note}</small>:null}
+                    <i className={'vendor-cap-state '+(r?r.state:'run')} aria-label={r&&r.state==='ok'?'通过':r&&r.state==='fail'?'失败':'测试中'}>{r&&r.state==='ok'?'✓':r&&r.state==='fail'?'✗':'…'}</i>
+                  </div>
+                })}
+              </div>
+            })}
+          </section>
+        </div>}
         {customModelOpen&&<div className="vendor-kelivo-custom"><input aria-label="手动添加模型 ID" value={modelDraft} placeholder="输入模型 ID" onChange={e=>setModelDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&modelDraft.trim()){pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}}/><button type="button" onClick={()=>{if(!modelDraft.trim())return;pickModel(active.id,modelDraft.trim());setModelDraft('');setCustomModelOpen(false)}}>添加</button><button type="button" onClick={()=>setCustomModelOpen(false)}>取消</button></div>}
         {modelSheetOpen&&<div className="vendor-kelivo-sheet-overlay" role="presentation" onClick={()=>setModelSheetOpen(false)}>
           <section className="vendor-kelivo-sheet" role="dialog" aria-modal="true" aria-label={'从 '+active.name+' 添加模型'} onClick={e=>e.stopPropagation()}>
