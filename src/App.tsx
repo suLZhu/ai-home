@@ -252,7 +252,16 @@ export default function App() {
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
-  const [page, setPage] = useState<Page>('home')
+  const [page, setPage] = useState<Page>(() => {
+    try {
+      const restored = sessionStorage.getItem('ai-home.afterRestorePage')
+      if (restored === 'settings') {
+        sessionStorage.removeItem('ai-home.afterRestorePage')
+        return 'settings'
+      }
+    } catch { /* ignore */ }
+    return 'home'
+  })
   const pageBeforeSettings = useRef<Page>('home')
   // 鉴权状态提前声明：通知点击路由 / 闹钟同步的 effect 依赖数组会立即求值。
   const [authStatus, setAuthStatus] = useState<'checking'|'signedOut'|'signedIn'>('checking')
@@ -3625,7 +3634,16 @@ function Fun({shortcut,onShortcutUsed,displayName}:{shortcut:string;onShortcutUs
 function Settings({onBack,onLogout,packIcons,cloudStatus,themePrefs,setThemePrefs,customAssets,conversations,modelConfig,onOpenTool,displayName,personAppearance,setPersonAppearance,timeZone,setTimeZone,worldEntries,setWorldEntries,modelProfiles,setModelProfiles,bindings,setBindings,vendors,setVendors,subscriptions,setSubscriptions,systemPeople,avatarOf,onApiBaseApplied,workspaceConfigs,onWorkspaceSaved,defaultModelId,setDefaultModelId}:{onBack:()=>void;onLogout:()=>void;packIcons?:Record<string,string>;cloudStatus:string;themePrefs:ThemePrefs;setThemePrefs:(v:ThemePrefs)=>void;customAssets:CustomAssets;conversations:Record<Person,Conversation[]>;modelConfig:Record<Person,ModelConfig>;onOpenTool:(v:{person:Person;tool:Tool})=>void;displayName:(p:Person)=>string;personAppearance:Record<string,PersonAppearancePref>;setPersonAppearance:React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>;timeZone:string;setTimeZone:(v:string)=>void;worldEntries:WorldEntry[];setWorldEntries:React.Dispatch<React.SetStateAction<WorldEntry[]>>;modelProfiles:ModelProfile[];setModelProfiles:React.Dispatch<React.SetStateAction<ModelProfile[]>>;bindings:Record<Person,PersonBinding>;setBindings:React.Dispatch<React.SetStateAction<Record<Person,PersonBinding>>>;vendors:Vendor[];setVendors:React.Dispatch<React.SetStateAction<Vendor[]>>;subscriptions:SubscriptionAccount[];setSubscriptions:React.Dispatch<React.SetStateAction<SubscriptionAccount[]>>;systemPeople?:string[];avatarOf?:(p:string)=>string;onApiBaseApplied?:()=>void;workspaceConfigs:Record<string,WorkspaceConfig>;onWorkspaceSaved:(config:WorkspaceConfig)=>void;defaultModelId:string;setDefaultModelId:(v:string)=>void}) {
   void workspaceConfigs
   void packIcons
-  const [section,setSection]=useState('')
+  const [section,setSection]=useState(()=>{
+    try {
+      const restored=sessionStorage.getItem('ai-home.afterRestoreSection')
+      if(restored){
+        sessionStorage.removeItem('ai-home.afterRestoreSection')
+        return restored
+      }
+    } catch { /* ignore */ }
+    return ''
+  })
   // 二/三级页统一从顶部开始。旧版按 section 恢复 window.scrollY，会让不同层级看起来一页高一页低。
   const openSection=(next:string)=>{
     setSection(next)
