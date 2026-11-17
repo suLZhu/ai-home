@@ -13,20 +13,20 @@ export const SUBSCRIPTION_CHANNELS = [
     id: 'gpt', name: 'GPT / OpenAI', short: 'GPT', category: '订阅账号',
     aliases: ['gpt', 'openai', 'chatgpt', 'codex', 'o1', 'o3', 'gpt4o', 'gpt-4o', 'sora'],
     endpoint: 'https://api.openai.com/v1', vendorId: 'openai',
-    hint: 'ChatGPT / Codex 订阅：用官方账号网页授权，订阅地址填兼容网关。', needsCompatibleUrl: false,
+    hint: 'ChatGPT / Codex 订阅：官方账号授权后自动同步可用模型。', needsCompatibleUrl: false,
   },
   {
     id: 'claude', name: 'Claude / Anthropic', short: 'CL', category: '订阅账号',
     aliases: ['claude', 'anthropic', 'opus', 'sonnet', 'haiku', 'claude-code', '克劳德'],
     endpoint: '', vendorId: 'sub-anthropic',
-    hint: 'Claude Pro / Max：走 Claude Code OAuth；官方是 /v1/messages，需填兼容网关地址。',
-    needsCompatibleUrl: true,
+    hint: 'Claude Pro / Max：走 Claude Code OAuth，登录后自动同步可用模型。',
+    needsCompatibleUrl: false,
   },
   {
     id: 'grok', name: 'Grok / xAI', short: 'GR', category: '订阅账号',
     aliases: ['grok', 'xai', 'x.ai', 'grok-3', 'grok3', '马斯克'],
     endpoint: 'https://api.x.ai/v1', vendorId: 'sub-xai',
-    hint: 'Grok / X 订阅：官方 CLI 用设备码登录；也可直接填 xAI 控制台的 Key。', needsCompatibleUrl: false,
+    hint: 'Grok / X 订阅：官方设备码登录后自动同步可用模型。', needsCompatibleUrl: false,
   },
 ]
 
