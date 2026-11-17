@@ -52,10 +52,15 @@ const nowStamp = () => new Date().toISOString()
 
 // 官方订阅端点多数不是 OpenAI 兼容 /models；给 3 秒超时，失败就静默回退到候选清单。
 async function fetchStandardModels(endpoint: string, token: string): Promise<{ models: string[]; error: string }> {
+  const raw = String(endpoint || '').trim().replace(/\/+$/, '')
+  const directModelsUrl = /\/models(?:\?.*)?$/i.test(raw) ? raw : ''
+  const baseEndpoint = directModelsUrl
+    ? raw.replace(/\/models(?:\?.*)?$/i, '').replace(/\/+$/, '')
+    : raw
   const work = (async () => {
     const r = await apiFetch('/api/models', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint, apiKey: token }),
+      body: JSON.stringify({ endpoint: baseEndpoint, apiKey: token, modelsUrl: directModelsUrl }),
     })
     const d = await r.json().catch(() => ({}))
     if (!r.ok) return { models: [], error: String(d?.error || ('HTTP ' + r.status)).slice(0, 240) }
@@ -184,19 +189,28 @@ function normalizeCodexModels(payload: any): { models: string[]; error: string }
   return { models: normalizeModelIds(ids), error: ids.length ? '' : 'Codex 模型目录没有返回可用模型' }
 }
 
-async function fetchRemoteModels(endpoint: string, token: string, channelId = '', accountId = ''): Promise<{ models: string[]; error: string }> {
-  if (!token) return { models: [], error: '缺少令牌' }
+async function fetchRemoteModels(
+  endpoint: string,
+  token: string,
+  channelId = '',
+  accountId = '',
+  preferUrl = false,
+): Promise<{ models: string[]; error: string }> {
+  if (!token) return { models: [], error: '缺少令牌，请重新登录订阅账号' }
+  if (preferUrl) {
+    if (!endpoint) return { models: [], error: '请填写模型网址或兼容网关地址' }
+    return fetchStandardModels(endpoint, token)
+  }
   if (channelId === 'claude') return fetchClaudeModels(token)
   if (channelId === 'grok') return fetchGrokModels(token)
   if (!endpoint) return { models: [], error: '缺少接口地址' }
   if (channelId === 'gpt') {
     const codex = await fetchCodexModels(token, accountId)
     if (codex.models.length) return codex
-    // 用户把接口换成了兼容网关时，再试标准 /models；默认官方地址不试（肯定不认订阅令牌）。
     if (!/^https:\/\/api\.openai\.com/i.test(endpoint)) {
       const standard = await fetchStandardModels(endpoint, token)
       if (standard.models.length) return standard
-      return { models: [], error: codex.error || standard.error }
+      return { models: [], error: standard.error || codex.error }
     }
     return codex
   }
@@ -400,7 +414,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
       const endpoint = a.endpoint || ch?.endpoint || ''
       const currentKey = (vendors.find(v => v.id === (a.vendorId || ch?.vendorId))?.keys || [])
         .find(k => k.id === a.vendorKeyId)?.value || ''
-      const fetched = await fetchRemoteModels(endpoint, currentKey, a.channelId, a.accountId || '')
+      const customEndpoint = !!endpoint && endpoint !== (ch?.endpoint || '')
+      const fetched = await fetchRemoteModels(endpoint, currentKey, a.channelId, a.accountId || '', customEndpoint)
       if (!fetched.models.length) {
         if (a.modelSource !== 'candidate') {
           setSubscriptions(subs => subs.map(s => s.id === a.id ? { ...s, modelSource: 'candidate' } : s))
@@ -422,14 +437,29 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   const saveEndpoint = async (a: SubscriptionAccount) => {
     const endpoint = endpointDraft.trim()
     if (!endpoint) return
+    if (!/^https?:\/\//i.test(endpoint)) {
+      setModelNote('网址需以 http:// 或 https:// 开头')
+      return
+    }
     const ch = channelById(a.channelId)
     const vid = a.vendorId || ch?.vendorId || ('sub-' + a.channelId)
+    const currentKey = (vendors.find(v => v.id === vid)?.keys || [])
+      .find(k => k.id === a.vendorKeyId)?.value || ''
     const next = { ...a, endpoint }
     setSubscriptions(subs => subs.map(s => s.id === a.id ? next : s))
     const nextVendors = vendors.map(v => v.id === vid ? { ...v, endpoint } : v)
     setVendors(nextVendors)
     setModelProfiles(old => syncVendorProfiles(nextVendors, old))
-    await refreshModels(next)
+    setBusy(a.channelId); setModelNote('')
+    try {
+      const fetched = await fetchRemoteModels(endpoint, currentKey, a.channelId, a.accountId || '', true)
+      if (!fetched.models.length) {
+        setModelNote('从网址拉取失败' + (fetched.error ? '：' + fetched.error : ''))
+        return
+      }
+      const merged = mergeAvailableModels(fetched.models, a.channelId)
+      updateModels(next, merged, merged, '已从网址拉取 ' + fetched.models.length + ' 个模型。', 'account')
+    } finally { setBusy('') }
   }
 
   const logout = (id: string) => {
@@ -479,10 +509,10 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
             {expanded && <div className="account-models" data-models-for={r.id}>
               <p className="account-models-lead">勾选的模型会进入聊天模型面板；可自己增删。</p>
               <div className="account-endpoint-row">
-                <input aria-label="接口地址" value={endpointDraft} onChange={e => setEndpointDraft(e.target.value)} placeholder="兼容网关地址，例如 http://127.0.0.1:8317/v1" />
-                <button type="button" disabled={busy === r.id || !endpointDraft.trim()} onClick={() => void saveEndpoint(a!)}>{busy === r.id ? '拉取中…' : '保存并重拉'}</button>
+                <input aria-label="模型网址或兼容网关" value={endpointDraft} onChange={e => setEndpointDraft(e.target.value)} placeholder="模型网址 / 兼容网关，例如 https://example.com/v1 或 /v1/models" />
+                <button type="button" disabled={busy === r.id || !endpointDraft.trim()} onClick={() => void saveEndpoint(a!)}>{busy === r.id ? '拉取中…' : '从网址拉取'}</button>
               </div>
-              <p className="account-endpoint-hint">当前接口：{a!.endpoint || '未设置'}</p>
+              <p className="account-endpoint-hint">当前模型源：{a!.endpoint || '官方账号目录'}</p>
               {a!.modelSource !== 'account' && <p className="account-model-warning">下面显示的是候选模型，不是从账号真实拉取的。{r.id === 'gpt' ? '没能从 Codex 目录拉到模型；请重新登录一次（需要账号 ID），或填兼容网关。' : '可填兼容网关地址后重新拉取。'}</p>}
               {a!.modelSource === 'account' && <p className="account-endpoint-hint">模型目录已从账号拉取。聊天仍走 OpenAI 兼容协议；如果发送时提示 401/404，请把接口地址换成兼容网关，或改用 API Key。</p>}
               <div className="account-model-chips">
