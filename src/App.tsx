@@ -3459,7 +3459,10 @@ function Chat(p: any) {
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
   // 我的头像按助手各存一份：在助手档案的「用户设置」里改。
   const userAvatar=(p.userSettings&&p.userSettings[chatPerson]&&p.userSettings[chatPerson].avatar)||''
-  const myName=String(p.roomName||'我')
+  // Display the name configured for this specific assistant, including old messages.
+  // "用户" is only a legacy room label, never override an explicit user setting.
+  const mySettings:UserSettings|undefined=p.userSettings?.[chatPerson]
+  const myName=String(mySettings?.userName?.trim()||mySettings?.callName?.trim()||p.roomName||'我')
   // 图片表情包：上传后缩到 128px 存 localStorage（控制体积），点击即作为图片附件进发送栏。
   function shrinkSticker(src:string):Promise<string>{return new Promise(resolve=>{const img=new Image();img.onload=()=>{const max=128;const scale=Math.min(1,max/Math.max(img.width,img.height,1));const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');if(!ctx){resolve(src);return}ctx.drawImage(img,0,0,w,h);let out='';try{out=c.toDataURL('image/webp',0.82)}catch{out=''}if(!out.startsWith('data:image/webp')){try{out=c.toDataURL('image/png')}catch{out=src}}resolve(out)};img.onerror=()=>resolve(src);img.src=src})}
   async function addImageStickers(list:FileList|null){if(!list||!list.length)return;const added:string[]=[];for(const file of Array.from(list).slice(0,9)){if(!file.type.startsWith('image/'))continue;const raw=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('图片读取失败'));r.readAsDataURL(file)}).catch(()=>'');if(raw)added.push(await shrinkSticker(raw))}if(!added.length)return;const next=[...imageStickers,...added].slice(-30);try{localStorage.setItem('ai-home.imageStickers',JSON.stringify(next))}catch{p.setChatError('图片表情保存失败：浏览器本地存储空间不足，可先「清空图片」再上传。');return}setImageStickers(next);if(stickerInput.current)stickerInput.current.value=''}
