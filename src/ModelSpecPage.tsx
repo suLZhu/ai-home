@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { pushBackHandler } from './backStack.mjs'
 import {
+import { IconClose, IconPlus, IconTrash } from './icons'
   MODEL_TYPES, INPUT_MODALITIES, OUTPUT_MODALITIES, MODEL_ABILITIES,
   normalizeModelSpec, type ModelSpec, type ResolvedModelSpec,
 } from './modelSpecs.mjs'
@@ -56,13 +57,13 @@ export function ModelSpecPage({ vendorName, modelId, spec, onSave, onClose }: Pr
         onChange={e => patch({ [key]: draft[key].map((x, i) => i === index ? { ...x, key: e.target.value } : x) } as Partial<ModelSpec>)}/>
       <input aria-label={key === 'headers' ? 'Header 值' : '字段值'} value={pair.value} placeholder="值"
         onChange={e => patch({ [key]: draft[key].map((x, i) => i === index ? { ...x, value: e.target.value } : x) } as Partial<ModelSpec>)}/>
-      <button type="button" aria-label="删除这一行" onClick={() => patch({ [key]: draft[key].filter((_, i) => i !== index) } as Partial<ModelSpec>)}>×</button>
+      <button type="button" aria-label="删除这一行" onClick={() => patch({ [key]: draft[key].filter((_, i) => i !== index) } as Partial<ModelSpec>)}><IconTrash size={14}/></button>
     </div>
   ))
 
   return <div className="model-edit-page">
     <header className="mep-head">
-      <button type="button" className="mep-close" aria-label="关闭" onClick={onClose}>×</button>
+      <button type="button" className="mep-close" aria-label="关闭" onClick={onClose}><IconClose size={15}/></button>
       <b>编辑模型</b>
       <button type="button" className="mep-save" aria-label="保存" onClick={() => onSave(normalizeModelSpec(draft))}>✓</button>
     </header>
@@ -121,12 +122,12 @@ export function ModelSpecPage({ vendorName, modelId, spec, onSave, onClose }: Pr
       {tab === 'advanced' && <>
         <h3 className="mep-section">提供商量写</h3>
         <p className="mep-desc">为此特定模型配置自定义提供商设置。将从父提供商继承通用属性。</p>
-        <button type="button" className="mep-wide" onClick={() => patch({ headers: [...draft.headers, { key: 'x-provider-rewrite', value: '' }] })}>＋ 添加提供商量写</button>
+        <button type="button" className="mep-wide" onClick={() => patch({ headers: [...draft.headers, { key: 'x-provider-rewrite', value: '' }] })}><IconPlus className="ui-icon-inline" size={14}/> 添加提供商量写</button>
 
-        <div className="mep-plain-row"><span>自定义 Headers</span><button type="button" className="mep-round" aria-label="添加 Header" onClick={() => patch({ headers: [...draft.headers, { key: '', value: '' }] })}>＋</button></div>
+        <div className="mep-plain-row"><span>自定义 Headers</span><button type="button" className="mep-round" aria-label="添加 Header" onClick={() => patch({ headers: [...draft.headers, { key: '', value: '' }] })}><IconPlus size={14}/></button></div>
         <div className="mep-kv-list">{pairs('headers')}</div>
 
-        <div className="mep-plain-row"><span>自定义 Body</span><button type="button" className="mep-round" aria-label="添加 Body" onClick={() => patch({ body: [...draft.body, { key: '', value: '' }] })}>＋</button></div>
+        <div className="mep-plain-row"><span>自定义 Body</span><button type="button" className="mep-round" aria-label="添加 Body" onClick={() => patch({ body: [...draft.body, { key: '', value: '' }] })}><IconPlus size={14}/></button></div>
         <div className="mep-kv-list">{pairs('body')}</div>
       </>}
 
