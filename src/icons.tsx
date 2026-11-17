@@ -261,3 +261,20 @@ export const IconMore: IconComponent = props => <Icon {...props}>
 export const IconVideo: IconComponent = props => <Icon {...props}>
   <path d="M15 12v4.4a.6.6 0 0 1-.6.6H3.6a.6.6 0 0 1-.6-.6V7.6a.6.6 0 0 1 .6-.6h10.8a.6.6 0 0 1 .6.6V12Zm0 0 5.016-4.18A.6.6 0 0 1 21 8.281v7.438a.6.6 0 0 1-.984.461L15 12Z" />
 </Icon>
+
+
+export const IconCopy: IconComponent = props => <Icon {...props}>
+  <path d="M19.4 20H9.6a.6.6 0 0 1-.6-.6V9.6a.6.6 0 0 1 .6-.6h9.8a.6.6 0 0 1 .6.6v9.8a.6.6 0 0 1-.6.6Z" />
+  <path d="M15 9V4.6a.6.6 0 0 0-.6-.6H4.6a.6.6 0 0 0-.6.6v9.8a.6.6 0 0 0 .6.6H9" />
+</Icon>
+
+export const IconRefresh: IconComponent = props => <Icon {...props}>
+  <path d="M21.888 13.5A10 10 0 1 1 21.168 8" />
+  <path d="M17 8h4.4a.6.6 0 0 0 .6-.6V3" />
+</Icon>
+
+export const IconEmoji: IconComponent = props => <Icon {...props}>
+  <circle cx="12" cy="12" r="10" />
+  <path d="M16.5 14.5S15 16.5 12 16.5s-4.5-2-4.5-2" />
+  <path d="M15.5 9a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1ZM8.5 9a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1Z" fill="currentColor" />
+</Icon>
