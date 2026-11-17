@@ -278,3 +278,8 @@ export const IconEmoji: IconComponent = props => <Icon {...props}>
   <path d="M16.5 14.5S15 16.5 12 16.5s-4.5-2-4.5-2" />
   <path d="M15.5 9a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1ZM8.5 9a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1Z" fill="currentColor" />
 </Icon>
+
+
+export const IconMenu: IconComponent = props => <Icon {...props}>
+  <path d="M3 5h18M3 12h18M3 19h18" />
+</Icon>
