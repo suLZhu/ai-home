@@ -6,7 +6,7 @@ import { apiFetch, isLocalMode } from './apiBase.mjs'
 import { confirmDialog } from './uiDialog'
 import {
   BACKUP_DIR_LABEL, BACKUP_KINDS, backupKind, backupFileName, kindFromFileName,
-  collectBackupLocal, localKeysForRestore, makeBackupEnvelope, parseBackup, summarizeBackup,
+  collectBackupLocal, localKeysForRestore, makeBackupEnvelope, parseBackup, summarizeBackup, summarizeChatBackup,
 } from './backups.mjs'
 import { backupFilesAvailable, deleteBackupFile, listBackupFiles, readBackupFile, saveBackupFile } from './nativeSystem.mjs'
 import { syncVendorProfiles, type Vendor } from './vendors.mjs'
@@ -125,14 +125,17 @@ export function BackupCenter({ people, vendors, setVendors, setModelProfiles }: 
     if (!kind) throw new Error('未知的恢复类型')
     const local = localKeysForRestore(payload, kindId)
     const summary = summarizeBackup(payload)
+    const chatSummary = (kindId === 'chat' || kindId === 'full') ? summarizeChatBackup(payload) : null
+    if (kindId === 'chat' && !local['ai-home.conversations'] && !local['ai-home.messages']) throw new Error('备份中没有聊天记录，已取消恢复，现有数据未改动')
     const details = [
+      chatSummary && chatSummary.conversationCount ? chatSummary.conversationCount + ' 个会话，' + chatSummary.messagesCount + ' 条消息' : '',
       Object.keys(local).length ? Object.keys(local).length + ' 项本地设置' : '',
       summary.memoryCount ? summary.memoryCount + ' 条记忆' : '',
       summary.apiKeys ? summary.apiKeys + ' 把 API Key' : '',
     ].filter(Boolean).join(' · ') || '空内容'
     const ok = await confirmDialog({
       title: '恢复' + kind.label,
-      message: '用「' + sourceName + '」覆盖当前' + kind.label + '？\n包含：' + details + (isLocalMode() ? '' : '\n服务器上的对应数据也会被写回。'),
+      message: '用「' + sourceName + '」覆盖当前' + kind.label + '？\n包含：' + details + (chatSummary && chatSummary.preview.length ? '\n会话预览：' + chatSummary.preview.map(x => x.title).join('、') : '') + '\n恢复会替换相应分类现有数据，请先做好当前备份。' + (isLocalMode() ? '' : '\n服务器上的对应数据也会被写回。'),
       confirmLabel: '恢复',
       danger: true,
     })
