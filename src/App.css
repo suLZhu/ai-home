@@ -4288,3 +4288,13 @@ body.has-pack .settings-screen{
 .shell .app-sidebar .sidebar-conv-row{min-height:32px!important;height:auto!important}
 .shell .app-sidebar .sidebar-conv-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shell .app-sidebar .sidebar-archive-empty{margin:8px 6px;color:var(--muted,#8b8494);font-size:11px}
+
+/* Per-assistant chat tool panel: consistent switch rows and optional city field. */
+.shell .fullscreen-chat .tray-tool-settings{display:flex;flex-direction:column;gap:9px;min-width:0}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option{display:flex;align-items:center;gap:12px;min-height:54px;padding:9px 11px!important;border:1px solid var(--line,#e6e0e8);border-radius:13px}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option span{min-width:0;flex:1;font-size:13px}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option small{font-size:11px;line-height:1.4}
+.shell .fullscreen-chat .tray-weather-city{display:flex;flex-direction:column;gap:5px;min-width:0;padding:9px 11px;font-size:12px;color:var(--ink,#333)}
+.shell .fullscreen-chat .tray-weather-city input{box-sizing:border-box;width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--line,#e6e0e8);border-radius:10px;background:var(--field,#fff);color:var(--ink,#333);font-size:14px}
+.shell .fullscreen-chat .tray-weather-city small{color:var(--muted,#888);line-height:1.4}
+.shell .fullscreen-chat .tray-tool-settings>.tray-tool-grid{margin-top:5px}
