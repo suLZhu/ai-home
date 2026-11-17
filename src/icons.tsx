@@ -9,7 +9,7 @@ export type IconComponent = (props: IconProps) => ReactElement
 
 function Icon({ size = 20, className, children }: IconProps & { children: ReactNode }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"
+    stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round"
     className={className} aria-hidden="true" focusable="false">{children}</svg>
 }
 
@@ -152,4 +152,97 @@ export const IconShield: IconComponent = props => <Icon {...props}>
 export const IconInfo: IconComponent = props => <Icon {...props}>
   <circle cx="12" cy="12" r="8.2" />
   <path d="M12 11v5M12 8.2h.01" />
+</Icon>
+
+
+// 通用控制图标：所有小按钮统一用这组线性 SVG，不再依赖系统字体里的符号/emoji。
+export const IconBack: IconComponent = props => <Icon {...props}>
+  <path d="m15 5-7 7 7 7" />
+</Icon>
+
+export const IconChevronRight: IconComponent = props => <Icon {...props}>
+  <path d="m9 5 7 7-7 7" />
+</Icon>
+
+export const IconChevronDown: IconComponent = props => <Icon {...props}>
+  <path d="m5 9 7 7 7-7" />
+</Icon>
+
+export const IconChevronUp: IconComponent = props => <Icon {...props}>
+  <path d="m5 15 7-7 7 7" />
+</Icon>
+
+export const IconClose: IconComponent = props => <Icon {...props}>
+  <path d="M6 6l12 12M18 6 6 18" />
+</Icon>
+
+export const IconEdit: IconComponent = props => <Icon {...props}>
+  <path d="M4.5 19.5 5.8 14 15 4.8a2.1 2.1 0 0 1 3 3L8.8 17Z" />
+  <path d="m13.7 6.1 4.2 4.2" />
+</Icon>
+
+export const IconTrash: IconComponent = props => <Icon {...props}>
+  <path d="M5 7h14M9 7V4.8h6V7M7.5 7l.8 12h7.4l.8-12M10.5 10.5v5M13.5 10.5v5" />
+</Icon>
+
+export const IconEye: IconComponent = props => <Icon {...props}>
+  <path d="M3.5 12s3-5 8.5-5 8.5 5 8.5 5-3 5-8.5 5-8.5-5-8.5-5Z" />
+  <circle cx="12" cy="12" r="2.4" />
+</Icon>
+
+export const IconEyeOff: IconComponent = props => <Icon {...props}>
+  <path d="M4 4l16 16" />
+  <path d="M9.3 7.5A8.9 8.9 0 0 1 12 7c5.5 0 8.5 5 8.5 5a14 14 0 0 1-2.2 2.8M14.6 16.6A8.7 8.7 0 0 1 12 17c-5.5 0-8.5-5-8.5-5a14 14 0 0 1 2.1-2.8" />
+  <path d="M10.3 10.3a2.4 2.4 0 0 0 3.4 3.4" />
+</Icon>
+
+export const IconArrowUp: IconComponent = props => <Icon {...props}>
+  <path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" />
+</Icon>
+
+export const IconArrowDown: IconComponent = props => <Icon {...props}>
+  <path d="M12 5v14M6.5 13.5 12 19l5.5-5.5" />
+</Icon>
+
+export const IconSwitch: IconComponent = props => <Icon {...props}>
+  <path d="M5 8h12M14 5l3 3-3 3M19 16H7M10 13l-3 3 3 3" />
+</Icon>
+
+export const IconShare: IconComponent = props => <Icon {...props}>
+  <path d="M12 5h7v7" />
+  <path d="m19 5-9 9" />
+  <path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
+</Icon>
+
+export const IconTest: IconComponent = props => <Icon {...props}>
+  <path d="M4 12h3l1.5-4 3 8 2.2-6 1.6 2H20" />
+</Icon>
+
+export const IconSearch: IconComponent = props => <Icon {...props}>
+  <circle cx="10.8" cy="10.8" r="6.3" />
+  <path d="m15.4 15.4 4.1 4.1" />
+</Icon>
+
+export const IconMinus: IconComponent = props => <Icon {...props}>
+  <path d="M5 12h14" />
+</Icon>
+
+export const IconFile: IconComponent = props => <Icon {...props}>
+  <path d="M6 3.8h8l4 4V20H6Z" />
+  <path d="M14 3.8V8h4M9 12h6M9 15h6" />
+</Icon>
+
+export const IconWarning: IconComponent = props => <Icon {...props}>
+  <path d="M12 4 3.8 19h16.4Z" />
+  <path d="M12 9v4M12 16.4h.01" />
+</Icon>
+
+export const IconMail: IconComponent = props => <Icon {...props}>
+  <rect x="4" y="6" width="16" height="12" rx="2" />
+  <path d="m5 8 7 5 7-5" />
+</Icon>
+
+export const IconLock: IconComponent = props => <Icon {...props}>
+  <rect x="5.5" y="10" width="13" height="10" rx="2" />
+  <path d="M8.5 10V7.5a3.5 3.5 0 0 1 7 0V10" />
 </Icon>
