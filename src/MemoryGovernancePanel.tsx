@@ -8,6 +8,7 @@ import {
 } from './memoryGovernance'
 import { MemoryViewSwitcher, MemoryVisualizer, type MemoryView } from './memoryViews'
 import { MEMORY_VIEW_KEY, normalizeMemoryView } from './memoryVisuals.mjs'
+import { IconShare } from './icons'
 
 const CATEGORIES = ['人物关系', '经历事件', '偏好习惯', '项目进度', '其他']
 
@@ -128,7 +129,7 @@ export function MemoryGovernancePanel({ person, onJumpToSource, hint, showViews 
           </div>
           <div className="tool-dash-memory-actions">
             {record.sourceConversationId && onJumpToSource && <button type="button" className="tool-dash-jump"
-              onClick={() => onJumpToSource(record.sourceConversationId, record.sourceMessageIds[0])}>跳回来源会话 ↗</button>}
+              onClick={() => onJumpToSource(record.sourceConversationId, record.sourceMessageIds[0])}>跳回来源会话 <IconShare className="ui-icon-inline" size={13}/></button>}
             {record.lifecycle === 'candidate' && <>
               <button type="button" className="tool-dash-approve" disabled={!!busy} onClick={() => void transition(record, 'active')}>确认生效</button>
               <button type="button" className="tool-dash-reject" disabled={!!busy} onClick={() => void transition(record, 'rejected')}>拒绝</button>
