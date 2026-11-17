@@ -95,6 +95,8 @@ import { BRAND_NAME, brandAsset } from './brandAssets'
 import './pixel.css'
 // 薄雾 Mist 收尾层：Tokens → Components → Pages 的组件层，最后加载统一视觉。
 import './mist.css'
+// 极简白底基线必须最后加载：先统一结构，再做下一轮主题。
+import './minimal.css'
 
 type InboxMessage={id:string;person:Person;content:string;kind:string;created_at:string;read_at?:string|null}
 type Page = 'home' | 'room' | 'fun' | 'settings'
