@@ -1,7 +1,7 @@
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
-import { friendlyHttpError, routeInfoFromError, upstreamHint, diagnoseChatHttpError, diagnoseChatTransportError } from '../src/chatHttpError.mjs'
+import { friendlyHttpError, routeInfoFromError, upstreamHint, diagnoseChatHttpError, diagnoseChatTransportError, diagnoseGptSubscriptionError } from '../src/chatHttpError.mjs'
 
 test('404 JSON 不把原始报文糊到界面', () => {
   const raw = JSON.stringify({ error: { code: 'model_not_found', message: "The model 'gpt-5-display-name' does not exist", type: 'invalid_request_error' } })
@@ -82,4 +82,16 @@ test('上游 429 余额不足应区别于限流', () => {
 test('真正的 429 限流仍被正确识别', () => {
   const msg=diagnoseChatHttpError(429,JSON.stringify({error:{message:'rate limit exceeded'}}))
   assert.match(msg,/限流/)
+})
+
+test('GPT Codex 429 never falsely concludes ChatGPT subscription is unpaid',()=>{
+  const detail=JSON.stringify({error:{message:'Your account is not active, please check your billing details.'}})
+  const result=diagnoseGptSubscriptionError(429,detail,{hasAccountId:true,elapsedMs:6000})
+  assert.match(result,/Codex 订阅接口/)
+  assert.match(result,/不能据此判断 ChatGPT Plus 欠费/)
+  assert.doesNotMatch(result,/中转账户未激活|请充值/)
+})
+test('missing Codex account ID suggests checking OAuth account binding',()=>{
+  const result=diagnoseGptSubscriptionError(429,'Too Many Requests',{hasAccountId:false})
+  assert.match(result,/账号标识/)
 })
