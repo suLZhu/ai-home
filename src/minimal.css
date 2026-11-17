@@ -1113,3 +1113,51 @@ html,body{
 .shell .theme-settings .theme-fontctl-foot button{
   border-radius:var(--radius,7px)!important;
 }
+
+
+/* 6.5 圆角控件增加实时样例，明确滑杆实际控制范围。 */
+.shell .theme-radius-preview{
+  display:flex!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:8px!important;
+  width:100%!important;
+  min-width:0!important;
+  margin:8px 0 4px!important;
+  box-sizing:border-box!important;
+}
+.shell .theme-radius-preview-button,
+.shell .theme-radius-preview-field,
+.shell .theme-radius-preview-bubble{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  min-height:34px!important;
+  padding:0 12px!important;
+  box-sizing:border-box!important;
+  font-size:11px!important;
+  line-height:1!important;
+  white-space:nowrap!important;
+}
+.shell .theme-radius-preview-button{
+  border:1px solid #222!important;
+  background:#222!important;
+  color:#fff!important;
+}
+.shell .theme-radius-preview-field{
+  border:1px solid var(--minimal-line-strong)!important;
+  background:#fff!important;
+  color:#555!important;
+}
+.shell .theme-radius-preview-bubble{
+  border:1px solid var(--minimal-line)!important;
+  background:#f5f5f5!important;
+  color:#555!important;
+}
+.shell .theme-radius-setting input[type="range"]{
+  display:block!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  box-sizing:border-box!important;
+}
