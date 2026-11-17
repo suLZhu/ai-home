@@ -3510,3 +3510,11 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-center .vendor-config-info.vendor-config-switch input[type=checkbox]::after{
   box-shadow:0 1px 2px rgba(0,0,0,.18)
 }
+
+/* 多 Key 内联 */
+.vendor-inline-keys{margin:4px 0 6px;padding:10px 0 2px;border-top:1px solid var(--line,#ece4d8)}
+.vendor-inline-empty{margin:2px 0 8px;font-size:11px;color:var(--muted,#8a7d6d)}
+.vendor-inline-keys .vendor-key-manager-row{margin-bottom:8px;padding:9px;border:1px solid var(--line,#e6ded2);border-radius:10px;background:var(--card,#fffdf9)}
+.vendor-inline-keys .vendor-key-add-card.inline{margin-top:6px;padding:9px;border-radius:10px;box-shadow:none;background:var(--field,#f7f3ec)}
+.vendor-inline-keys .vendor-key-add-card.inline>b{font-size:11px}
+.vendor-inline-keys .vendor-submit{margin-top:6px}

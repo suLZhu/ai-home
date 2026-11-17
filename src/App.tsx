@@ -4298,14 +4298,36 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           </div>
           <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
-          {showBackupKeys&&<div className="vendor-config-info"><span>管理 Key <small>{active.keys.length} 把 Key</small></span><button type="button" onClick={()=>onSection('vendor:keys:'+active.id)}>管理 ›</button></div>}
-          <div className="vendor-config-info"><span>测试连接 <small>{testState.text||'用当前地址与 Key 拉一次模型列表'}</small></span><button type="button" disabled={testState.busy} onClick={()=>void testVendor(active)}>{testState.busy?'测试中…':'测试'}</button></div>
-          <div className="vendor-config-info"><span>模型管理</span><button type="button" onClick={()=>setTab('model')}>{pickedModels.length} 个已启用　›</button></div>
+          {showBackupKeys&&<div className="vendor-inline-keys">
+            {active.keys.length===0?<p className="vendor-inline-empty">还没有 API Key，添加后可设置主号与备用。</p>:active.keys.map((k,index)=><div className="vendor-key-manager-row" key={k.id}>
+              <div className="vendor-key-manager-row-head">
+                <span className={'vendor-key-role-pill '+(k.role==='primary'?'primary':'backup')}>{k.role==='primary'?'主号':'备用 '+(index+1)}</span>
+                <input aria-label="Key 备注名" value={k.label} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,label:e.target.value}:x)}))} placeholder="备注名"/>
+                <SoftSelect className="vendor-key-role" ariaLabel="Key 角色" value={k.role||'backup'} onChange={v=>setManagedKeyRole(k.id,v as 'primary'|'backup')} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/>
+              </div>
+              <div className="key-input-row vendor-managed-key-input">
+                <input aria-label={'API Key '+(index+1)} type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={k.value} onChange={e=>patch(active.id,v=>({...v,keys:v.keys.map(x=>x.id===k.id?{...x,value:e.target.value}:x)}))} placeholder="粘贴 API Key"/>
+                <button type="button" className="paste-key-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?'隐藏':'显示'}</button>
+                <button type="button" className="vendor-managed-key-remove" aria-label="删除这把 Key" onClick={()=>void confirmDialog({title:'删除 API Key',message:'确定删除这把 Key？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)removeManagedKey(k.id)})}>×</button>
+              </div>
+            </div>)}
+            <form className="vendor-key-add-card inline" onSubmit={e=>{e.preventDefault();addBackupKey()}}>
+              <b>添加 Key</b>
+              <div className="vendor-key-add-meta">
+                <input aria-label="新 Key 备注名" value={keyDraft.label} onChange={e=>setKeyDraft(v=>({...v,label:e.target.value}))} placeholder="备注名"/>
+                <SoftSelect className="vendor-key-role" ariaLabel="新 Key 角色" value={keyDraftRole} onChange={v=>setKeyDraftRole(v as 'primary'|'backup')} options={[{value:'backup',label:'备用'},{value:'primary',label:'主号'}]}/>
+              </div>
+              <div className="key-input-row vendor-managed-key-input">
+                <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="粘贴 API Key"/>
+                <PasteButton onPaste={value=>setKeyDraft(v=>({...v,value}))}/>
+              </div>
+              <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
+            </form>
+          </div>}
           <button type="button" className="vendor-config-more-head" aria-expanded={showMore} onClick={()=>setShowMore(v=>!v)}>其他设置<span aria-hidden="true">{showMore?'⌃':'⌄'}</span></button>
           {showMore&&<>
             <label className="vendor-config-info vendor-config-switch"><span>Response API <small>使用 /responses 端点</small></span><input type="checkbox" checked={!!active.responseApi} onChange={e=>patch(active.id,x=>({...x,responseApi:e.target.checked}))}/></label>
             <label className="vendor-config-info vendor-config-switch"><span>发送会话缓存键 <small>OpenAI prompt_cache_key</small></span><input type="checkbox" checked={!!active.promptCacheKey} onChange={e=>patch(active.id,x=>({...x,promptCacheKey:e.target.checked}))}/></label>
-            <div className="vendor-config-info"><span>获取账户余额</span><span className="vendor-soon">未接入</span></div>
             <div className="vendor-config-info"><span>图片与请求预算</span><span className="vendor-soon">继承默认</span></div>
             <div className="vendor-config-info"><span>网络代理</span><span className="vendor-soon">未接入</span></div>
             <div className="vendor-config-info"><span>自定义请求</span><span className="vendor-soon">未接入</span></div>
