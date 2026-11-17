@@ -102,3 +102,33 @@ export function summarizeBackup(payload) {
     apiKeys: Object.keys(keys).length,
   }
 }
+
+/** Parse a chat backup without mutating storage; show the user what will be restored. */
+export function summarizeChatBackup(payload) {
+  const local = payload?.data?.local || {}
+  const tryParse = key => {
+    try {
+      const raw = local[key]
+      return typeof raw === 'string' ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+  const conversations = tryParse('ai-home.conversations')
+  const messages = tryParse('ai-home.messages')
+  const rows = []
+  if (conversations && typeof conversations === 'object') {
+    for (const [assistantId, list] of Object.entries(conversations)) {
+      if (!Array.isArray(list)) continue
+      for (const item of list) {
+        if (!item || typeof item !== 'object') continue
+        rows.push({
+          assistantId,
+          title: typeof item.title === 'string' ? item.title : '未命名会话',
+          count: Array.isArray(item.messages) ? item.messages.length : 0,
+        })
+      }
+    }
+  }
+  const messagesCount = rows.reduce((n, x) => n + x.count, 0) ||
+    (messages && typeof messages === 'object' ? Object.values(messages).reduce((n, v) => n + (Array.isArray(v) ? v.length : 0), 0) : 0)
+  return { conversationCount: rows.length, messagesCount, preview: rows.slice(0, 5) }
+}
