@@ -3898,7 +3898,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   const activeId=showKeyManager?section.slice('vendor:keys:'.length):(section.startsWith('vendor:')&&!showNew&&!showDefault&&!showCatalog?section.slice('vendor:'.length):'')
   const [tab,setTab]=useState<'config'|'model'>('config')
   const [,setPickerOpen]=useState(false)
-  const [modelQuery,setModelQuery]=useState('')
   const [modelSheetOpen,setModelSheetOpen]=useState(false)
   const [modelSheetQuery,setModelSheetQuery]=useState('')
   const [sheetGroupOpen,setSheetGroupOpen]=useState<Record<string,boolean>>({})
@@ -4005,7 +4004,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     if(!ok)return
     commit(vendors.filter(x=>x.id!==v.id));backToList()
   }
-  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelQuery('');setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
+  const resetEditUI=()=>{setSpecTarget('');setAddedGroupOpen({});setTestState({busy:false,text:''});setSortMode(false);setSelectMode(false);setSelectedVendors([]);setGroupPrompt(false);setGroupDraft('');setProbe({});setProbeNote('');setPickerOpen(false);setModelSheetQuery('');setModelSheetOpen(false);setSheetGroupOpen({});setBatchIds([]);setModelSelectMode(false);setKeyDraftRole('backup');setListState({loading:false,error:''});setCustomModelOpen(false);setModelDraft('');setShowKey(false);setShowBackupKeys(false);setKeyDraft({label:'',value:''});setAddTab('openai');setNewEnabled(true);setNewResponseApi(false)}
   // 返回列表：清掉详情页的临时 UI 状态，页面由 section 决定。
   const backToList=()=>{resetEditUI();onSection('vendor')}
   const backToDetail=()=>{resetEditUI();setTab('config');setShowBackupKeys(true);onSection('vendor:'+activeId)}
@@ -4068,34 +4067,54 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       setTestState({busy:false,ok:true,text:'连接成功 · '+cost+' ms · '+count+' 个模型'})
     }catch(e){setTestState({busy:false,ok:false,text:'连接失败：'+(e instanceof Error?e.message:'未知错误')})}
   }
-  // 检测：拿「这一家 /models 现在返回的清单」比对已添加模型，标出哪些上游已经没有了。
+  // 测试：拿「这一家 /models 现在返回的清单」比对模型，标出哪些上游已经没有了。
+  // 选中了模型就只测选中的那几个；没选就测这一家的全部模型。
   const probeModels=async(v:Vendor)=>{
-    const ids=v.models.filter(m=>m.selected).map(m=>m.id)
-    if(!ids.length){setProbeNote('还没有模型可检测');return}
-    setProbeNote('正在检测…')
+    const scoped=batchIds.filter(id=>v.models.some(m=>m.id===id&&m.selected))
+    const ids=scoped.length?scoped:v.models.filter(m=>m.selected).map(m=>m.id)
+    if(!ids.length){setProbeNote('先选中要测试的模型');return}
+    setProbeNote('正在测试…')
     const remote=(remoteModels[v.id]||[]).length?remoteModels[v.id]:await fetchRemote(v)
-    if(!remote.length){setProbeNote('检测失败：没有拿到上游模型列表，检查地址与 Key');return}
+    if(!remote.length){setProbeNote('测试失败：没有拿到上游模型列表，检查地址与 Key');return}
     const next:Record<string,boolean>={}
     for(const id of ids) next[id]=remote.includes(id)
     setProbe(next)
     const bad=ids.filter(id=>!remote.includes(id)).length
-    setProbeNote(bad?`检测完成：${ids.length-bad} 个可用，${bad} 个未在上游返回（可能已下线）`:`检测完成：全部 ${ids.length} 个都在上游列表里`)
+    setProbeNote(bad?`测试完成：${ids.length-bad} 个可用，${bad} 个未在上游返回（可能已下线）`:`测试完成：全部 ${ids.length} 个都在上游列表里`)
+  }
+  const hideSelected=(v:Vendor)=>{
+    if(!batchIds.length) return
+    patch(v.id,x=>({...x,models:x.models.map(m=>batchIds.includes(m.id)?{...m,hidden:true}:m)}))
+    setBatchIds([]);setModelSelectMode(false);setProbeNote('')
   }
   const removeSelected=async(v:Vendor)=>{
     if(!batchIds.length) return
     const ok=await confirmDialog({title:'删除模型',message:'从「'+v.name+'」移除 '+batchIds.length+' 个模型？之后可以重新获取再添加。',confirmLabel:'删除',danger:true})
     if(!ok) return
     patch(v.id,x=>({...x,models:x.models.filter(m=>!batchIds.includes(m.id))}))
-    setBatchIds([]);setProbeNote('');setProbe({})
+    setBatchIds([]);setProbeNote('');setProbe({});setModelSelectMode(false)
   }
   const remoteIds=active?(remoteModels[active.id]||[]):[]
   const pickedModels=active?active.models.filter(m=>m.selected):[]
-  const query=modelQuery.trim().toLowerCase()
   const requestUrlPreview=chatRequestUrl({endpoint:newEndpoint,apiPath:newApiPath})
 
   const [showHidden,setShowHidden]=useState(false)
-  const [modelMenu,setModelMenu]=useState<string|null>(null)
   const [showMore,setShowMore]=useState(false)
+  // 模型卡片：点一下进设置，长按进多选。长按用 pointer 计时，松手/移出/取消都清掉。
+  // 长按触发后浏览器还会补一个 click，用触发时间戳把它吞掉，避免刚进多选就被反选。
+  const pressTimer=useRef<number|null>(null)
+  const pressAt=useRef(0)
+  const clearPress=()=>{if(pressTimer.current!==null){window.clearTimeout(pressTimer.current);pressTimer.current=null}}
+  const startPress=(id:string)=>{
+    if(modelSelectMode) return
+    clearPress()
+    pressTimer.current=window.setTimeout(()=>{pressTimer.current=null;pressAt.current=Date.now();setModelSelectMode(true);setBatchIds([id])},480)
+  }
+  const tapModel=(id:string)=>{
+    if(Date.now()-pressAt.current<700) return
+    if(modelSelectMode){setBatchIds(ids=>ids.includes(id)?ids.filter(x=>x!==id):[...ids,id]);return}
+    setSpecTarget(id)
+  }
   const isList=!showNew&&!showDefault&&!showCatalog&&!showKeyManager&&!active
   return <div className="vendor-center">
     {isList&&<>
@@ -4286,16 +4305,16 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     </div>}
 
     {active&&!showKeyManager&&<section className="vendor-page">
-      <header className="vendor-kelivo-page-head">
+      <header className={'vendor-kelivo-page-head'+(tab==='model'?' vendor-head-centered':'')}>
         <button type="button" className="vendor-kelivo-back" aria-label="返回供应商列表" onClick={backToList}>‹</button>
         <span className="vendor-kelivo-provider-icon">{active.avatar||active.name.slice(0,1)}</span>
         <b>{active.name}</b>
         <small className="vendor-kelivo-provider-meta">{pickedModels.length} 个模型</small>
-        <div className="vendor-kelivo-head-actions">
-          {tab==='config'?<button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}>♥</button>:<button type="button" aria-label={modelSelectMode?'退出多选':'多选模型'} title={modelSelectMode?'退出多选':'多选模型'} className={modelSelectMode?'on':''} onClick={()=>{setModelSelectMode(v=>!v);setBatchIds([])}}>{modelSelectMode?'×':'☑'}</button>}
+        {tab==='config'&&<div className="vendor-kelivo-head-actions">
+          <button type="button" aria-label="测试连接" title="测试连接" disabled={testState.busy} onClick={()=>void testVendor(active)}>♥</button>
           <button type="button" aria-label="分享供应商" title="分享供应商配置（不含 Key）" onClick={()=>void shareVendor(active)}>↗</button>
-          {tab==='model'?<button type="button" aria-label="删除所选模型" title="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>▤</button>:!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}>▤</button>}
-        </div>
+          {!active.builtin&&<button type="button" aria-label="删除供应商" title="删除供应商" className="danger" onClick={()=>void deleteVendor(active)}>▤</button>}
+        </div>}
       </header>
       <div className="vendor-card open" key={active.id}>
 
@@ -4353,7 +4372,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       </div>}
 
       {tab==='model'&&<div className="vendor-card-body vendor-kelivo-model-page">
-        <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索已添加模型" placeholder="搜索已添加模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)}/>{!!modelQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setModelQuery('')}>×</button>}</div>
         <div className="vendor-kelivo-added">
           {pickedModels.length>0&&pickedModels.some(m=>m.hidden)&&<div className="vendor-kelivo-added-group vendor-hidden-models">
             <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen._hidden!==false} onClick={()=>setAddedGroupOpen(v=>({...v,_hidden:v._hidden!==false?false:true}))}>
@@ -4370,31 +4388,31 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           </div>}
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
             <div className="vendor-model-cards">
-              {pickedModels.filter(m=>!m.hidden).filter(m=>!query||m.id.toLowerCase().includes(query)).sort((a,b)=>(a.name||a.id).localeCompare(b.name||b.id)).map(m=>{
-                const spec=specForModel(active,m.id); const brand=brandOf(m.id)
-                return <div className={'vendor-model-card'+(batchIds.includes(m.id)?' picked':'')} key={m.id} role="button" tabIndex={0}
-                  onClick={()=>setSpecTarget(m.id)}
-                  onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();setSpecTarget(m.id)}}}>
+              {pickedModels.filter(m=>!m.hidden).sort((a,b)=>(a.name||a.id).localeCompare(b.name||b.id)).map(m=>{
+                const spec=specForModel(active,m.id); const brand=brandOf(m.id); const picked=batchIds.includes(m.id)
+                return <div className={'vendor-model-card'+(picked?' picked':'')} key={m.id} role="button" tabIndex={0}
+                  onPointerDown={()=>startPress(m.id)}
+                  onPointerUp={clearPress}
+                  onPointerLeave={clearPress}
+                  onPointerCancel={clearPress}
+                  onContextMenu={ev=>ev.preventDefault()}
+                  onClick={()=>tapModel(m.id)}
+                  onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();tapModel(m.id)}}}>
+                  {modelSelectMode&&<span className={'vendor-model-check'+(picked?' on':'')} aria-hidden="true">{picked?'✓':''}</span>}
                   <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
                   <span className="vendor-model-card-main"><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></span>
-                  <button type="button" className="vendor-model-card-more" aria-label={'更多操作 '+m.id} onClick={ev=>{ev.stopPropagation();setModelMenu(v=>v===m.id?null:m.id)}}>⋮</button>
-                  {modelMenu===m.id&&<div className="vendor-model-card-menu" onClick={ev=>ev.stopPropagation()}>
-                    <button type="button" onClick={()=>{setSpecTarget(m.id);setModelMenu(null)}}>编辑</button>
-                    <button type="button" onClick={()=>{patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:true}:x)}));setModelMenu(null)}}>隐藏</button>
-                    <button type="button" className="danger" onClick={()=>{void confirmDialog({title:'删除模型',message:'从这家供应商移除 '+m.id+'？',confirmLabel:'删除',danger:true}).then(ok=>{if(ok)patch(active.id,v=>({...v,models:v.models.filter(x=>x.id!==m.id)}));setModelMenu(null)})}}>删除</button>
-                  </div>}
                 </div>
               })}
             </div>}
-          {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
           {!!probeNote&&<p className="vendor-probe-note" role="status">{probeNote}</p>}
         </div>
         <div className="vendor-kelivo-bottomdock">
           {modelSelectMode?<div className="vendor-kelivo-batchbar">
             <button type="button" onClick={()=>setBatchIds(batchIds.length===pickedModels.length?[]:pickedModels.map(m=>m.id))}>{batchIds.length===pickedModels.length&&pickedModels.length?'全不选':'全选'}</button>
-            <button type="button" aria-label="反选" onClick={()=>setBatchIds(pickedModels.filter(m=>!batchIds.includes(m.id)).map(m=>m.id))}>⇄</button>
-            <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>void probeModels(active)}>检测</button>
-            <button type="button" className="danger" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>🗑</button>
+            <button type="button" className="probe" disabled={!batchIds.length} onClick={()=>void probeModels(active)}>测试</button>
+            <button type="button" disabled={!batchIds.length} onClick={()=>hideSelected(active)}>隐藏</button>
+            <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}>🗑</button>
+            <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}>×</button>
           </div>:<div className="vendor-kelivo-floating-actions">
             <button type="button" aria-label="获取模型列表" title="获取模型列表" onClick={()=>{setModelSheetQuery('');setModelSheetOpen(true);if(!remoteIds.length)void fetchRemote(active)}}>▧</button>
             <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}>＋</button>

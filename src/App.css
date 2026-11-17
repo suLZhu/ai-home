@@ -3605,3 +3605,23 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-config-pair.two{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;align-items:center!important}
 .vendor-config-pair.two>.vendor-config-switch{display:flex!important;align-items:center;justify-content:space-between;gap:6px;padding:0!important;min-width:0}
 .vendor-config-pair.two>.vendor-config-switch>span{white-space:nowrap;font-size:13px}
+
+/* 模型页顶部：标题居中，右上角图标去掉 */
+.vendor-center .vendor-kelivo-page-head.vendor-head-centered{position:relative;justify-content:center;gap:8px}
+.vendor-center .vendor-kelivo-page-head.vendor-head-centered>.vendor-kelivo-back{position:absolute;left:0;top:50%;transform:translateY(-50%)}
+.vendor-center .vendor-kelivo-page-head.vendor-head-centered>b{flex:0 1 auto;text-align:center}
+.vendor-center .vendor-kelivo-page-head.vendor-head-centered>.vendor-kelivo-provider-meta{display:none}
+
+/* 模型卡片：点一下进设置，长按进多选 */
+.vendor-center .vendor-model-card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.vendor-center .vendor-model-card.picked{background:color-mix(in srgb,var(--accent,#7b6389) 8%,transparent)!important}
+.vendor-center .vendor-model-check{flex:0 0 20px;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line,#d8d0e0);display:grid;place-items:center;font-size:12px;line-height:1;color:#fff;background:transparent}
+.vendor-center .vendor-model-check.on{background:var(--accent,#7b6389);border-color:transparent}
+
+/* 底部动作条：贴到 tab 栏上方，不再浮在列表中间 */
+.vendor-center .vendor-kelivo-bottomdock{position:fixed!important;left:0!important;right:0!important;bottom:calc(62px + var(--app-safe-bottom,0px))!important;z-index:30;display:flex;justify-content:center;margin:0!important;padding:0 10px!important;pointer-events:none}
+.vendor-center .vendor-kelivo-bottomdock>*{pointer-events:auto}
+.vendor-center .vendor-kelivo-bottomdock .vendor-kelivo-floating-actions{position:static!important;bottom:auto!important}
+.vendor-center .vendor-kelivo-bottomdock .vendor-kelivo-batchbar{position:static!important;bottom:auto!important;margin:0!important}
+.vendor-center .vendor-kelivo-bottomdock .vendor-kelivo-batchbar button.exit{width:38px!important;min-width:38px!important;padding:0!important;font-size:16px!important;color:var(--muted,#8a7d6d)!important}
+.vendor-center .vendor-kelivo-model-page{padding-bottom:132px!important}
