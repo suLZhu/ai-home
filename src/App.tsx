@@ -25,7 +25,7 @@ import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, t
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, type IconComponent } from './icons'
+import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, type IconComponent } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
@@ -3830,17 +3830,17 @@ function groupModelsByName(ids: string[]): { id: string; label: string; models: 
   return [...map.entries()].sort((a, b) => a[0] === '#' ? 1 : b[0] === '#' ? -1 : a[0].localeCompare(b[0])).map(([label, models]) => ({ id: 'letter-' + label, label, models }))
 }
 
-function brandOf(modelId:string){
+function brandOf(modelId:string):{icon:IconComponent;cls:string}{
   const s=modelId.toLowerCase()
-  if(/gpt|openai|(?:^|[^a-z0-9])o[1-9]/.test(s)) return {glyph:'✳',cls:'brand-gpt'}
-  if(/claude|sonnet|opus|haiku/.test(s)) return {glyph:'✳',cls:'brand-claude'}
-  if(/gemini|gemma/.test(s)) return {glyph:'✦',cls:'brand-gemini'}
-  if(/glm|zhipu/.test(s)) return {glyph:'◈',cls:'brand-glm'}
-  if(/deepseek/.test(s)) return {glyph:'🐳',cls:'brand-ds'}
-  if(/qwen|qwq/.test(s)) return {glyph:'❖',cls:'brand-qwen'}
-  if(/kimi|moonshot/.test(s)) return {glyph:'☾',cls:'brand-kimi'}
-  if(/grok/.test(s)) return {glyph:'𝕏',cls:'brand-grok'}
-  return {glyph:'◇',cls:'brand-other'}
+  if(/gpt|openai|(?:^|[^a-z0-9])o[1-9]/.test(s)) return {icon:IconChat,cls:'brand-gpt'}
+  if(/claude|sonnet|opus|haiku/.test(s)) return {icon:IconSparkles,cls:'brand-claude'}
+  if(/gemini|gemma/.test(s)) return {icon:IconStar,cls:'brand-gemini'}
+  if(/glm|zhipu/.test(s)) return {icon:IconGrid,cls:'brand-glm'}
+  if(/deepseek/.test(s)) return {icon:IconMemory,cls:'brand-ds'}
+  if(/qwen|qwq/.test(s)) return {icon:IconSparkles,cls:'brand-qwen'}
+  if(/kimi|moonshot/.test(s)) return {icon:IconClock,cls:'brand-kimi'}
+  if(/grok/.test(s)) return {icon:IconStar,cls:'brand-grok'}
+  return {icon:IconSparkles,cls:'brand-other'}
 }
 
 
@@ -3867,7 +3867,7 @@ function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
     g.items.push(e);groups.set(key,g)
   }
   return <section className="vendor-page">
-    <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
+    <button type="button" className="settings-back" onClick={onBack}><IconBack className="ui-icon-inline" size={14}/> 供应商</button>
     <div className="vendor-card open">
       <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconBook size={16}/></span><b>模型目录</b><span className="vendor-kelivo-provider-meta">{entries.length} 个模型</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
@@ -3879,11 +3879,11 @@ function ModelCatalogPage({vendors,onBack,onOpenVendor}:{
             return <div className="vendor-kelivo-added-group" key={key}>
               <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={!collapsed} onClick={()=>setClosed(v=>({...v,[key]:!collapsed}))}><span >{collapsed?<IconChevronRight size={13}/>:<IconChevronDown size={13}/>}</span><b>{g.label}</b><small>{g.items.length}</small></button>
               {!collapsed&&g.items.map(e=>{
-                const brand=brandOf(e.modelId)
+                const brand=brandOf(e.modelId); const BrandIcon=brand.icon
                 return <div className="catalog-row" role="button" tabIndex={0} key={e.vendorId+':'+e.modelId}
                   onClick={()=>onOpenVendor(e.vendorId)}
                   onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();onOpenVendor(e.vendorId)}}}>
-                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true"><BrandIcon size={14}/></span>
                   <span className="catalog-main">
                     <b>{e.spec.displayName||e.name}</b>
                     <ModelChips spec={e.spec}/>
@@ -3920,7 +3920,7 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
   return <section className="vendor-page default-model-page">
     <button type="button" className="settings-back" onClick={onBack}>← 供应商</button>
     <div className="vendor-card open">
-      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true">★</span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
+      <div className="vendor-detail-head vendor-kelivo-detail-head"><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconStar size={16}/></span><b>默认模型</b><span className="vendor-kelivo-provider-meta">{current?(current.name||current.model):'未设置'}</span></div>
       <div className="vendor-card-body vendor-kelivo-model-page">
         <p className="resource-hint">助手没有单独选模型时，聊天用这个兜底；助手自己选过的，仍以助手的为准。</p>
         <div className="vendor-kelivo-search"><span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="搜索默认模型" placeholder="搜索模型或供应商" value={query} onChange={e=>setQuery(e.target.value)}/>{!!query&&<button type="button" aria-label="清除搜索" onClick={()=>setQuery('')}><IconClose size={15}/></button>}</div>
@@ -3939,7 +3939,7 @@ function DefaultModelPage({profiles,vendors,defaultModelId,setDefaultModelId,onB
                   <b>{p.name||p.model}</b>
                   <span className="vendor-kelivo-badges">{badges.length?badges.map(b=><small key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</small>):<small>{p.model}</small>}</span>
                 </button>
-                <button type="button" className={'default-model-pick'+(on?' on':'')} aria-label={on?'取消默认':'设为默认'} onClick={()=>setDefaultModelId(on?'':p.id)}>{on?'✓':'○'}</button>
+                <button type="button" className={'default-model-pick'+(on?' on':'')} aria-label={on?'取消默认':'设为默认'} onClick={()=>setDefaultModelId(on?'':p.id)}>{on?<IconCheck size={13}/>:null}</button>
               </div>})}
           </div>)}
         </div>
@@ -4251,7 +4251,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               return <div className={'vendor-kelivo-provider-row sortrow'+' pickrow'+(off?' off':'')+(picked?' picked':'')} key={v.id} role="button" tabIndex={0}
                 onClick={()=>setSelectedVendors(ids=>picked?ids.filter(x=>x!==v.id):[...ids,v.id])}
                 onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();setSelectedVendors(ids=>picked?ids.filter(x=>x!==v.id):[...ids,v.id])}}}>
-                <span className="vendor-pick" aria-hidden="true">{picked?'✓':''}</span>
+                <span className="vendor-pick" aria-hidden="true">{picked?<IconCheck size={13}/>:null}</span>
                 <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
                 <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
               </div>
@@ -4259,7 +4259,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             if(sortMode) return <div className={'vendor-kelivo-provider-row sortrow'+(off?' off':'')} key={v.id}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
               <span className="vendor-kelivo-provider-info"><b>{v.name}</b><small>{v.keys.filter(k=>!!k.value).length} Key · {v.models.filter(m=>m.selected).length} 模型</small></span>
-              <span className="vendor-sort-btns"><button type="button" aria-label={'上移 '+v.name} onClick={()=>moveVendor(v.id,-1)}>↑</button><button type="button" aria-label={'下移 '+v.name} onClick={()=>moveVendor(v.id,1)}>↓</button></span>
+              <span className="vendor-sort-btns"><button type="button" aria-label={'上移 '+v.name} onClick={()=>moveVendor(v.id,-1)}><IconArrowUp size={14}/></button><button type="button" aria-label={'下移 '+v.name} onClick={()=>moveVendor(v.id,1)}><IconArrowDown size={14}/></button></span>
             </div>
             return <button type="button" className={'vendor-kelivo-provider-row'+(off?' off':'')} key={v.id} onClick={()=>openVendorPage(v.id)}>
               <span className="vendor-kelivo-provider-icon" aria-hidden="true">{v.avatar||v.name.slice(0,1)}</span>
@@ -4280,7 +4280,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 {!collapsed&&list.map(row)}
               </div>
             })}
-            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true">＋</span><span className="vendor-kelivo-provider-info"><b>添加供应商</b></span><span className="vendor-kelivo-provider-caret"><IconChevronRight size={14}/></span></button>
+            <button type="button" className="vendor-kelivo-provider-row add" onClick={()=>{resetEditUI();onSection('vendor:add')}}><span className="vendor-kelivo-provider-icon" aria-hidden="true"><IconPlus size={15}/></span><span className="vendor-kelivo-provider-info"><b>添加供应商</b></span><span className="vendor-kelivo-provider-caret"><IconChevronRight size={14}/></span></button>
           </>
         })()}
       </div>
@@ -4453,7 +4453,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                 <input aria-label="新 API Key" type="text" inputMode="text" style={{WebkitTextSecurity:showKey?'none':'disc'} as any} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} value={keyDraft.value} onChange={e=>setKeyDraft(v=>({...v,value:e.target.value}))} placeholder="输入 API Key"/>
                 <button type="button" className="paste-key-btn key-eye-btn" aria-label={showKey?'隐藏 Key':'显示 Key'} onClick={()=>setShowKey(v=>!v)}>{showKey?<IconEyeOff size={15}/>:<IconEye size={15}/>}</button>
               </div>
-              <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}>＋ 添加 Key</button>
+              <button type="submit" className="vendor-submit" disabled={!keyDraft.value.trim()}><IconPlus className="ui-icon-inline" size={14}/> 添加 Key</button>
             </form>
           </div>}
           <button type="button" className="vendor-config-more-head" aria-expanded={showMore} onClick={()=>setShowMore(v=>!v)}>其他设置<span aria-hidden="true" >{showMore?<IconChevronUp size={14}/>:<IconChevronDown size={14}/>}</span></button>
@@ -4484,9 +4484,9 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
               <span >{addedGroupOpen._hidden!==false?<IconChevronDown size={13}/>:<IconChevronRight size={13}/>}</span><b>隐藏模型</b><small>{pickedModels.filter(m=>m.hidden).length}</small>
             </button>
             {addedGroupOpen._hidden!==false&&pickedModels.filter(m=>m.hidden).map(m=>{
-              const spec=specForModel(active,m.id); const brand=brandOf(m.id)
+              const spec=specForModel(active,m.id); const brand=brandOf(m.id); const BrandIcon=brand.icon
               return <div className="vendor-kelivo-added-row hidden-model" key={m.id}>
-                <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                <span className={'vendor-model-brand '+brand.cls} aria-hidden="true"><BrandIcon size={14}/></span>
                 <button type="button" className="vendor-kelivo-model-label" onClick={()=>setSpecTarget(m.id)}><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></button>
                 <button type="button" className="vendor-model-hide on" aria-label="取消隐藏" onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:false}:x)}))}><IconEyeOff size={14}/></button>
               </div>
@@ -4495,7 +4495,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
             <div className="vendor-model-cards">
               {pickedModels.filter(m=>!m.hidden).sort((a,b)=>(a.name||a.id).localeCompare(b.name||b.id)).map(m=>{
-                const spec=specForModel(active,m.id); const brand=brandOf(m.id); const picked=batchIds.includes(m.id)
+                const spec=specForModel(active,m.id); const brand=brandOf(m.id); const BrandIcon=brand.icon; const picked=batchIds.includes(m.id)
                 return <div className={'vendor-model-card'+(picked?' picked':'')} key={m.id} role="button" tabIndex={0}
                   onPointerDown={()=>startPress(m.id)}
                   onPointerUp={clearPress}
@@ -4504,8 +4504,8 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                   onContextMenu={ev=>ev.preventDefault()}
                   onClick={()=>tapModel(m.id)}
                   onKeyDown={ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();tapModel(m.id)}}}>
-                  {modelSelectMode&&<span className={'vendor-model-check'+(picked?' on':'')} aria-hidden="true">{picked?'✓':''}</span>}
-                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                  {modelSelectMode&&<span className={'vendor-model-check'+(picked?' on':'')} aria-hidden="true">{picked?<IconCheck size={12}/>:null}</span>}
+                  <span className={'vendor-model-brand '+brand.cls} aria-hidden="true"><BrandIcon size={14}/></span>
                   <span className="vendor-model-card-main"><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></span>
                 </div>
               })}
@@ -4518,7 +4518,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             <button type="button" className="danger" aria-label="删除所选模型" disabled={!batchIds.length} onClick={()=>void removeSelected(active)}><IconTrash size={15}/></button>
             <button type="button" className="exit" aria-label="退出多选" onClick={()=>{setModelSelectMode(false);setBatchIds([])}}><IconClose size={15}/></button>
           </div>:<div className="vendor-kelivo-floating-actions">
-            <button type="button" aria-label="获取模型列表" title="获取模型列表" onClick={()=>{setModelSheetQuery('');setModelSheetOpen(true);if(!remoteIds.length)void fetchRemote(active)}}>▧</button>
+            <button type="button" aria-label="获取模型列表" title="获取模型列表" onClick={()=>{setModelSheetQuery('');setModelSheetOpen(true);if(!remoteIds.length)void fetchRemote(active)}}><IconGrid size={15}/></button>
             <button type="button" aria-label="手动添加模型" title="手动添加模型" onClick={()=>setCustomModelOpen(v=>!v)}><IconPlus size={15}/></button>
           </div>}
         </div>
@@ -4535,7 +4535,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                   return <div className="vendor-cap-row" key={k}>
                     <span className="vendor-cap-label">{label}</span>
                     {r&&r.note?<small className="vendor-cap-note">{r.note}</small>:null}
-                    <i className={'vendor-cap-state '+(r?r.state:'run')} aria-label={r&&r.state==='ok'?'通过':r&&r.state==='fail'?'失败':'测试中'}>{r&&r.state==='ok'?'✓':r&&r.state==='fail'?'✗':'…'}</i>
+                    <i className={'vendor-cap-state '+(r?r.state:'run')} aria-label={r&&r.state==='ok'?'通过':r&&r.state==='fail'?'失败':'测试中'}>{r&&r.state==='ok'?<IconCheck size={13}/>:r&&r.state==='fail'?<IconClose size={13}/>:<IconMore size={13}/>}</i>
                   </div>
                 })}
               </div>
@@ -4547,16 +4547,16 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
           <section className="vendor-kelivo-sheet" role="dialog" aria-modal="true" aria-label={'从 '+active.name+' 添加模型'} onClick={e=>e.stopPropagation()}>
             <div className="vendor-kelivo-sheet-grip"/>
             <div className="vendor-kelivo-sheet-search">
-              <span aria-hidden="true">⌕</span><input aria-label="在可用模型中搜索" autoFocus value={modelSheetQuery} onChange={e=>setModelSheetQuery(e.target.value)} placeholder="输入模型名称筛选"/>
-              <button type="button" aria-label="全选" title="全选" onClick={()=>pickModels(active.id,[...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase())))}>☑</button>
-              <button type="button" aria-label="刷新当前供应商模型" disabled={listState.loading} onClick={()=>void fetchRemote(active)}>{listState.loading?'…':'⟳'}</button>
+              <span aria-hidden="true"><IconSearch size={15}/></span><input aria-label="在可用模型中搜索" autoFocus value={modelSheetQuery} onChange={e=>setModelSheetQuery(e.target.value)} placeholder="输入模型名称筛选"/>
+              <button type="button" aria-label="全选" title="全选" onClick={()=>pickModels(active.id,[...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase())))}><IconCheck size={14}/></button>
+              <button type="button" aria-label="刷新当前供应商模型" disabled={listState.loading} onClick={()=>void fetchRemote(active)}>{listState.loading?<IconMore size={14}/>:<IconRefresh size={14}/>}</button>
             </div>
             {listState.error&&<p className="mcp-error" role="alert">{listState.error}</p>}
             {listState.loading&&<p className="muted">正在读取「{active.name}」的模型…</p>}
             <div className="vendor-kelivo-sheet-items">
               {groupModelsByName([...new Set([...remoteIds,...pickedModels.map(m=>m.id)])].filter(id=>id.toLowerCase().includes(modelSheetQuery.trim().toLowerCase()))).map(g=><div className="vendor-kelivo-sheet-group" key={g.id}>
                 <button type="button" className="vendor-kelivo-sheet-group-head" aria-expanded={!sheetGroupOpen[g.id]} onClick={()=>setSheetGroupOpen(v=>({...v,[g.id]:!v[g.id]}))}><span >{sheetGroupOpen[g.id]?<IconChevronRight size={13}/>:<IconChevronDown size={13}/>}</span><b>{g.label}</b><small>{g.models.length}</small><span className="vendor-kelivo-sheet-group-add" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();pickModels(active.id,g.models)}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();pickModels(active.id,g.models)}}}><IconPlus size={14}/></span></button>
-                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)} >{added?<IconMinus size={14}/>:<IconPlus size={14}/>}</button></div>})}
+                {!sheetGroupOpen[g.id]&&g.models.map(id=>{const added=pickedModels.some(m=>m.id===id);const brand=brandOf(id);const BrandIcon=brand.icon;return <div className={'vendor-kelivo-sheet-model'+(added?' added':'')} key={id}><span className={'vendor-model-brand '+brand.cls} aria-hidden="true"><BrandIcon size={14}/></span><div className="vendor-kelivo-model-label"><b>{id}</b><ModelChips spec={inferModelSpec(id)} dense/></div><button type="button" aria-label={(added?'移除 ':'添加 ')+id} onClick={()=>toggleModel(active.id,id,added)} >{added?<IconMinus size={14}/>:<IconPlus size={14}/>}</button></div>})}
               </div>)}
               {!listState.loading&&!remoteIds.length&&<div className="vendor-kelivo-empty"><b>尚未获取模型</b><small>点击右上角刷新，或关闭弹层后手动添加模型</small></div>}
             </div>
@@ -4797,13 +4797,13 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     {tab==='world' && <div className="resource-world"><WorldbookEditor entries={worldEntries} onChange={setWorldEntries} personLabel={displayName}/></div>}
     {tab==='mcp' && <>
       {mcpFormOpen ? <>
-        <div className="worldbook-form-head"><button type="button" className="worldbook-back" onClick={() => { setMcpFormOpen(false); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}>← 返回</button><b>{mcpEdit.length ? '编辑 MCP 服务' : '新增 MCP 服务'}</b></div>
+        <div className="worldbook-form-head"><button type="button" className="worldbook-back" onClick={() => { setMcpFormOpen(false); setMcpEdit([]); setMcpDraft({ name: '', url: '', token: '', owner: 'all' }); setMcpTest({ busy: false, message: '' }) }}><IconBack className="ui-icon-inline" size={14}/> 返回</button><b>{mcpEdit.length ? '编辑 MCP 服务' : '新增 MCP 服务'}</b></div>
         <form className="resource-form" onSubmit={addMcp}>
           <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
           <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
           <label>Token（可选）<span className="mcp-token-field"><input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type={mcpShowToken ? "text" : "password"} autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/><button type="button" className="mcp-token-eye" aria-label={mcpShowToken?'隐藏 Token':'显示 Token'} onClick={()=>setMcpShowToken(v=>!v)}>{mcpShowToken?'隐藏':'显示'}</button></span></label>
           <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button></div>
-          {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?'✓ ':'✗ '}{mcpTest.message}</small>}
+          {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?<IconCheck className="ui-icon-inline" size={13}/>:<IconClose className="ui-icon-inline" size={13}/>} {mcpTest.message}</small>}
           <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>
         </form>
       </> : <>
