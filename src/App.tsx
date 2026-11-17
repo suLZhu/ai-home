@@ -121,7 +121,7 @@ type Tool = '人物设置' | '世界书' | '记忆面板' | '工作流' | '自�
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
 type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; at?: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string; reasoning?: string }
-type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
+type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; archivedAt?:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
 // 资源库：全局模型预设池 + 每位助手的绑定。旧快照缺这两个字段时完全沿用旧行为。
@@ -2092,6 +2092,9 @@ export default function App() {
   // 左侧抽屉里的会话操作：和房间页共用 conversations / messages / activeConversationIds，
   // 切换前先把当前聊天视图写回持久化会话，避免刚发出去的消息丢在旧会话里。
   const drawerConvs:Conversation[]=conversations[person]||[]
+  const [showArchivedConvs,setShowArchivedConvs]=useState(false)
+  const visibleDrawerConvs=drawerConvs.filter(c=>showArchivedConvs?!!c.archivedAt:!c.archivedAt)
+  const archivedDrawerCount=drawerConvs.filter(c=>!!c.archivedAt).length
   const drawerActiveId:string=activeConversationIds[person]||''
   function drawerWriteBack(){
     if(!drawerActiveId)return
@@ -2139,6 +2142,29 @@ export default function App() {
     setChatError('')
     setDrawerRenameId(null)
   }
+  function drawerArchive(id:string) {
+    const list=conversations[person]||[]
+    const target=list.find(c=>c.id===id)
+    if(!target||target.archivedAt)return
+    const now=new Date().toISOString()
+    // Archive only changes visibility. No message or summary is deleted.
+    setConversations(old=>({...old,[person]:(old[person]||[]).map(c=>{
+      if(c.id===id)return {...c,archivedAt:now,messages:id===drawerActiveId?(messages[person]||c.messages):c.messages}
+      return c
+    })}))
+    if(id===drawerActiveId){
+      const replacement=list.find(c=>c.id!==id&&!c.archivedAt)
+      const fallback=replacement||{id:crypto.randomUUID(),title:'新对话',messages:[] as ChatMessage[],updatedAt:now}
+      if(!replacement)setConversations(old=>({...old,[person]:[...(old[person]||[]),fallback]}))
+      setActiveConversationIds(old=>({...old,[person]:fallback.id}))
+      setMessages(old=>({...old,[person]:fallback.messages||[]}))
+    }
+    setChatError('')
+    setDrawerRenameId(null)
+  }
+  function drawerUnarchive(id:string) {
+    setConversations(old=>({...old,[person]:(old[person]||[]).map(c=>c.id===id?{...c,archivedAt:undefined}:c)}))
+  }
   // 聊天页没有「← 房间」按钮：从抽屉底部或系统返回手势回房间。
   const drawerBackToRoom=()=>{setSidebarOpen(false);setChatOpen(false);setActiveTool('')}
   const beautifyClass=BEAUTIFY_PACKS.find(p=>p.id===beautifyPack)?.cssClass||''
@@ -2182,18 +2208,20 @@ export default function App() {
         </section>
         <section className="sidebar-section sidebar-combined">
           <div className="sidebar-combined-card">
-            <div className="sidebar-combined-head"><b>历史聊天</b><small>{displayName(person)}</small></div>
+            <div className="sidebar-combined-head"><b>{showArchivedConvs?'已归档':'历史聊天'}</b><button type="button" className="sidebar-conv-archive-tab" aria-pressed={showArchivedConvs} onClick={()=>setShowArchivedConvs(v=>!v)}>{showArchivedConvs?'返回聊天':'归档 '+archivedDrawerCount}</button></div>
             <div className="sidebar-conv-list">
-              {drawerConvs.map((c:Conversation)=>(
+              {visibleDrawerConvs.map((c:Conversation)=>(
                 <div className={'sidebar-conv-row'+(c.id===drawerActiveId?' active':'')} key={c.id}>
                   {drawerRenameId===c.id
                     ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
                     : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
-                  <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}><IconEdit size={14}/></button>
+                  {!showArchivedConvs&&<button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}><IconEdit size={14}/></button>}
+                  <button type="button" className="sidebar-conv-archive-action" aria-label={(showArchivedConvs?'取消归档 ':'归档 ')+(c.title||'新对话')} title={showArchivedConvs?'取消归档':'归档会话'} onClick={()=>showArchivedConvs?drawerUnarchive(c.id):drawerArchive(c.id)}>{showArchivedConvs?'恢复':'归档'}</button>
                   <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>void drawerDelete(c.id)}><IconClose size={15}/></button>
                 </div>
               ))}
             </div>
+            {showArchivedConvs&&visibleDrawerConvs.length===0&&<p className="sidebar-archive-empty">暂时没有已归档的对话。</p>}
             <button type="button" className="sidebar-conv-new" onClick={drawerCreate}><IconPlus className="ui-icon-inline" size={14}/> 新建对话</button>
             <div className="sidebar-combined-sep" aria-hidden="true"/>
             <div className="sidebar-combined-head"><b>助手工具</b><small>{displayName(person)}</small></div>
