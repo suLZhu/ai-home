@@ -3491,3 +3491,22 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-config-pair>.vendor-config-inline>span{white-space:nowrap}
 .vendor-config-pair>.vendor-config-switch.compact>span{white-space:nowrap}
 .vendor-config-hero .vendor-config-select{flex:1 1 auto;max-width:62%}
+
+/* 隐藏按钮：任何状态都保持纯文字 */
+.shell .settings-screen .vendor-kelivo-head-actions .vendor-head-hide,
+.shell .settings-screen .vendor-kelivo-head-actions .vendor-head-hide.on{
+  background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+  height:auto!important;width:auto!important;min-width:0!important;padding:0 2px!important;font-size:12px!important;
+  color:var(--muted,#8a7d6d)!important
+}
+.shell .settings-screen .vendor-kelivo-head-actions .vendor-head-hide.on{color:var(--accent,#7b6389)!important;font-weight:600!important}
+/* 开关轨道：关闭态也要看得见 */
+.vendor-center .vendor-config-info.vendor-config-switch input[type=checkbox]{
+  background:#e7e1ea!important;box-shadow:inset 0 0 0 1px rgba(70,50,80,.08)!important
+}
+.vendor-center .vendor-config-info.vendor-config-switch input[type=checkbox]:checked{
+  background:var(--accent,#7b6389)!important;box-shadow:none!important
+}
+.vendor-center .vendor-config-info.vendor-config-switch input[type=checkbox]::after{
+  box-shadow:0 1px 2px rgba(0,0,0,.18)
+}
