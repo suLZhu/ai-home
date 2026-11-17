@@ -83,3 +83,17 @@
 .mep-foot{position:fixed;right:0;bottom:0;left:0;display:flex;justify-content:flex-end;gap:10px;padding:10px 16px calc(10px + var(--app-safe-bottom,0px));background:var(--bg,#f6f1ea)}
 .mep-cancel{border:0;background:transparent;color:var(--muted,#8a7d6d);font-size:13px;padding:8px 14px}
 .mep-confirm{border:0;border-radius:999px;background:var(--accent,#8a5a3b);color:#fff;font-size:13px;padding:10px 26px}
+
+/* 编辑模型：整页一张卡，字段扁平分隔 */
+.mep-body{margin:0 12px;padding:8px 12px 70px;border:1px solid var(--line,#e2d9cc);border-radius:16px;background:var(--surface,#fffdf9)}
+.mep-summary{border:0;border-bottom:1px solid var(--line,#eee7dc);border-radius:0;background:transparent;padding:4px 0 10px;margin:0 0 2px}
+.mep-card{border:0;border-bottom:1px solid var(--line,#eee7dc);border-radius:0;background:transparent;margin:0;padding:8px 0}
+.mep-card:last-child{border-bottom:0}
+.mep-card-head{margin-bottom:6px}
+.mep-section{margin:8px 0 2px}
+.mep-card input{padding:8px 10px;border-radius:10px}
+.mep-seg button{padding:8px 4px;border-radius:10px}
+.mep-tabs{padding:6px 12px 8px}
+.mep-tabs button{padding:8px 4px}
+.mep-tools-list{border:0;border-radius:0;background:transparent}
+.mep-tool-row{padding:10px 2px}
