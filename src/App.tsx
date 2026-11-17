@@ -25,7 +25,7 @@ import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, t
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
-import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
+import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
 import { BUILTIN_THEME_PACKS } from './builtinThemePacks.mjs'
 import { PersonAppearance } from './PersonAppearance'
@@ -4122,15 +4122,6 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       if(!keys.some(k=>k.role==='primary')&&keys[0])keys=keys.map((k,i)=>i===0?{...k,role:'primary' as const}:k)
       return {...v,keys}
     })
-  }
-  const shareVendor=async(v:Vendor)=>{
-    const safe={name:v.name,endpoint:v.endpoint,apiPath:v.apiPath||DEFAULT_API_PATH,modelsPath:v.modelsPath||'',providerType:v.providerType||'openai',models:v.models.filter(m=>m.selected).map(m=>m.id)}
-    const text=JSON.stringify(safe,null,2)
-    try{
-      const nav=navigator as any
-      if(typeof nav.share==='function')await nav.share({title:v.name,text})
-      else if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);setTestState({busy:false,ok:true,text:'供应商配置已复制（不包含 API Key）'})}
-    }catch{}
   }
   const deleteVendor=async(v:Vendor)=>{
     const ok=await confirmDialog({
