@@ -189,31 +189,12 @@ function normalizeCodexModels(payload: any): { models: string[]; error: string }
   return { models: normalizeModelIds(ids), error: ids.length ? '' : 'Codex 模型目录没有返回可用模型' }
 }
 
-async function fetchRemoteModels(
-  endpoint: string,
-  token: string,
-  channelId = '',
-  accountId = '',
-  preferUrl = false,
-): Promise<{ models: string[]; error: string }> {
-  if (!token) return { models: [], error: '缺少令牌，请重新登录订阅账号' }
-  if (preferUrl) {
-    if (!endpoint) return { models: [], error: '请填写模型网址或兼容网关地址' }
-    return fetchStandardModels(endpoint, token)
-  }
+async function fetchRemoteModels(endpoint: string, token: string, channelId = '', accountId = ''): Promise<{ models: string[]; error: string }> {
+  if (!token) return { models: [], error: '缺少登录令牌' }
   if (channelId === 'claude') return fetchClaudeModels(token)
   if (channelId === 'grok') return fetchGrokModels(token)
+  if (channelId === 'gpt') return fetchCodexModels(token, accountId)
   if (!endpoint) return { models: [], error: '缺少接口地址' }
-  if (channelId === 'gpt') {
-    const codex = await fetchCodexModels(token, accountId)
-    if (codex.models.length) return codex
-    if (!/^https:\/\/api\.openai\.com/i.test(endpoint)) {
-      const standard = await fetchStandardModels(endpoint, token)
-      if (standard.models.length) return standard
-      return { models: [], error: standard.error || codex.error }
-    }
-    return codex
-  }
   return fetchStandardModels(endpoint, token)
 }
 
@@ -223,7 +204,6 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   const [errorInfo, setErrorInfo] = useState<LoginErrorInfo | null>(null)
   const [showErrorDetail, setShowErrorDetail] = useState(false)
   const [modelOpen, setModelOpen] = useState('')
-  const [endpointDraft, setEndpointDraft] = useState('')
   const [customModel, setCustomModel] = useState('')
   const [modelNote, setModelNote] = useState('')
   const [device, setDevice] = useState<{ userCode: string; url: string; status: string } | null>(null)
@@ -272,20 +252,114 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
     return { keyId, vendor }
   }
 
-  const applyLogin = async (id: string, token: string, idToken = '', source = '网页授权登录') => {
+  const tokenExpiry = (seconds: number) => seconds > 0 ? new Date(Date.now() + seconds * 1000).toISOString() : ''
+
+  const replaceVendorToken = (a: SubscriptionAccount, token: string) => {
+    const ch = channelById(a.channelId)
+    const vid = a.vendorId || ch?.vendorId || ('sub-' + a.channelId)
+    const nextVendors = vendors.map(v => v.id !== vid ? v : ({
+      ...v,
+      keys: (v.keys || []).map(k => k.id === a.vendorKeyId ? { ...k, value: token } : k),
+    }))
+    setVendors(nextVendors)
+    setModelProfiles(old => syncVendorProfiles(nextVendors, old))
+  }
+
+  const refreshOAuthToken = async (a: SubscriptionAccount, currentToken: string) => {
+    const refreshToken = String(a.refreshToken || '')
+    if (!refreshToken) return { account: a, token: currentToken, error: '登录凭证来自旧版本，请重新登录一次' }
+    let url = ''
+    let headers: Record<string,string> = {}
+    let body = ''
+    if (a.channelId === 'gpt') {
+      url = 'https://auth.openai.com/oauth/token'
+      headers = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }
+      body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        refresh_token: refreshToken,
+      }).toString()
+    } else if (a.channelId === 'claude') {
+      url = 'https://api.anthropic.com/v1/oauth/token'
+      headers = {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'anthropic-beta': 'oauth-2025-04-20',
+        'User-Agent': 'anthropic-sdk-typescript/0.68.0 userOAuthProvider',
+      }
+      body = JSON.stringify({
+        grant_type: 'refresh_token',
+        client_id: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
+        refresh_token: refreshToken,
+      })
+    } else if (a.channelId === 'grok') {
+      url = 'https://auth.x.ai/oauth2/token'
+      headers = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }
+      body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: GROK_CLIENT_ID,
+        refresh_token: refreshToken,
+      }).toString()
+    } else {
+      return { account: a, token: currentToken, error: '这个账号暂不支持自动续期' }
+    }
+    try {
+      const native = nativeHttpPost(url, headers, body)
+      if (!native || native.error) return { account: a, token: currentToken, error: native?.error || '原生网络请求不可用' }
+      const status = Number(native.status || 0)
+      let data: any = {}
+      try { data = JSON.parse(String(native.body || '{}')) } catch { return { account: a, token: currentToken, error: '续期响应不是 JSON' } }
+      if (status >= 400 || data.error) return { account: a, token: currentToken, error: String(data.error_description || data.error || ('HTTP ' + status)) }
+      const token = String(data.access_token || '')
+      if (!token) return { account: a, token: currentToken, error: '续期响应没有 access_token' }
+      const patched: SubscriptionAccount = {
+        ...a,
+        refreshToken: String(data.refresh_token || refreshToken),
+        tokenExpiresAt: tokenExpiry(Number(data.expires_in || 0)),
+        loggedIn: true,
+        lastVerified: nowStamp(),
+      }
+      replaceVendorToken(patched, token)
+      setSubscriptions(subs => subs.map(x => x.id === a.id ? patched : x))
+      return { account: patched, token, error: '' }
+    } catch (e) {
+      return { account: a, token: currentToken, error: e instanceof Error ? e.message : '自动续期失败' }
+    }
+  }
+
+  const ensureFreshToken = async (a: SubscriptionAccount, currentToken: string, force = false) => {
+    const expiresAt = Date.parse(String(a.tokenExpiresAt || ''))
+    const shouldRefresh = force || (Number.isFinite(expiresAt) && expiresAt <= Date.now() + 60_000)
+    if (!shouldRefresh) return { account: a, token: currentToken, error: '' }
+    return refreshOAuthToken(a, currentToken)
+  }
+
+  const applyLogin = async (
+    id: string,
+    auth: { token: string; refreshToken?: string; expiresIn?: number; idToken?: string },
+    source = '网页授权登录',
+  ) => {
     const found = subscriptions.find(s => s.channelId === id)
     const a = found || blankSubscription(channelById(id) || SUBSCRIPTION_CHANNELS[0])
     const ch = channelById(id)
     const endpoint = a.endpoint || ch?.endpoint || ''
+    const token = String(auth.token || '')
+    const idToken = String(auth.idToken || '')
     const accountId = chatGptAccountIdFromToken(idToken) || chatGptAccountIdFromToken(token) || a.accountId || ''
+    const credentialAccount: SubscriptionAccount = {
+      ...a,
+      refreshToken: String(auth.refreshToken || ''),
+      tokenExpiresAt: tokenExpiry(Number(auth.expiresIn || 0)),
+      accountId,
+    }
     const fetched = await fetchRemoteModels(endpoint, token, id, accountId)
     // 重新登录时保留用户以前增删 / 勾选过的模型，不让它一登录就丢。
     const available = mergeAvailableModels([...fetched.models, ...(a.availableModels || [])], id)
     const state: ModelState = { available, picked: a.pickedModels?.length ? a.pickedModels : null }
-    const { keyId, vendor } = commit(a, token, state)
+    const { keyId, vendor } = commit(credentialAccount, token, state)
     const picked = pickedModelIds(vendor)
     const patched: SubscriptionAccount = {
-      ...a,
+      ...credentialAccount,
       loginMode: 'web', vendorKeyId: keyId, apiKey: '',
       tokenSource: source, loggedIn: true, accountId,
       modelSource: fetched.models.length ? 'account' : 'candidate',
@@ -295,8 +369,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
     setSubscriptions(found ? subscriptions.map(s => s.id === a.id ? patched : s) : [...subscriptions, patched])
     setModelNote(fetched.models.length
       ? '已从账号拉取 ' + fetched.models.length + ' 个模型，可在「选择模型」里调整。'
-      : '未能从账号拉取模型' + (fetched.error ? '（' + fetched.error + '）' : '') + '。下面是候选清单，不是账号真实模型；可填兼容网关或改用 API Key。')
-    setEndpointDraft(endpoint)
+      : '未能自动同步模型' + (fetched.error ? '（' + fetched.error + '）' : '') + '。可以点「重新同步」再试。')
     setModelOpen(id)
   }
 
@@ -307,7 +380,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
       const config = buildLoginConfig(id, pkce)
       if (!config) throw new Error('这个渠道暂时不支持网页登录')
       const result = await startOAuthLogin(config)
-      await applyLogin(id, result.token, result.idToken || '')
+      await applyLogin(id, result)
     } catch (e) {
       setErrorInfo(formatLoginError(e))
       setShowErrorDetail(false)
@@ -376,7 +449,11 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
         const poll = await grokDevicePoll(String(start.device_code))
         if (poll?.access_token) {
           setDevice(null)
-          await applyLogin('grok', String(poll.access_token), '', '设备码登录')
+          await applyLogin('grok', {
+            token: String(poll.access_token),
+            refreshToken: String(poll.refresh_token || ''),
+            expiresIn: Number(poll.expires_in || 0),
+          }, '设备码登录')
           return
         }
         if (poll?.error === 'authorization_pending') continue
@@ -414,52 +491,33 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
       const endpoint = a.endpoint || ch?.endpoint || ''
       const currentKey = (vendors.find(v => v.id === (a.vendorId || ch?.vendorId))?.keys || [])
         .find(k => k.id === a.vendorKeyId)?.value || ''
-      const customEndpoint = !!endpoint && endpoint !== (ch?.endpoint || '')
-      const fetched = await fetchRemoteModels(endpoint, currentKey, a.channelId, a.accountId || '', customEndpoint)
-      if (!fetched.models.length) {
-        if (a.modelSource !== 'candidate') {
-          setSubscriptions(subs => subs.map(s => s.id === a.id ? { ...s, modelSource: 'candidate' } : s))
+      let resolved = await ensureFreshToken(a, currentKey)
+      if (resolved.error && !resolved.token) {
+        setModelNote(resolved.error)
+        return
+      }
+      let fetched = await fetchRemoteModels(endpoint, resolved.token, a.channelId, resolved.account.accountId || '')
+      if (!fetched.models.length && /401|403|bad-credentials|invalid[_ -]?token|unauth/i.test(fetched.error)) {
+        resolved = await ensureFreshToken(resolved.account, resolved.token, true)
+        if (!resolved.error) {
+          fetched = await fetchRemoteModels(endpoint, resolved.token, a.channelId, resolved.account.accountId || '')
         }
-        setModelNote('没能从账号拉取模型' + (fetched.error ? '：' + fetched.error : '') + '。可以继续用候选，或填写兼容网关地址后重新拉取。')
+      }
+      if (!fetched.models.length) {
+        if (!resolved.account.refreshToken && /401|403|bad-credentials|invalid[_ -]?token|unauth/i.test(fetched.error)) {
+          setModelNote('登录状态已经过期，而且这是旧版保存的账号凭证。请点右侧菜单「重新登录」一次，之后会自动续期和同步模型。')
+          return
+        }
+        setModelNote('自动同步失败' + (fetched.error ? '：' + fetched.error : '') + '。可稍后重试；如果持续失败请重新登录。')
         return
       }
       const merged = mergeAvailableModels(fetched.models, a.channelId)
-      updateModels(a, merged, merged, '已拉取 ' + fetched.models.length + ' 个模型。', 'account')
+      updateModels(resolved.account, merged, merged, '已自动同步 ' + fetched.models.length + ' 个模型。', 'account')
     } finally { setBusy('') }
   }
 
   const openModels = (a: SubscriptionAccount) => {
-    const ch = channelById(a.channelId)
-    setEndpointDraft(a.endpoint || ch?.endpoint || '')
     setModelOpen(modelOpen === a.channelId ? '' : a.channelId)
-  }
-
-  const saveEndpoint = async (a: SubscriptionAccount) => {
-    const endpoint = endpointDraft.trim()
-    if (!endpoint) return
-    if (!/^https?:\/\//i.test(endpoint)) {
-      setModelNote('网址需以 http:// 或 https:// 开头')
-      return
-    }
-    const ch = channelById(a.channelId)
-    const vid = a.vendorId || ch?.vendorId || ('sub-' + a.channelId)
-    const currentKey = (vendors.find(v => v.id === vid)?.keys || [])
-      .find(k => k.id === a.vendorKeyId)?.value || ''
-    const next = { ...a, endpoint }
-    setSubscriptions(subs => subs.map(s => s.id === a.id ? next : s))
-    const nextVendors = vendors.map(v => v.id === vid ? { ...v, endpoint } : v)
-    setVendors(nextVendors)
-    setModelProfiles(old => syncVendorProfiles(nextVendors, old))
-    setBusy(a.channelId); setModelNote('')
-    try {
-      const fetched = await fetchRemoteModels(endpoint, currentKey, a.channelId, a.accountId || '', true)
-      if (!fetched.models.length) {
-        setModelNote('从网址拉取失败' + (fetched.error ? '：' + fetched.error : ''))
-        return
-      }
-      const merged = mergeAvailableModels(fetched.models, a.channelId)
-      updateModels(next, merged, merged, '已从网址拉取 ' + fetched.models.length + ' 个模型。', 'account')
-    } finally { setBusy('') }
   }
 
   const logout = (id: string) => {
@@ -467,8 +525,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
     if (!a) return
     commit(a, '', null)
     setSubscriptions(subscriptions.map(s => s.id === a.id ? {
-      ...s, vendorKeyId: '', apiKey: '', tokenSource: '', loggedIn: false, modelSource: '',
-      modelCount: 0, lastVerified: '',
+      ...s, vendorKeyId: '', apiKey: '', tokenSource: '', refreshToken: '', tokenExpiresAt: '',
+      loggedIn: false, modelSource: '', modelCount: 0, lastVerified: '',
     } : s))
     setMenu(''); setModelOpen(''); setModelNote('')
   }
@@ -477,7 +535,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   return <section id="subscription-accounts" className="account-login-page">
       <header className="account-page-head">
         <b>账号登录</b>
-        <p className="account-page-lead">登录订阅账号后会尝试拉取模型。ChatGPT / Claude 的网页订阅令牌通常不能直接当 API 用，拉不到时会列出候选并提示；填兼容网关或改用 API Key 后才是账号真实模型。</p>
+        <p className="account-page-lead">登录成功后会自动同步这个账号可用的模型；令牌过期会自动续期，不需要填写网址或 API Key。</p>
       </header>
       <div className="account-rows">
         {rows.map(r => {
@@ -508,13 +566,8 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
             </div>}
             {expanded && <div className="account-models" data-models-for={r.id}>
               <p className="account-models-lead">勾选的模型会进入聊天模型面板；可自己增删。</p>
-              <div className="account-endpoint-row">
-                <input aria-label="模型网址或兼容网关" value={endpointDraft} onChange={e => setEndpointDraft(e.target.value)} placeholder="模型网址 / 兼容网关，例如 https://example.com/v1 或 /v1/models" />
-                <button type="button" disabled={busy === r.id || !endpointDraft.trim()} onClick={() => void saveEndpoint(a!)}>{busy === r.id ? '拉取中…' : '从网址拉取'}</button>
-              </div>
-              <p className="account-endpoint-hint">当前模型源：{a!.endpoint || '官方账号目录'}</p>
-              {a!.modelSource !== 'account' && <p className="account-model-warning">下面显示的是候选模型，不是从账号真实拉取的。{r.id === 'gpt' ? '没能从 Codex 目录拉到模型；请重新登录一次（需要账号 ID），或填兼容网关。' : '可填兼容网关地址后重新拉取。'}</p>}
-              {a!.modelSource === 'account' && <p className="account-endpoint-hint">模型目录已从账号拉取。聊天仍走 OpenAI 兼容协议；如果发送时提示 401/404，请把接口地址换成兼容网关，或改用 API Key。</p>}
+              {a!.modelSource !== 'account' && <p className="account-model-warning">当前还没有同步到账号真实模型。可以点下面的「重新同步」；如果提示登录过期，请重新登录一次。</p>}
+              {a!.modelSource === 'account' && <p className="account-endpoint-hint">模型目录已从账号自动同步。</p>}
               <div className="account-model-chips">
                 {available.map(id => <button type="button" key={id}
                   className={'account-model-chip' + (picked.includes(id) ? ' on' : '')}
@@ -542,7 +595,7 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
                   setCustomModel('')
                 }}>添加</button>
                 <button type="button" disabled={busy === r.id} onClick={() => void refreshModels(a!)}>
-                  {busy === r.id ? '拉取中…' : '重新拉取'}
+                  {busy === r.id ? '同步中…' : '重新同步'}
                 </button>
               </div>
             </div>}
