@@ -2483,6 +2483,7 @@ function Room(props: {
   mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
   userSettings:Record<Person,UserSettings>, setUserSettings:React.Dispatch<React.SetStateAction<Record<Person,UserSettings>>>,
+  chatToolPrefs:Record<string,ChatToolPrefs>, setChatToolPrefs:React.Dispatch<React.SetStateAction<Record<string,ChatToolPrefs>>>,
   profileFromChat:boolean, setProfileFromChat:(v:boolean)=>void, openAssistantProfile:(fromChat?:boolean)=>void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
   sending: boolean, chatError: string, setChatError: (v:string)=>void,
