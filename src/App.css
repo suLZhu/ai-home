@@ -3683,3 +3683,23 @@ body.has-pack .fullscreen-chat .compose.compose-box.compose-wechat{
 /* 贴边把手：稍微大一点、看得见，但仍不挡内容 */
 .shell .mobile-menu-toggle.sidebar-edge-handle{width:18px!important;height:56px!important;min-height:56px!important;opacity:.55!important;border-radius:0 10px 10px 0!important;padding:0!important}
 .shell .mobile-menu-toggle.sidebar-edge-handle span{font-size:13px!important}
+/* ── 美化包：整机皮肤（页面背景 / 侧边栏 / 设置卡片 / 线条）─────────────
+   之前只有聊天窗口吃包里的背景和气泡，侧边栏、设置页还是写死的浅色。
+   这里把包的底色、线条、强调色铺到整机：外壳透明 + 包背景铺底，侧边栏和卡片半透明。 */
+body.has-pack{background:var(--surface,#f5f0e6)}
+body.has-pack .shell{background:transparent}
+body.has-pack .shell::before{content:'';position:absolute;inset:0;z-index:-1;background:var(--pack-chat-bg,none) center/cover no-repeat;opacity:var(--pack-bg-opacity,1);pointer-events:none}
+body.has-pack .screen{background:transparent}
+body.has-pack .app-sidebar{background:rgba(255,253,249,.7);border-right:1px solid var(--line,#e2d9e5);color:var(--ink,#3f3743);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+body.has-pack .sidebar-brand b,body.has-pack .sidebar-link b{color:var(--ink,#3f3743)}
+body.has-pack .sidebar-link.active{background:var(--accent-soft,rgba(123,99,137,.16))}
+body.has-pack .sidebar-link-icon{background:var(--field,rgba(255,255,255,.55));color:var(--accent,#6b557c)}
+body.has-pack .sidebar-conv-row.active{background:var(--accent-soft,rgba(123,99,137,.14))}
+body.has-pack .settings-screen,body.has-pack .settings-detail,body.has-pack .settings-groups{background:transparent}
+body.has-pack .settings-row-list{background:rgba(255,253,249,.72)!important;border-color:var(--line,#e6ded2)!important;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+body.has-pack .settings-row{background:transparent!important;border-bottom-color:var(--line,#eee7dc)!important}
+body.has-pack .setting-card,body.has-pack .settings-inner-card{background:rgba(255,253,249,.72);border:1px solid var(--line,#e6ded2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+body.has-pack .settings-heading h2,body.has-pack .setting-card b{color:var(--ink,#403b35)}
+body.has-pack .settings-back{background:rgba(255,255,255,.6)!important;border-color:var(--line,#e6ded2)!important;color:var(--ink,#403b35)!important}
+/* 侧边栏打开时收起菜单胶囊，避免压住抽屉标题 */
+.shell:has(.app-sidebar.sidebar-open) .mobile-menu-toggle{opacity:0;pointer-events:none;transition:opacity .18s ease}
