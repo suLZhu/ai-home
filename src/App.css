@@ -3427,3 +3427,23 @@ body.has-pack{font-family:var(--pack-font-family,"Noto Serif SC","Songti SC",ser
 .vendor-default-row b{font-size:12px}
 .vendor-default-row small{margin-left:auto;font-size:10.5px;color:var(--muted,#8a7d6d);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vendor-kelivo-provider-info small{display:block;font-size:9.5px;color:var(--muted,#8a7d6d);margin-top:1px}
+
+/* 设置整体上提 + 紧凑 */
+.settings-screen{padding-top:calc(var(--app-safe-top,0px) + 6px)!important}
+.settings-heading{padding-top:0;margin-bottom:8px}
+.settings-screen .settings-flat-list{padding:4px 0 18px}
+.settings-screen .settings-flat-list .settings-row-list{gap:8px}
+.settings-screen .settings-flat-list .settings-row{min-height:64px;padding:10px 14px;gap:11px;border-radius:14px}
+.settings-screen .settings-flat-list .settings-row-text small{font-size:11px;line-height:1.4}
+.settings-inner-card{padding:12px 13px}
+.settings-back{padding:7px 11px}
+/* 供应商隐藏 */
+.vendor-hidden-group{margin-bottom:4px}
+.vendor-hidden-group .vendor-kelivo-provider-row{opacity:.65}
+.vendor-model-hide{width:26px;height:26px;border:0;background:transparent;font-size:13px;line-height:1;border-radius:8px;color:var(--muted,#8a7d6d)}
+.vendor-model-hide.on{color:var(--accent,#7b6389)}
+.vendor-kelivo-added-row.hidden-model{opacity:.6}
+.vendor-hidden-models .vendor-kelivo-added-group-head b{color:var(--muted,#8a7d6d)}
+
+.shell .settings-screen{padding-top:calc(var(--app-safe-top,0px) + 6px)!important}
+.shell .settings-heading{padding-top:0!important}

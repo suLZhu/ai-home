@@ -178,13 +178,13 @@ function normalizeModels(raw, fallback) {
   )
   const list = (Array.isArray(fallback) ? fallback : []).map((name) => {
     const s = saved.get(name)
-    return { id: name, name: str(s?.name) || name, selected: !!(s && s.selected), source: str(s?.source) }
+    return { id: name, name: str(s?.name) || name, selected: !!(s && s.selected), source: str(s?.source), hidden: !!s?.hidden }
   })
   // 用户自己追加 / 已勾选的模型要保留；旧版本写死、且从未勾选过的预置模型不再出现。
   for (const [id, m] of saved) {
     if (list.some((x) => x.id === id)) continue
     if (!m.selected && LEGACY_PRESET_MODELS.has(id)) continue
-    list.push({ id, name: str(m.name) || id, selected: !!m.selected, source: str(m.source) })
+    list.push({ id, name: str(m.name) || id, selected: !!m.selected, source: str(m.source), hidden: !!m.hidden })
   }
   return list
 }
@@ -206,6 +206,7 @@ export function normalizeVendors(raw) {
       modelsPath: s ? str(s.modelsPath) : '',
       builtin: true,
       enabled: s ? s.enabled !== false : true,
+      hidden: s ? s.hidden === true : false,
       group: s ? str(s.group) : '',
       avatar: s ? (str(s.avatar) || v.avatar || '') : (v.avatar || ''),
       providerType: normalizeProviderType(s?.providerType),
@@ -227,6 +228,7 @@ export function normalizeVendors(raw) {
       modelsPath: str(v.modelsPath),
       builtin: false,
       enabled: v.enabled !== false,
+      hidden: v.hidden === true,
       group: str(v.group),
       avatar: str(v.avatar),
       providerType: normalizeProviderType(v.providerType),

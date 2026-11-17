@@ -1,7 +1,7 @@
 import type { ModelSpec } from './modelSpecs.d.mts'
 
 export type VendorKey = { id: string; label: string; value: string; role: 'primary' | 'backup' }
-export type VendorModel = { id: string; name: string; selected: boolean; source?: string }
+export type VendorModel = { id: string; name: string; selected: boolean; source?: string; hidden?: boolean }
 export type Vendor = {
   id: string
   name: string
@@ -10,6 +10,7 @@ export type Vendor = {
   modelsPath?: string
   builtin: boolean
   enabled?: boolean
+  hidden?: boolean
   group?: string
   avatar?: string
   providerType?: 'openai' | 'google' | 'claude'

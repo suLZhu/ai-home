@@ -4089,11 +4089,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
     {isList&&<>
       <div className="vendor-kelivo-list-head">
         <b>供应商</b>
-        <div className="vendor-kelivo-head-actions">
-          <button type="button" aria-label="模型目录" title="模型目录" onClick={()=>onSection('vendor:catalog')}><span aria-hidden="true">📖</span><em>目录</em></button>
-          <button type="button" aria-label="多选供应商" title="多选供应商" className={selectMode?'on':''} onClick={()=>{setSelectMode(v=>!v);setSelectedVendors([]);setGroupPrompt(false)}}><span aria-hidden="true">☑</span><em>多选</em></button>
-          <button type="button" aria-label="导入供应商" title="从 Kelivo 配置导入" onClick={()=>{setImportOpen(true);setImportText('');setImportMsg('')}}><span aria-hidden="true">☁</span><em>导入</em></button>
-          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><span aria-hidden="true">＋</span><em>添加</em></button>
+        <div className="vendor-kelivo-head-actions">          <button type="button" aria-label="添加供应商" title="添加供应商" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><span aria-hidden="true">＋</span><em>添加</em></button>
         </div>
       </div>
       <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索供应商" placeholder="搜索供应商或分组" value={vendorQuery} onChange={e=>setVendorQuery(e.target.value)}/>{!!vendorQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setVendorQuery('')}>×</button>}</div>
@@ -4102,8 +4098,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         {(()=>{
           const q=vendorQuery.trim().toLowerCase()
           const match=(v:Vendor)=>!q||v.name.toLowerCase().includes(q)||(v.group||'').toLowerCase().includes(q)
+          const visibleVendors=vendors.filter(match).filter(v=>!v.hidden)
+          const hiddenVendors=vendors.filter(match).filter(v=>v.hidden)
           const map=new Map<string,Vendor[]>()
-          for(const v of vendors.filter(match)){const key=v.group||'';if(!map.has(key))map.set(key,[]);map.get(key)!.push(v)}
+          for(const v of visibleVendors){const key=v.group||'';if(!map.has(key))map.set(key,[]);map.get(key)!.push(v)}
           const entries=[...map.entries()].sort((a,b)=>!a[0]?1:!b[0]?-1:0)
           const row=(v:Vendor)=>{
             const off=v.enabled===false
@@ -4132,6 +4130,10 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
             </button>
           }
           return <>
+            {hiddenVendors.length>0&&<div className="vendor-kelivo-provider-group vendor-hidden-group">
+              <button type="button" className="vendor-kelivo-provider-group-head" aria-expanded={providerGroupOpen._hidden!==true} onClick={()=>setProviderGroupOpen(v=>({...v,_hidden:v._hidden!==true}))}><span>{providerGroupOpen._hidden!==true?'⌄':'›'}</span><b>隐藏</b><small>{hiddenVendors.length}</small></button>
+              {providerGroupOpen._hidden!==true&&hiddenVendors.map(row)}
+            </div>}
             {entries.map(([group,list])=>{
               const key=group||'_ungrouped'
               const collapsed=providerGroupOpen[key]===true
@@ -4291,6 +4293,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
         <div className="vendor-config-menu">
           <div className="vendor-config-info"><span>供应商类型</span><SoftSelect className="vendor-config-select" ariaLabel="供应商类型" value={active.providerType||'openai'} onChange={v=>patch(active.id,x=>({...x,providerType:v as 'openai'|'google'|'claude'}))} options={[{value:'openai',label:'OpenAI 兼容'},{value:'google',label:'Google'},{value:'claude',label:'Claude'}]}/></div>
           <label className="vendor-config-info vendor-config-inline"><span>分组</span><input className="vendor-config-input" aria-label="供应商分组" list="vendor-group-options" value={active.group||''} onChange={e=>patch(active.id,x=>({...x,group:e.target.value}))} placeholder="其他"/></label>
+          <label className="vendor-config-info vendor-config-switch"><span>隐藏 <small>只在列表的「隐藏」里显示</small></span><input type="checkbox" checked={active.hidden===true} onChange={e=>patch(active.id,x=>({...x,hidden:e.target.checked}))}/></label>
           <label className="vendor-config-info vendor-config-switch"><span>是否启用</span><input type="checkbox" checked={active.enabled!==false} onChange={e=>patch(active.id,x=>({...x,enabled:e.target.checked}))}/></label>
           <label className="vendor-config-info vendor-config-switch"><span>多 Key 模式 <small>备用优先，主号兜底</small></span><input type="checkbox" checked={showBackupKeys} onChange={e=>setShowBackupKeys(e.target.checked)}/></label>
           {showBackupKeys&&<div className="vendor-config-info"><span>管理 Key <small>{active.keys.length} 把 Key</small></span><button type="button" onClick={()=>onSection('vendor:keys:'+active.id)}>管理 ›</button></div>}
@@ -4327,8 +4330,21 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
       {tab==='model'&&<div className="vendor-card-body vendor-kelivo-model-page">
         <div className="vendor-kelivo-search"><span aria-hidden="true">⌕</span><input aria-label="搜索已添加模型" placeholder="搜索已添加模型" value={modelQuery} onChange={e=>setModelQuery(e.target.value)}/>{!!modelQuery&&<button type="button" aria-label="清除搜索" onClick={()=>setModelQuery('')}>×</button>}</div>
         <div className="vendor-kelivo-added">
+          {pickedModels.length>0&&pickedModels.some(m=>m.hidden)&&<div className="vendor-kelivo-added-group vendor-hidden-models">
+            <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen._hidden!==false} onClick={()=>setAddedGroupOpen(v=>({...v,_hidden:v._hidden!==false?false:true}))}>
+              <span>{addedGroupOpen._hidden!==false?'⌄':'›'}</span><b>隐藏模型</b><small>{pickedModels.filter(m=>m.hidden).length}</small>
+            </button>
+            {addedGroupOpen._hidden!==false&&pickedModels.filter(m=>m.hidden).map(m=>{
+              const spec=specForModel(active,m.id); const brand=brandOf(m.id)
+              return <div className="vendor-kelivo-added-row hidden-model" key={m.id}>
+                <span className={'vendor-model-brand '+brand.cls} aria-hidden="true">{brand.glyph}</span>
+                <button type="button" className="vendor-kelivo-model-label" onClick={()=>setSpecTarget(m.id)}><b>{spec.displayName||m.name||m.id}</b><ModelChips spec={spec}/></button>
+                <button type="button" className="vendor-model-hide on" aria-label="取消隐藏" onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===m.id?{...x,hidden:false}:x)}))}>🙈</button>
+              </div>
+            })}
+          </div>}
           {pickedModels.length===0?<div className="vendor-kelivo-empty"><b>暂无模型</b><small>点击下方按钮添加模型</small></div>:
-            groupModels(pickedModels.filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=>m.id)).map(g=><div className="vendor-kelivo-added-group" key={g.id}>
+            groupModels(pickedModels.filter(m=>!m.hidden).filter(m=>!query||m.id.toLowerCase().includes(query)).map(m=>m.id)).map(g=><div className="vendor-kelivo-added-group" key={g.id}>
               <button type="button" className="vendor-kelivo-added-group-head" aria-expanded={addedGroupOpen[g.id]!==false} onClick={()=>setAddedGroupOpen(v=>({...v,[g.id]:v[g.id]!==false?false:true}))}>
                 <span>{addedGroupOpen[g.id]!==false?'⌄':'›'}</span><b>{g.label}</b><small>{g.models.length}</small>
               </button>
@@ -4346,6 +4362,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
                   {probe[id]===true&&<span className="vendor-model-probe ok" title="上次拉取时在列表里">✓</span>}
                   {probe[id]===false&&<span className="vendor-model-probe bad" title="上次拉取时不在列表里">×</span>}
                   <button type="button" className="vendor-kelivo-spec-gear" aria-label={'编辑模型规格 '+id} title="模型规格" onClick={()=>setSpecTarget(id)}>⚙</button>
+                  <button type="button" className={'vendor-model-hide'+(m.hidden?' on':'')} aria-label={m.hidden?'取消隐藏':'隐藏模型'} onClick={()=>patch(active.id,v=>({...v,models:v.models.map(x=>x.id===id?{...x,hidden:!x.hidden}:x)}))}>{m.hidden?'🙈':'👁'}</button>
                 </div>})}
             </div>)}
           {!!query&&pickedModels.length>0&&!pickedModels.some(m=>m.id.toLowerCase().includes(query))&&<p className="muted">没有匹配的已添加模型</p>}
