@@ -107,3 +107,68 @@
 @media (prefers-reduced-motion: reduce) {
   .shell .settings-module-card { transition: none; }
 }
+
+/* 第二轮：统一「可进入页面」的布局标尺。
+   统一内容高度及安全区，禁止各页面再各自写 100vh/100dvh 的补丁。
+   覆盖层/短弹窗另有独立尺寸等级，不能强制撑满屏幕。 */
+.shell {
+  --qj-page-top: var(--app-safe-top, 0px);
+  --qj-page-bottom: var(--app-safe-bottom, 0px);
+  --qj-page-height: 100dvh;
+  --qj-page-content-height: calc(var(--qj-page-height) - var(--qj-page-top) - var(--qj-page-bottom));
+  --qj-page-gutter: var(--layout-page-gutter);
+  --qj-page-gap: var(--layout-gap);
+  --qj-page-radius: var(--layout-card-radius);
+  --qj-sheet-max-height: calc(100dvh - var(--qj-page-top) - var(--qj-page-bottom) - 24px);
+  --qj-overlay-radius: 16px;
+}
+/* 页面都从同一父容器计算高度，列表内部滚动，不让页面本身无限扩展。 */
+.shell > .screen {
+  min-height: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  padding-inline: var(--qj-page-gutter);
+}
+.shell .settings-screen,
+.shell .room-screen,
+.shell .fullscreen-chat {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.shell .settings-page-header,
+.shell .room-header,
+.shell .chat-header {
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+.shell .settings-page-header button,
+.shell .sidebar-close,
+.shell .sidebar-settings,
+.shell .sidebar-nav-row,
+.shell .sidebar-conv-new {
+  min-height: var(--layout-touch-size);
+}
+/* 所有完整对话框共享同一个屏幕安全高度，内容超出则内部滚动。 */
+.shell .request-stats-card,
+.shell .chat-summary-card,
+.shell .vendor-kelivo-sheet {
+  box-sizing: border-box;
+  max-height: var(--qj-sheet-max-height);
+  overscroll-behavior: contain;
+}
+/* 浮层只负责遮罩和对齐，不与内容混用滚动区域。 */
+.shell .request-stats-modal,
+.shell .chat-summary-modal,
+.shell .vendor-kelivo-sheet-overlay {
+  box-sizing: border-box;
+  padding-top: calc(12px + var(--qj-page-top));
+  padding-bottom: calc(12px + var(--qj-page-bottom));
+}
+/* 统一可滚动区，避免头部随内容滚走；保留各功能原有互动方式。 */
+.shell .request-stats-card,
+.shell .chat-summary-card { overflow-y: auto; }
+@media (min-width: 700px) {
+  .shell { --qj-page-gutter: 20px; }
+}
