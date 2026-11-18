@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import './LayoutPrototype.css'
 
-type View = 'chat' | 'room' | 'settings' | 'theme' | 'profile'
+type View = 'home' | 'chat' | 'room' | 'settings' | 'theme' | 'profile'
 type Person = '小晏' | '言朔'
 const people: Person[] = ['小晏', '言朔']
 const settingItems = [
@@ -16,7 +16,7 @@ const settingItems = [
 ] as const
 
 export default function LayoutPrototype() {
-  const [view, setView] = useState<View>('chat')
+  const [view, setView] = useState<View>('home')
   const [person, setPerson] = useState<Person>('小晏')
   const [drawer, setDrawer] = useState(false)
   const [section, setSection] = useState<string | null>(null)
@@ -30,23 +30,39 @@ export default function LayoutPrototype() {
     setDrawer(false)
     setMenu(false)
   }
-  const title = view === 'chat' ? person : view === 'room' ? person + '的房间' :
+  const title = view === 'home' ? '栖间' : view === 'chat' ? person : view === 'room' ? person + '的房间' :
     view === 'settings' ? (section || '设置') :
     view === 'theme' ? '主题中心' : person + '的资料'
   return <div className="qj-preview">
     <div className="qj-status" aria-hidden="true"><span>10:24</span><span>●  ▰  ▰  100%</span></div>
     <header className="qj-topbar">
-      {view === 'chat' ? <button className="qj-icon" aria-label="打开侧边栏" onClick={() => setDrawer(true)}>☰</button> :
+      {(view === 'chat' || view === 'home') ? <button className="qj-icon" aria-label="打开侧边栏" onClick={() => setDrawer(true)}>☰</button> :
        <button className="qj-icon" aria-label="返回" onClick={() => {
          if (section) setSection(null)
          else if (view === 'theme') go('settings')
-         else go('chat')
+         else go('home')
        }}>‹</button>}
       <div className="qj-top-title"><strong>{title}</strong><small>{view === 'chat' ? conversation : '页面布局测试版 · 仅演示'}</small></div>
       {view === 'chat' ? <button className="qj-icon" aria-label="更多" onClick={() => setMenu(v => !v)}>⋯</button> :
         <span className="qj-icon-placeholder" />}
     </header>
     <main className="qj-main">
+      {view === 'home' && <div className="qj-home">
+        <div className="qj-home-hero"><strong>10:24</strong><span>星期三 · 11月18日</span><p>晚上好。家里很安静，说点什么吧。</p></div>
+        <div className="qj-home-people">
+          {people.map((p, i) => <button key={p} className="qj-home-person" onClick={() => { setPerson(p); go('chat') }}>
+            <span className="qj-home-avatar">{p.slice(0,1)}</span>
+            <span className="qj-home-person-info"><b>{p}</b><small>{i === 0 ? '上次聊到：栖间页面规划' : '今天有什么新鲜事？'}</small><em>{i === 0 ? '上次聊到 栖间功能规划' : '最近会话'}</em></span>
+            <span className="qj-home-chevron">›</span>
+          </button>)}
+        </div>
+        <div className="qj-home-heading">今 天 的 事</div>
+        <div className="qj-row-group">
+          <button className="qj-row" onClick={() => go('profile')}><span>认识的日子</span><small>从第一次聊天算起</small><i>›</i></button>
+          <button className="qj-row" onClick={() => go('room')}><span>日程与约定</span><small>查看助手房间中的日常</small><i>›</i></button>
+          <button className="qj-row" onClick={() => go('settings')}><span>记忆与记录</span><small>在设置中查看管理</small><i>›</i></button>
+        </div>
+      </div>}
       {view === 'chat' && <div className="qj-chat">
         <div className="qj-chat-date">今天 10:24</div>
         <div className="qj-message from"><span className="qj-avatar">{person.slice(0, 1)}</span><p>早上好。今天有什么想聊的？</p></div>
@@ -86,7 +102,7 @@ export default function LayoutPrototype() {
     </main>
     {view === 'chat' && <div className="qj-composer"><button className="qj-icon" aria-label="添加附件" onClick={() => setMenu(v=>!v)}>＋</button><div className="qj-compose-placeholder">输入消息…（仅预览）</div><button className="qj-send" aria-label="发送，仅预览">➤</button></div>}
     <nav className="qj-bottom" aria-label="主要导航">
-      <button className={view === 'chat'?'active':''} onClick={() => go('chat')}><span>▤</span>聊天</button>
+      <button className={view === 'home'||view === 'chat'?'active':''} onClick={() => go('home')}><span>▤</span>主页</button>
       <button className={view === 'room'?'active':''} onClick={() => go('room')}><span>⌂</span>房间</button>
       <button className={view === 'settings'||view==='theme'?'active':''} onClick={() => go('settings')}><span>⚙</span>设置</button>
     </nav>
@@ -96,8 +112,8 @@ export default function LayoutPrototype() {
       <h3 className="qj-label">我的助手</h3>
       {people.map(p => <button className={'qj-assistant '+(p === person?'selected':'')} key={p} onClick={()=>{setPerson(p);setConversation('今天的聊天');setDrawer(false);setView('chat')}}><span className="qj-avatar">{p.slice(0,1)}</span><span>{p}</span><small>›</small></button>)}
       <h3 className="qj-label">当前会话</h3>
-      {['今天的聊天','栖间功能规划'].map(c => <button className={'qj-drawer-conv '+(conversation===c?'selected':'')} key={c} onClick={()=>{setConversation(c);setDrawer(false)}}>{c}</button>)}
-      <button className="qj-new" onClick={()=>{setConversation('新会话');setDrawer(false)}}>＋ 新建会话</button>
+      {['今天的聊天','栖间功能规划'].map(c => <button className={'qj-drawer-conv '+(conversation===c?'selected':'')} key={c} onClick={()=>{setConversation(c);setView('chat');setDrawer(false)}}>{c}</button>)}
+      <button className="qj-new" onClick={()=>{setConversation('新会话');setView('chat');setDrawer(false)}}>＋ 新建会话</button>
       <div className="qj-drawer-spacer" />
       <button className="qj-drawer-settings" onClick={()=>go('settings')}>⚙　设置</button>
     </aside></div>}
