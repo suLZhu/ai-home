@@ -45,7 +45,7 @@ export default function LayoutPrototype() {
       <div className="qj-top-title"><strong>{title}</strong><small>{view === 'chat' ? conversation : '页面布局测试版 · 仅演示'}</small></div>
       {view === 'chat' && <div className="qj-chat-switch" aria-label="快速切换聊天助手">
         {people.map(p => <button key={p} className={p === person ? 'selected' : ''} onClick={() => setPerson(p)} aria-pressed={p === person}>{p}</button>)}
-      </div>
+      </div>}
       {view === 'chat' ? <button className="qj-icon" aria-label="更多" onClick={() => setMenu(v => !v)}>⋯</button> :
         <span className="qj-icon-placeholder" />}
     </header>
