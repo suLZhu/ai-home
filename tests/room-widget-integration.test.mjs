@@ -25,3 +25,14 @@ test('assistant widget creation refuses blank custom widget content',()=>{
  assert.match(app,/不能创建空白小组件/)
  assert.match(app,/config=\{html,url,icon:/)
 })
+
+test('room widgets can be pinned by valid percent coordinates',()=>{
+ const widgets=readFileSync(new URL('../src/RoomWidgets.tsx',import.meta.url),'utf8')
+ const app=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8')
+ assert.match(widgets,/function widgetPosition\(widget:/)
+ assert.match(widgets,/aria-label="房间横向位置"/)
+ assert.match(widgets,/aria-label="房间纵向位置"/)
+ assert.match(widgets,/position:'absolute'/)
+ assert.match(app,/roomX:\{type:'number'/)
+ assert.match(app,/roomY:\{type:'number'/)
+})
