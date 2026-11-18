@@ -21,8 +21,10 @@ import { WebBrowser, type WebPage } from './WebBrowser'
 import { GUIDE_BRIEF, GUIDE_MARKDOWN } from './guide.mjs'
 import { applyWebUpdate, compareVersions, currentBundle, liveUpdateSupported, notifyAppReady, resetToBuiltin } from './liveUpdate.mjs'
 import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, setActivePack as setStoredActivePack, upsertThemePack, type ThemePack } from './themePack.mjs'
-import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
+import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, normalizeRoomStyle, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
+import { RoomWidgets } from './RoomWidgets'
+import { requestInputWeights, allocateInputTokens, tokenCountLabel } from './requestTokenBreakdown.mjs'
 import { confirmDialog } from './uiDialog'
 import { planCompaction, buildSummaryPrompt, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
 import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, type IconComponent } from './icons'
@@ -55,6 +57,7 @@ import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, 
 // 订阅账号：本地持久化归一化；极简账号登录面板单独放一个文件。
 import { SUBSCRIPTION_STORAGE_KEY, normalizeSubscriptions, type SubscriptionAccount } from './subscriptionChannels.mjs'
 import { SubscriptionAccounts } from './SubscriptionAccounts'
+import { chatGptAccountIdFromToken } from './subscriptionOAuth.mjs'
 // 统一模型线路层：一个逻辑模型可挂多条线路，主线路优先 + 自动 fallback。
 // 线路配置（可能含内联 Key）只存本机，整包不进云端快照。
 import { logicalModelId, buildRoutePlan, MAX_ROUTE_ATTEMPTS } from './modelRoutes.mjs'
@@ -62,6 +65,9 @@ import { ROUTE_STATE_KEY, normalizeRouteState, activeLogicalId, fixedRouteId, ty
 import { summarizeRouteReport } from './routeFallback.mjs'
 // 统一简洁下拉：替换原生 select，避免 Android WebView 弹系统白方框。
 import { SoftSelect } from './SoftSelect'
+import { CHAT_TOOL_PREFS_KEY, normalizeChatToolPrefs, normalizeAssistantChatToolPrefs, type ChatToolPrefs } from './chatToolPrefs.mjs'
+import { fetchWeatherContext } from './weatherContext.mjs'
+import { sanitizeGeminiTools } from './geminiToolSchema.mjs'
 import { ModelPickerSheet } from './ModelPickerSheet'
 import { ModelSpecPage } from './ModelSpecPage'
 import { ModelChips } from './ModelChips'
@@ -88,7 +94,7 @@ import { channelPlan, notificationPayload, decideNotification, loadNotified, mar
 import { buildAlarmPlan } from './taskAlarms.mjs'
 import { readNotificationPrefs } from './notificationPreferences.mjs'
 import { registerSystemHandlers, clearConversationNotifications, systemBridgeAvailable, syncSystemChannels, syncSystemAlarms, showSystemNotification, consumePendingOpen, readNativeDelivered, setGenerationForeground, nativeTextZoomAvailable, setAppTextZoom, nativeHttpStreamAvailable, openNativeWebView, readClipboardText, appVersion } from './nativeSystem.mjs'
-import { friendlyHttpError, routeInfoFromError } from './chatHttpError.mjs'
+import { routeInfoFromError, diagnoseChatHttpError, diagnoseChatTransportError, diagnoseGptSubscriptionError } from './chatHttpError.mjs'
 import { readActiveGeneration, startGeneration, finishGeneration, needsGenerationRecovery, recoverInterruptedMessages } from './generationRecovery.mjs'
 import { BRAND_NAME, brandAsset } from './brandAssets'
 // 像素黑白选框/图标层必须最后导入，才能覆盖各组件自带的彩色样式。
@@ -119,9 +125,9 @@ function alignCardNames(cards:Record<string,CharacterCard>|null|undefined, names
 }
 type Tool = '人物设置' | '世界书' | '记忆面板' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板' | '助手档案'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
-type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
+type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number; inputBreakdown?: {context:number;tools:number;worldbook:number}; inputBreakdownEstimated?:boolean }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; at?: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string; reasoning?: string }
-type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
+type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; archivedAt?:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
 type ModelConfig = { endpoint: string; model: string; inputPrice?: string; outputPrice?: string; cachedInputPrice?: string; usdToCny?: string }
 type MCPConnection = { id: string; person: Person; name: string; url: string; transport: string; enabled: boolean; hasToken?: boolean }
 // 资源库：全局模型预设池 + 每位助手的绑定。旧快照缺这两个字段时完全沿用旧行为。
@@ -364,6 +370,8 @@ export default function App() {
   const [projects,setProjects]=useState<ProjectRecord[]>(()=>read('ai-home.projects',[]))
   // 用户配置的 IANA 时区：只影响服务端生成的时间上下文（日期/星期/时间/时段），
   // 不发起任何网络请求。非法或空值由 normalizeTimeZone 回退到 Asia/Shanghai。
+  const [chatToolPrefs,setChatToolPrefs]=useState<Record<string,ChatToolPrefs>>(()=>normalizeAssistantChatToolPrefs(read<unknown>(CHAT_TOOL_PREFS_KEY,{}),ASSISTANT_PEOPLE))
+  useEffect(()=>{try{localStorage.setItem(CHAT_TOOL_PREFS_KEY,JSON.stringify(chatToolPrefs))}catch{}},[chatToolPrefs])
   const [timeZone,setTimeZone]=useState<string>(()=>normalizeTimeZone(read<string>('ai-home.timeZone','')))
   useEffect(()=>{ try{localStorage.setItem('ai-home.timeZone',JSON.stringify(timeZone))}catch{ /* private mode */ } },[timeZone])
   // ── Android 返回键 ──
@@ -600,6 +608,8 @@ export default function App() {
   // 左侧抽屉默认完全收起：屏幕边缘只留一条细把手，点一下才滑出，再点遮罩 / × / 系统返回手势收起。
   // 不再定时自动收回——用户要在里面翻历史会话、重命名，自动收回会打断操作。
   const [sidebarOpen,setSidebarOpen]=useState(false)
+  // Hooks must run in the same order for checking/signed-out/signed-in renders.
+  const [showArchivedConvs,setShowArchivedConvs]=useState(false)
   // 抽屉里的会话重命名：输入框与草稿只属于抽屉，不占用聊天顶栏。
   const [drawerRenameId,setDrawerRenameId]=useState<string|null>(null)
   const [drawerRenameDraft,setDrawerRenameDraft]=useState('')
@@ -723,7 +733,7 @@ export default function App() {
   const CLOUD_FLUSH_MAX_MS = 5000
   const firstDirtyAtRef = useRef(0)
 
-  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, modelProfiles, bindings, chatPool])
+  const getSnapshot = useCallback(() => ({ version: 2, themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, chatToolPrefs, modelProfiles, bindings, chatPool }), [themePrefs, assistants, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, projects, timeZone, chatToolPrefs, modelProfiles, bindings, chatPool])
   // Keep the latest snapshot available without making the one-time cloud-load callback
   // change identity on every edit. Otherwise the session-check effect reloads stale cloud
   // state after every local change and can resurrect deleted conversations.
@@ -770,6 +780,7 @@ export default function App() {
     if (Array.isArray(data.projects)) setProjects(data.projects)
     // 未知/非法时区回退默认值；旧快照没有 timeZone 字段时保持本机配置不变。
     if (typeof data.timeZone === 'string' && data.timeZone.trim()) setTimeZone(normalizeTimeZone(data.timeZone))
+    if (data.chatToolPrefs && typeof data.chatToolPrefs === 'object') setChatToolPrefs(normalizeAssistantChatToolPrefs(data.chatToolPrefs,ASSISTANT_PEOPLE))
     // 资源库字段是附加的：旧快照没有时不动本机值，行为与改造前一致。
     if (Array.isArray(data.modelProfiles)) setModelProfiles(normalizeProfiles(data.modelProfiles))
     if (data.bindings && typeof data.bindings === 'object') setBindings(normalizeBindings(data.bindings, ASSISTANT_PEOPLE))
@@ -1004,7 +1015,7 @@ export default function App() {
       }
     }, delay)
     return ()=>window.clearTimeout(timer)
-  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, fallBackToLocal, modelProfiles, bindings, chatPool])
+  }, [cloudReady, authStatus, getSnapshot, messages, conversations, activeConversationIds, modelConfig, memory, memoryEntries, prompt, characters, userSettings, worldEntries, worldbook, mcpConnections, tasks, assistants, ackTick, timeZone, chatToolPrefs, fallBackToLocal, modelProfiles, bindings, chatPool])
 
   useEffect(() => {
     if (authStatus !== 'signedIn' || isLocalMode()) return
@@ -1035,9 +1046,47 @@ export default function App() {
   }, [])
 
   useEffect(() => { localStorage.setItem('ai-home.assistants', JSON.stringify(assistants)) }, [assistants])
-  useEffect(() => { try { localStorage.setItem('ai-home.conversations', JSON.stringify(conversations)) } catch { /* keep chat usable if local storage is full */ } }, [conversations])
+  // Streaming responses previously stringified *all* conversations and active messages on
+  // every paint (about 6x/sec), blocking Android WebView's UI thread for large histories.
+  // Coalesce writes and cap the dirty window. Flush on background/unload and generation end.
+  const chatPersistLatest = useRef({ conversations, messages })
+  chatPersistLatest.current = { conversations, messages }
+  const chatPersistTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
+  const chatPersistDirtySince = useRef(0)
+  const flushChatPersistence = useCallback(() => {
+    if (chatPersistTimer.current !== null) { clearTimeout(chatPersistTimer.current); chatPersistTimer.current = null }
+    chatPersistDirtySince.current = 0
+    const data = chatPersistLatest.current
+    try { localStorage.setItem('ai-home.conversations', JSON.stringify(data.conversations)) }
+    catch { /* storage quota must not interrupt chatting */ }
+    try {
+      const safeMessages = Object.fromEntries(Object.entries(data.messages).map(([k,v])=>[
+        k, (v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({
+          name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent,
+        }))}))
+      ]))
+      localStorage.setItem('ai-home.messages', JSON.stringify(safeMessages))
+    } catch { /* storage quota must not interrupt chatting */ }
+  }, [])
+  useEffect(() => {
+    const now = Date.now()
+    if (!chatPersistDirtySince.current) chatPersistDirtySince.current = now
+    if (chatPersistTimer.current !== null) clearTimeout(chatPersistTimer.current)
+    const delay = Math.min(550, Math.max(0, 1800 - (now - chatPersistDirtySince.current)))
+    chatPersistTimer.current = setTimeout(flushChatPersistence, delay)
+  }, [conversations, messages, flushChatPersistence])
+  useEffect(() => {
+    const flushOnHide = () => { if (document.hidden && chatPersistDirtySince.current) flushChatPersistence() }
+    const flushOnPageHide = () => { if (chatPersistDirtySince.current) flushChatPersistence() }
+    document.addEventListener('visibilitychange', flushOnHide)
+    window.addEventListener('pagehide', flushOnPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide)
+      window.removeEventListener('pagehide', flushOnPageHide)
+      flushOnPageHide()
+    }
+  }, [flushChatPersistence])
   useEffect(() => localStorage.setItem('ai-home.activeConversationIds', JSON.stringify(activeConversationIds)), [activeConversationIds])
-  useEffect(() => { try { localStorage.setItem('ai-home.messages', JSON.stringify(Object.fromEntries(Object.entries(messages).map(([k,v])=>[k,(v as ChatMessage[]).map(m=>({...m,attachments:m.attachments?.map(a=>({name:a.name,type:a.type,size:a.size,preview:a.preview,assetId:a.assetId,textContent:a.textContent}))}))])))) } catch { /* avoid crashing chat if local storage is full */ } }, [messages])
   // 消息 id 补齐（一次性迁移，幂等）：老版本的用户消息没有 id，而编辑/删除/重新生成都按 id 定位。
   // 视图（messages）与持久化（conversations）按「同会话、同位置、同角色同内容」对齐，
   // 保证两边拿到同一个 id——修改才能同时写进两边、刷新后仍生效。
@@ -1211,6 +1260,7 @@ export default function App() {
     const text = textInput.trim()
     if ((!text && !attachments.length) || sending) return 'noop'
     const target = person
+    const currentChatPrefs=normalizeChatToolPrefs(chatToolPrefs[target])
     // 聊天窗口选的模型预设优先；未绑定时回退旧的「每助手一份」配置（老数据零影响）。
     const activeModel = resolveModelConfig(bindings[target]?.modelProfileId || defaultModelId || '', modelProfiles, modelConfig[target])
     // 多 KEY：默认「备用优先、主号兜底」，服务端按顺序自动换下一把；
@@ -1232,7 +1282,7 @@ export default function App() {
     const subscriptionProtocol = !routeMode && activeVendor?.subscriptionChannel === 'gpt' ? 'codex'
       : !routeMode && activeVendor?.subscriptionChannel === 'claude' ? 'anthropic'
       : !routeMode && activeVendor?.subscriptionChannel === 'grok' ? 'grok' : ''
-    const subscriptionAccountId = activeVendor?.subscriptionAccountId || ''
+    const subscriptionAccountId = (subscriptionProtocol==='codex'?chatGptAccountIdFromToken(activeApiKey):'') || activeVendor?.subscriptionAccountId || ''
     if (subscriptionProtocol && isLocalMode() && !nativeHttpStreamAvailable()) {
       setChatError('订阅聊天需要 App 原生网络桥：请用最新 APK，或连接服务器 / 改用兼容网关。')
       return 'fail'
@@ -1265,8 +1315,8 @@ export default function App() {
     const system = [
       '【当前扮演角色】你是 '+(card.name||target)+'。请始终保持该角色身份。',
       '【排版】需要时可以用 Markdown：表格、列表、代码块、标题；折叠用 <details><summary>标题</summary>正文</details>；强调颜色或字号用 <span style="color:#c46a5a;font-size:15px">文字</span>。只在确实更清楚时使用，不要每句都上颜色，也不要输出脚本或外部样式。',
-      '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
-      '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
+      currentChatPrefs.tools && '记账工具只在用户明确要求记账时使用，成功返回前不要声称已记账。',
+      currentChatPrefs.tools && '定时/提醒能力说明：用户想定时做事时，直接用 scheduled_task_create 创建定时任务（先问清时间和要做的事），到点系统会把提醒发进聊天，本地模式同样可用、不需要云端。也可以在「工具 → 主动任务/工作流」里手动管理，或用输入框的「延期发送」。不要简单回答「我做不到」。',
       card.description && '【角色描述】\n'+card.description,
       // 用户设定：助手该怎么称呼我、我是谁、偏好与忌讳；每个助手单独配置，直接进入提示词。
       buildUserContext(userSettings[target], {roomName}),
@@ -1277,7 +1327,7 @@ export default function App() {
       memoryEntries[target].length && '【长期记忆库召回】\n'+memoryEntries[target].filter(e=>e.pinned || e.keywords.split(/[,，、\n]/).map(k=>k.trim()).filter(Boolean).some(k=>text.includes(k))).slice(0,12).map(e=>'['+e.category+'] '+e.title+'\n'+e.content).join('\n\n'),
       worldbook[target] && '【世界书补充】\n'+worldbook[target],
       enabledSkillsBlock(loadSkills(target)),
-      GUIDE_BRIEF,
+      currentChatPrefs.tools && GUIDE_BRIEF,
       matched.some(e=>e.target==='system'&&e.position==='top') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n'),
       matched.some(e=>e.target==='system'&&e.position==='tail') && '【世界书】\n'+matched.filter(e=>e.target==='system'&&e.position==='tail').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
     ].filter(Boolean).join('\n\n')
@@ -1312,7 +1362,7 @@ export default function App() {
       latestStreamContent = content
       latestStreamReasoning = reasoning
       if (streamPaintTimer !== undefined) return
-      const delay = Math.max(0, 90 - (Date.now() - lastStreamPaint))
+      const delay = Math.max(0, 160 - (Date.now() - lastStreamPaint))
       streamPaintTimer = setTimeout(flushStreamPaint, delay)
     }
     // 重新生成失败/空白时恢复原有有效回复；消息若已被用户删除，map 匹配不到、天然无副作用。
@@ -1388,6 +1438,7 @@ export default function App() {
     }
     const requestStartedAt=performance.now()
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
+    const measuredParts={context:0,tools:0,worldbook:0}
     // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
     let lastStreamLog=0
     // 声明在 try 之外：catch 需要读取 answer，保留已流式到达的文本（块级作用域 let 进不了 catch）。
@@ -1395,6 +1446,8 @@ export default function App() {
     let finished=false
     // 记录本轮生成结果，供 finally 判断是否自动补发 pending（成功才补发；报错/中断保留）。
     let genOutcome: 'ok'|'fail'|'noop' = 'noop'
+    let failurePhase: 'prepare'|'request'|'stream'|'tool' = 'prepare'
+    let outgoingToolsEnabled = false
     try {
       // 缓发 flush：把已显示的待发消息从历史里排除，随后合并成一条最终 user 消息——
       // 同一条消息绝不在请求里出现两次（气泡也不重复插入）。
@@ -1453,7 +1506,9 @@ export default function App() {
       if(Array.isArray(currentContent)){if(userTop)currentContent=[{type:'text',text:'【世界书】\n'+userTop+'\n\n'},...currentContent];if(userTail)currentContent=[...currentContent,{type:'text',text:'\n\n【世界书】\n'+userTail}]}else currentContent=[userTop&&'【世界书】\n'+userTop,currentContent,userTail&&'【世界书】\n'+userTail].filter(Boolean).join('\n\n')
       const historyWithWorld:any[]=[...previous]
       for(const e of matched.filter(e=>e.target==='assistant')){const item={role:'assistant',content:'【世界书：'+e.title+'】\n'+e.content};const at=e.position==='top'?0:e.position==='tail'?historyWithWorld.length:Math.max(0,historyWithWorld.length-Math.max(0,e.depth));historyWithWorld.splice(at,0,item)}
+      const weatherText=currentChatPrefs.weather&&currentChatPrefs.city.trim()?await fetchWeatherContext(currentChatPrefs.city):null
       const requestMessages:any[]=[
+        ...(weatherText?[{role:'system',content:weatherText}]:[]),
         ...(system?[{role:'system',content:system}]:[]),
         ...(contextSummary?[{role:'system',content:buildSummarySystemMessage(contextSummary,summaryCovered||Math.max(0,coveredIndex+1))}]:[]),
         ...(summaryFailed?[{role:'system',content:'【上下文提示】更早的对话因为压缩失败没有带上。需要细节时用 conversation_search 工具按关键词回顾原文，不要假装记得没看到的内容。'}]:[]),
@@ -1467,6 +1522,7 @@ export default function App() {
       const toolRoutes=new Map<string,{id:string;person:Person;name:string;connectionName:string}>()
       const openAITools:any[]=[]
       // The active assistant may manage only worldbook entries bound to itself.
+      if(currentChatPrefs.tools){
       openAITools.push({type:'function',function:{name:'worldbook_create_entry',description:'在当前助手自己的世界书中新增条目。仅当用户明确要求记录或更新世界设定时使用；不要写入用户未确认的重大设定。',parameters:{type:'object',properties:{title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['title','keywords','content'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'worldbook_search_entries',description:'搜索当前助手有权限访问的世界书条目。',parameters:{type:'object',properties:{query:{type:'string'}},required:['query'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'worldbook_update_entry',description:'更新当前助手已绑定的世界书条目；必须先搜索并使用准确条目 ID。',parameters:{type:'object',properties:{id:{type:'string'},title:{type:'string'},keywords:{type:'string'},content:{type:'string'},always:{type:'boolean'},enabled:{type:'boolean'}},required:['id'],additionalProperties:false}}})
@@ -1480,7 +1536,7 @@ export default function App() {
       openAITools.push({type:'function',function:{name:'conversation_search',description:'检索当前助手所有会话的原始消息（包括已被上下文压缩的更早对话）。需要核对前情、原话或细节时使用；只读，不会修改任何数据。',parameters:{type:'object',properties:{query:{type:'string',description:'关键词或短句，1 至 60 字'},limit:{type:'number',description:'返回条数，默认 6，最多 12'}},required:['query'],additionalProperties:false}}})
       // 房间小组件：助手创建后长期存在，只有用户手动删除；本地/服务器模式都可用。
       openAITools.push({type:'function',function:{name:'widget_list',description:'列出当前助手房间工作区里已有的小组件（记账本/清单/便签/计数器）。',parameters:{type:'object',properties:{},additionalProperties:false}}})
-      openAITools.push({type:'function',function:{name:'widget_create',description:'在房间工作区创建一个长期存在的、由你自由设计的小组件（不限于固定类型：记账、打卡、进度、倒计时、收藏、统计等都可以）。html 只写 body 内容（可含 style/script，不要 html/body 标签），不要依赖外部库；数据用 window.qijian.getData() 读、qijian.setData(obj) 存、qijian.onData(fn) 监听，数据会自动持久化。创建后一直留在工作区，除非用户手动删除。',parameters:{type:'object',properties:{title:{type:'string',description:'显示名称，例如“这个月的账”'},html:{type:'string',description:'小组件的 HTML/CSS/JS（body 内容）；用 qijian API 读写数据'},data:{type:'object',description:'可选初始 JSON 数据'},summary:{type:'string',description:'可选一句话摘要，卡片上显示'}},required:['title','html'],additionalProperties:false}}})
+      openAITools.push({type:'function',function:{name:'widget_create',description:'在房间工作区创建一个长期存在的、由你自由设计的小组件（不限于固定类型：记账、打卡、进度、倒计时、收藏、统计等都可以）。html 只写 body 内容（可含 style/script，不要 html/body 标签），不要依赖外部库；数据用 window.qijian.getData() 读、qijian.setData(obj) 存、qijian.onData(fn) 监听，数据会自动持久化。创建后一直留在工作区，除非用户手动删除。',parameters:{type:'object',properties:{title:{type:'string',description:'显示名称，例如“这个月的账”'},html:{type:'string',description:'小组件的 HTML/CSS/JS（body 内容）；用 qijian API 读写数据'},data:{type:'object',description:'可选初始 JSON 数据'},summary:{type:'string',description:'可选一句话摘要'},icon:{type:'string',description:'房间图标，可使用 emoji 或简单符号，例如 🌷、🌐'},url:{type:'string',description:'可选网页链接，仅允许 http/https；与 html 二选一'},roomX:{type:'number',description:'房间内水平位置百分比 0~100，与 roomY 一起指定'},roomY:{type:'number',description:'房间内垂直位置百分比 0~100，与 roomX 一起指定'}},required:['title'],additionalProperties:false}}})
       openAITools.push({type:'function',function:{name:'widget_append',description:'往已有小组件里追加内容：记账本加一笔、清单加一项、便签追加文字、计数器加减。先用 widget_list 拿到 id。',parameters:{type:'object',properties:{id:{type:'string'},action:{type:'string',enum:['ledger','checklist','note','counter']},amount:{type:'number'},note:{type:'string'},kind:{type:'string',enum:['expense','income']},text:{type:'string'},delta:{type:'number'}},required:['id','action'],additionalProperties:false}}})
       // 联网搜索 + 内置浏览器：搜索结果由 web_search 返回，open_web_page 打开页面。
       openAITools.push({type:'function',function:{name:'web_search',description:'联网搜索网页，返回标题、真实链接和摘要。用户要求查最新信息、新闻、资料，或你不确定时使用。搜到后可以调用 open_web_page 打开具体网页。',parameters:{type:'object',properties:{query:{type:'string',description:'搜索词'}},required:['query'],additionalProperties:false}}})
@@ -1528,10 +1584,15 @@ export default function App() {
           }
         }
       } catch { /* MCP is optional; continue with normal model chat. */ }
+      }
       for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
-        if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
-        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        outgoingToolsEnabled=openAITools.length>0
+        if(openAITools.length){requestBody.tools=/gemini|gemma/i.test(activeModel.model)?sanitizeGeminiTools(openAITools):openAITools;requestBody.tool_choice='auto'}
+        const beforeRoundTokens=Number(usageTotals.promptTokens)||0
+        const roundWeights=requestInputWeights(requestMessages,requestBody.tools||[],matched)
+        const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,includeTimeContext:currentChatPrefs.time,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        failurePhase='request'
         let response=await chatProxy()
         if(!response.ok){
           const detail=await response.text()
@@ -1544,11 +1605,12 @@ export default function App() {
           }
           if(response.status===400&&/stream_options|include_usage/i.test(detail)){
             delete requestBody.stream_options;response=await chatProxy()
-            if(!response.ok){const retryDetail=await response.text();console.warn('[chat] retry upstream HTTP error',response.status,retryDetail.slice(0,2000));throw new Error(friendlyHttpError(response.status,retryDetail))}
-          }else throw new Error(friendlyHttpError(response.status,detail))
+            if(!response.ok){const retryDetail=await response.text();console.warn('[chat] retry upstream HTTP error',response.status,retryDetail.slice(0,2000));throw new Error(subscriptionProtocol==='codex'?diagnoseGptSubscriptionError(response.status,retryDetail,{elapsedMs:performance.now()-requestStartedAt,hasAccountId:!!subscriptionAccountId}):diagnoseChatHttpError(response.status,retryDetail,{toolsEnabled:outgoingToolsEnabled,elapsedMs:performance.now()-requestStartedAt}))}
+          }else throw new Error(subscriptionProtocol==='codex'?diagnoseGptSubscriptionError(response.status,detail,{elapsedMs:performance.now()-requestStartedAt,hasAccountId:!!subscriptionAccountId}):diagnoseChatHttpError(response.status,detail,{toolsEnabled:outgoingToolsEnabled,elapsedMs:performance.now()-requestStartedAt}))
         }
         if(routeMode){const used=response.headers.get('X-Route-Used')||'';const usedLabel=(()=>{try{return decodeURIComponent(response.headers.get('X-Route-Label')||'')}catch{return ''}})();if(used)setLastRouteInfo('实际使用线路：'+(usedLabel||used))}
         if(!response.body) throw new Error('当前浏览器未提供流式响应读取能力')
+        failurePhase='stream'
         // 正文与思考各用一个有状态清洗器：跨 chunk 的协议标签由缓冲窗口负责识别，
         // 清洗后的增量才写进 answer / thinking（持久化与通知因此天然都是干净的）。
         const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
@@ -1561,9 +1623,15 @@ export default function App() {
         if(contentTail){roundText+=contentTail;answer+=contentTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,content:answer}:m),sendConversationId)}
         const reasoningTail=reasoningCleanup.flush()
         if(reasoningTail){thinking+=reasoningTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}
+        const inputTokensThisRound=(Number(usageTotals.promptTokens)||0)-beforeRoundTokens
+        const roundEstimate=allocateInputTokens(inputTokensThisRound,roundWeights)
+        measuredParts.context+=roundEstimate.context
+        measuredParts.tools+=roundEstimate.tools
+        measuredParts.worldbook+=roundEstimate.worldbook
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
+        failurePhase='tool'
         for(const call of toolCalls){
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
@@ -1618,9 +1686,13 @@ export default function App() {
                 resultContent=JSON.stringify({widgets:(listData.widgets||[]).map((w:any)=>({id:w.id,type:w.type,title:w.title,summary:w.type==='custom'?String(w.config?.summary||'AI 小组件'):w.type==='ledger'?((w.config?.entries||[]).length+' 笔'):w.type==='checklist'?((w.config?.items||[]).length+' 项'):w.type==='counter'?String(w.config?.count||0):'便签'}))})
               }else if(name==='widget_create'){
                 const html=String(args.html||'').trim()
-                const legacyType=String(args.type||'')
-                const type=html?'custom':(legacyType||'custom')
-                const config=html?{html,data:args.data&&typeof args.data==='object'?args.data:{},summary:String(args.summary||'')}:(args.config||{})
+                const url=String(args.url||'').trim()
+                if(url && !url.startsWith('https://') && !url.startsWith('http://'))throw new Error('网页地址必须以 http:// 或 https:// 开头')
+                if(!html && !url)throw new Error('请提供 HTML 内容或网页地址，不能创建空白小组件')
+                const type='custom'
+                const roomX=Number.isFinite(args.roomX)&&args.roomX>=0&&args.roomX<=100?args.roomX:null
+                const roomY=Number.isFinite(args.roomY)&&args.roomY>=0&&args.roomY<=100?args.roomY:null
+                const config={html,url,icon:String(args.icon||'').trim().slice(0,12),roomX:roomX!=null&&roomY!=null?roomX:null,roomY:roomX!=null&&roomY!=null?roomY:null,data:args.data&&typeof args.data==='object'&&!Array.isArray(args.data)?args.data:{},summary:String(args.summary||'')}
                 const createResponse=await apiFetch('/api/widgets',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target,type,title:String(args.title||''),config})})
                 const createData=await createResponse.json()
                 if(!createResponse.ok)throw new Error(createData.error||'创建小组件失败')
@@ -1780,7 +1852,7 @@ export default function App() {
       const elapsedMs=Math.max(1,Math.round(performance.now()-requestStartedAt))
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
-      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
+      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined,inputBreakdown:measuredParts,inputBreakdownEstimated:true}:undefined
       if(!answer){
         // 重新生成拿到空白回复：不覆盖旧回复，恢复原样并提示（防止有效回复被空白顶掉）。
         if(regen){restoreRegenerate();setChatError('重新生成没有返回内容，已保留原来的回复。');return 'fail'}
@@ -1798,14 +1870,17 @@ export default function App() {
       return 'ok'
     } catch(err) {
       const msg=err instanceof Error?err.message:String(err)
+      const elapsed=performance.now()-requestStartedAt
+      const isDiagnosed=/^(GPT 订阅接口|工具参数兼容性错误|请求参数被拒绝|网络请求未成功连接上游|模型接口|请求被模型接口拒绝|模型服务暂时不可用|请求被取消|请求等待超时|流式连接中断|无法连接模型接口|模型请求失败)/.test(msg)
+      const shownError=isDiagnosed?msg:diagnoseChatTransportError(err,{stage:failurePhase,elapsedMs:elapsed,toolsEnabled:outgoingToolsEnabled,localMode:isLocalMode()})
       // 用户删除「正在生成」的回复会触发中止：消息已不在，不写错误文案、也不弹错误提示。
       if(!abortController.signal.aborted){
         if(regen){
           // 重新生成失败 → 恢复原有有效回复，绝不把旧回复换成失败占位。
           restoreRegenerate()
-          setChatError('重新生成失败：'+(msg.includes('Failed to fetch')?(isLocalMode()?'连接模型接口失败，请检查模型设置里的 API 地址与网络。':'连接失败，请确认后端服务（'+(getApiBase()||'本机后端')+'）正在运行。'):msg))
+          setChatError('重新生成失败：'+shownError)
         }else{
-          setChatError(msg.includes('Failed to fetch')?(isLocalMode()?'连接模型接口失败：请检查模型设置里的 API 地址、API Key 与网络后重试。':'连接失败：后端未响应，请确认后端服务（'+(getApiBase()||'本机后端 127.0.0.1:4180')+'）正在运行，或检查网络后重试。'):msg)
+          setChatError(shownError)
           // 失败时保留已经流式到达的文本，只追加一行失败说明，不把已生成内容整段抹掉。
           updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId&&m.role==='assistant'?{...m,content:(answer?answer+'\n\n':'')+'（请求失败，请查看上方错误提示并检查模型设置。）'}:m),sendConversationId)
         }
@@ -1814,6 +1889,8 @@ export default function App() {
       return 'fail'
     } finally {
       if (streamPaintTimer !== undefined) flushStreamPaint()
+      // Persist the final generated answer immediately; intermediate chunks are batched.
+      window.setTimeout(flushChatPersistence, 0)
       if(sendAbortRef.current[sendScope]?.id===assistantMessageId)delete sendAbortRef.current[sendScope]
       delete sendingRef.current[sendScope]
       setSendingScopes(prev=>({...prev,[sendScope]:false}))
@@ -2052,6 +2129,8 @@ export default function App() {
   // 左侧抽屉里的会话操作：和房间页共用 conversations / messages / activeConversationIds，
   // 切换前先把当前聊天视图写回持久化会话，避免刚发出去的消息丢在旧会话里。
   const drawerConvs:Conversation[]=conversations[person]||[]
+  const visibleDrawerConvs=drawerConvs.filter(c=>showArchivedConvs?!!c.archivedAt:!c.archivedAt)
+  const archivedDrawerCount=drawerConvs.filter(c=>!!c.archivedAt).length
   const drawerActiveId:string=activeConversationIds[person]||''
   function drawerWriteBack(){
     if(!drawerActiveId)return
@@ -2099,6 +2178,29 @@ export default function App() {
     setChatError('')
     setDrawerRenameId(null)
   }
+  function drawerArchive(id:string) {
+    const list=conversations[person]||[]
+    const target=list.find(c=>c.id===id)
+    if(!target||target.archivedAt)return
+    const now=new Date().toISOString()
+    // Archive only changes visibility. No message or summary is deleted.
+    setConversations(old=>({...old,[person]:(old[person]||[]).map(c=>{
+      if(c.id===id)return {...c,archivedAt:now,messages:id===drawerActiveId?(messages[person]||c.messages):c.messages}
+      return c
+    })}))
+    if(id===drawerActiveId){
+      const replacement=list.find(c=>c.id!==id&&!c.archivedAt)
+      const fallback=replacement||{id:crypto.randomUUID(),title:'新对话',messages:[] as ChatMessage[],updatedAt:now}
+      if(!replacement)setConversations(old=>({...old,[person]:[...(old[person]||[]),fallback]}))
+      setActiveConversationIds(old=>({...old,[person]:fallback.id}))
+      setMessages(old=>({...old,[person]:fallback.messages||[]}))
+    }
+    setChatError('')
+    setDrawerRenameId(null)
+  }
+  function drawerUnarchive(id:string) {
+    setConversations(old=>({...old,[person]:(old[person]||[]).map(c=>c.id===id?{...c,archivedAt:undefined}:c)}))
+  }
   // 聊天页没有「← 房间」按钮：从抽屉底部或系统返回手势回房间。
   const drawerBackToRoom=()=>{setSidebarOpen(false);setChatOpen(false);setActiveTool('')}
   const beautifyClass=BEAUTIFY_PACKS.find(p=>p.id===beautifyPack)?.cssClass||''
@@ -2142,18 +2244,20 @@ export default function App() {
         </section>
         <section className="sidebar-section sidebar-combined">
           <div className="sidebar-combined-card">
-            <div className="sidebar-combined-head"><b>历史聊天</b><small>{displayName(person)}</small></div>
+            <div className="sidebar-combined-head"><b>{showArchivedConvs?'已归档':'历史聊天'}</b><button type="button" className="sidebar-conv-archive-tab" aria-pressed={showArchivedConvs} onClick={()=>setShowArchivedConvs(v=>!v)}>{showArchivedConvs?'返回聊天':'归档 '+archivedDrawerCount}</button></div>
             <div className="sidebar-conv-list">
-              {drawerConvs.map((c:Conversation)=>(
+              {visibleDrawerConvs.map((c:Conversation)=>(
                 <div className={'sidebar-conv-row'+(c.id===drawerActiveId?' active':'')} key={c.id}>
                   {drawerRenameId===c.id
                     ? <input className="sidebar-conv-input" autoFocus value={drawerRenameDraft} onChange={e=>setDrawerRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')drawerRename(c.id);if(e.key==='Escape')setDrawerRenameId(null)}} onBlur={()=>drawerRename(c.id)} aria-label="重命名会话"/>
                     : <button type="button" className="sidebar-conv-name" onClick={()=>drawerSwitch(c.id)}>{c.title||'新对话'}</button>}
-                  <button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}><IconEdit size={14}/></button>
+                  {!showArchivedConvs&&<button type="button" className="sidebar-conv-edit" aria-label={'重命名 '+(c.title||'新对话')} title="重命名" onClick={()=>{setDrawerRenameId(c.id);setDrawerRenameDraft(c.title||'')}}><IconEdit size={14}/></button>}
+                  <button type="button" className="sidebar-conv-archive-action" aria-label={(showArchivedConvs?'取消归档 ':'归档 ')+(c.title||'新对话')} title={showArchivedConvs?'取消归档':'归档会话'} onClick={()=>showArchivedConvs?drawerUnarchive(c.id):drawerArchive(c.id)}>{showArchivedConvs?'恢复':'归档'}</button>
                   <button type="button" className="sidebar-conv-del" aria-label={'删除 '+(c.title||'新对话')} title="删除会话" onClick={()=>void drawerDelete(c.id)}><IconClose size={15}/></button>
                 </div>
               ))}
             </div>
+            {showArchivedConvs&&visibleDrawerConvs.length===0&&<p className="sidebar-archive-empty">暂时没有已归档的对话。</p>}
             <button type="button" className="sidebar-conv-new" onClick={drawerCreate}><IconPlus className="ui-icon-inline" size={14}/> 新建对话</button>
             <div className="sidebar-combined-sep" aria-hidden="true"/>
             <div className="sidebar-combined-head"><b>助手工具</b><small>{displayName(person)}</small></div>
@@ -2185,7 +2289,7 @@ export default function App() {
         enqueuePending={enqueuePending} flushPending={flushPending} cancelPending={cancelPending} editPendingText={editPendingText} stopGeneration={stopGeneration}
         editMessage={editMessage} deleteMessage={deleteMessage} deleteMessages={deleteMessages} regenerateMessage={regenerateMessage} resendUserMessage={resendUserMessage} translateReasoning={translateReasoningText}
         tasks={tasks} addTask={addTask}
-        userSettings={userSettings} setUserSettings={setUserSettings}
+        userSettings={userSettings} setUserSettings={setUserSettings} chatToolPrefs={chatToolPrefs} setChatToolPrefs={setChatToolPrefs}
         profileFromChat={profileFromChat} setProfileFromChat={setProfileFromChat} openAssistantProfile={openAssistantProfile} onOpenSettings={()=>{pageBeforeSettings.current='room';navigate('settings')}} packIcons={activePack?.icons} />}
       {page === 'fun' && <Fun shortcut={funShortcut} onShortcutUsed={()=>setFunShortcut('')} displayName={displayName} />}
       {page === 'settings' && <Settings packIcons={activePack?.icons} onBack={()=>{setPage('home');setActiveTool('');setChatOpen(false)}} onLogout={logout} cloudStatus={cloudStatus} themePrefs={themePrefs} setThemePrefs={setThemePrefs} customAssets={customAssets} conversations={conversations} modelConfig={modelConfig} personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} onOpenTool={(tool)=>{setPerson(tool.person);setActiveTool(tool.tool);setPage('room');setToolReturnToSettings(true)}} displayName={displayName} timeZone={timeZone} setTimeZone={setTimeZone} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} vendors={vendors} setVendors={setVendors} subscriptions={subscriptions} setSubscriptions={setSubscriptions} onApiBaseApplied={recheckAfterApiChange} systemPeople={assistants.map(a=>a.id)} avatarOf={(id)=>characters[id]?.avatar||''} workspaceConfigs={workspaceConfigs} onWorkspaceSaved={(config)=>setWorkspaceConfigs(old=>({...old,[config.person]:config}))} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId} />}
@@ -2395,6 +2499,7 @@ function Room(props: {
   mcpConnections: Record<Person,MCPConnection[]>, setMcpConnections: React.Dispatch<React.SetStateAction<Record<Person,MCPConnection[]>>>,
   tasks: Record<Person,string[]>, addTask: () => void,
   userSettings:Record<Person,UserSettings>, setUserSettings:React.Dispatch<React.SetStateAction<Record<Person,UserSettings>>>,
+  chatToolPrefs:Record<string,ChatToolPrefs>, setChatToolPrefs:React.Dispatch<React.SetStateAction<Record<string,ChatToolPrefs>>>,
   profileFromChat:boolean, setProfileFromChat:(v:boolean)=>void, openAssistantProfile:(fromChat?:boolean)=>void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
   sending: boolean, chatError: string, setChatError: (v:string)=>void,
@@ -2473,7 +2578,10 @@ function Room(props: {
       if(action==='settings'){props.onOpenSettings?.();return}
       const map:Record<string,Tool>={world:'世界书',mcp:'MCP',skill:'SKILL 技能库',memory:'记忆面板'}
       const tool=map[action]; if(tool) props.setActiveTool(tool)
-    }}/>
+    }}>
+      {/* Room and workspace share the same widgets; place them inside the scene. */}
+      <RoomWidgets person={person}/>
+    </RoomScene>
   </div>
 }
 
@@ -2487,7 +2595,7 @@ function PackIcon({ value }: { value?: string }) {
 // Only hide duplicate built-in navigation in the room scene. Keep custom widgets,
 // decorations and saved layouts intact; settings and chat remain accessible elsewhere.
 const ROOM_DUPLICATE_ACTIONS = new Set(['world','mcp','settings','chat','skill','memory'])
-function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void;icons?:Record<string,string>}) {
+function RoomScene({layout,counts,onAction,icons,children}:{layout:RoomLayout;counts:Record<string,number>;onAction:(action:string)=>void;icons?:Record<string,string>;children?:React.ReactNode}) {
   const bg=layout.background as Record<string,string>|undefined
   const bgStyle:React.CSSProperties|undefined=bg?(bg.image?{backgroundImage:`url(${bg.image})`,backgroundSize:'cover',backgroundPosition:'center'}:bg.css?{background:bg.css}:bg.color?{background:bg.color}:undefined):undefined
   return <div className={'room-illustration'+(bgStyle?' free-bg':'')} style={bgStyle}>
@@ -2496,11 +2604,11 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
       if(legacy){
         const cls='ri-'+String(item.type||'')+(item.cls?' '+item.cls:'')
         const kids=item.type==='window'?<><i/><i/><i/></>:item.type==='shelf'?<><i/><i/><i/><i/></>:item.type==='desk'?<><span className="ri-monitor"/><span className="ri-leg l"/><span className="ri-leg r"/></>:item.text?item.text:null
-        return <div key={item.id} className={cls} style={item.style as any|undefined} aria-hidden="true">{kids}</div>
+        return <div key={item.id} className={cls} style={normalizeRoomStyle(item.style) as React.CSSProperties|undefined} aria-hidden="true">{kids}</div>
       }
       // 模板热点：沿用房间 CSS 的位置
       if(item.kind==='hotspot'&&item.hit){
-        return <button key={item.id} type="button" className={'ri-hit '+item.hit} style={item.style as any|undefined} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{icons?.[item.action||'']?<PackIcon value={icons[item.action||'']}/>:null}{icons?.[item.action||'']?' ':''}{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
+        return <button key={item.id} type="button" className={'ri-hit '+item.hit} style={normalizeRoomStyle(item.style) as React.CSSProperties|undefined} aria-label={item.label||'房间入口'} onClick={()=>onAction(item.action||'chat')}><span className="ri-tag">{icons?.[item.action||'']?<PackIcon value={icons[item.action||'']}/>:null}{icons?.[item.action||'']?' ':''}{item.label||'入口'}{item.countKey?<small> {counts[item.countKey]??0}</small>:null}</span></button>
       }
       // 自由物件：任意位置/尺寸/样式/文字，AI 可以画公园、星空、太空……
       const pos:React.CSSProperties={
@@ -2509,7 +2617,7 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
         top:item.y!=null?`${item.y}%`:(item.style?.top as string|undefined),
         width:item.w!=null?`${item.w}%`:(item.style?.width as string|undefined),
         height:item.h!=null?`${item.h}%`:(item.style?.height as string|undefined),
-        ...(item.style as any|undefined),
+        ...(normalizeRoomStyle(item.style) || {}),
       }
       const content=item.emoji||item.text||null
       if(item.action){
@@ -2517,6 +2625,7 @@ function RoomScene({layout,counts,onAction,icons}:{layout:RoomLayout;counts:Reco
       }
       return <div key={item.id} className="free-item" style={pos} aria-hidden="true">{content}</div>
     })}
+    <div className="room-scene-widgets">{children}</div>
   </div>
 }
 
@@ -2930,8 +3039,8 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
       const u = m.usage || {}
       const time = u.at ? new Date(u.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''
       const total = (Number(u.promptTokens) || 0) + (Number(u.completionTokens) || 0)
-      return <div className="request-stats-row" key={m.id || Math.random()}>
-        <div className="request-stats-line1"><b>{u.model || '未知模型'}</b><span>{time}</span></div>
+      return <details className="request-stats-row" key={m.id || u.at || 'usage'}>
+        <summary className="request-stats-line1"><b>{u.model || '未知模型'}</b><span>{time} · {tokenCountLabel(total)} Token</span></summary>
         <div className="request-stats-line2">
           <span>输入 {Number(u.promptTokens || 0).toLocaleString()}</span>
           <span>输出 {Number(u.completionTokens || 0).toLocaleString()}</span>
@@ -2940,20 +3049,35 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
           {u.tokensPerSecond ? <span>{Math.round(Number(u.tokensPerSecond))} tok/s</span> : null}
           {u.elapsedMs ? <span>{(Number(u.elapsedMs) / 1000).toFixed(1)}s</span> : null}
         </div>
-      </div>
+        {u.inputBreakdown&&<div className="request-token-breakdown">
+          <div><b>本次输入构成（估算）</b><small>按实际输入 Token 总数和发送内容占比分摊；非供应商精确分类账单</small></div>
+          <div>上下文 <strong>≈{tokenCountLabel(u.inputBreakdown.context)} Token</strong></div>
+          <div>工具定义及结果 <strong>≈{tokenCountLabel(u.inputBreakdown.tools)} Token</strong></div>
+          <div>世界书 <strong>≈{tokenCountLabel(u.inputBreakdown.worldbook)} Token</strong></div>
+          <small>同一回复若多次调用工具，输入包含所有请求轮次；缓存命中不额外叠加。</small>
+        </div>}
+        {!u.inputBreakdown&&<p className="muted">这条记录来自旧版本，尚无分类估算；新版请求会自动记录。</p>}
+      </details>
     })}</div>
   </div>
 }
 
 function Chat(p: any) {
   const chatPerson:Person=p.person as Person
+  const toolPrefs:ChatToolPrefs=normalizeChatToolPrefs(p.chatToolPrefs?.[chatPerson])
+  const setToolPrefs=(patch:Partial<ChatToolPrefs>)=>p.setChatToolPrefs((old:Record<string,ChatToolPrefs>)=>({...old,[chatPerson]:{...normalizeChatToolPrefs(old?.[chatPerson]),...patch}}))
  const chatDisplay = useChatDisplay()
   // 聊天窗口内的「配置」抽屉：按当前助手选择模型预设 / 世界书条目 / MCP 服务。
   // 输入栏图标点开的小面板：与表情面板互斥，不遮挡聊天记录。
-  const [tray,setTray]=useState<''|'model'|'bind'|'tools'>('')
+  const [tray,setTray]=useState<''|'model'|'world'|'mcp'|'tools'>('')
   const [bindOpen,setBindOpen]=useState(false)
   const formRef=useRef<HTMLFormElement>(null)
-  const openTray=(id:''|'model'|'bind'|'tools')=>{
+  // On Android, blurring the IME can move the fixed composer between pointerdown
+  // and click, consuming the first tap. Keep the focused editor during action taps.
+  const keepComposerFocus=(event:React.PointerEvent<HTMLButtonElement>)=>{
+    if(event.pointerType!=='mouse' && document.activeElement===composeTextRef.current) event.preventDefault()
+  }
+  const openTray=(id:''|'model'|'world'|'mcp'|'tools')=>{
     // 打开半屏模型面板前先收起软键盘，否则键盘会把 sheet 顶到屏幕外。
     if(id==='model'){const active=document.activeElement;if(active instanceof HTMLElement)active.blur()}
     setTray(t=>t===id?'':id);setEmojiOpen(false);setAttachOpen(false)
@@ -2995,7 +3119,7 @@ function Chat(p: any) {
   const [emojiTab,setEmojiTab]=useState<'emoji'|'fav'|'search'>('emoji')
   useEffect(()=>{
     if(!emojiOpen)return
-    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.emoji-panel,.compose-icon'))setEmojiOpen(false)}
+    const onDown=(e:PointerEvent)=>{const t=e.target;if(t instanceof Element&&!t.closest('.emoji-panel,.cw-circle[aria-label="表情包"]'))setEmojiOpen(false)}
     document.addEventListener('pointerdown',onDown)
     return ()=>document.removeEventListener('pointerdown',onDown)
   },[emojiOpen])
@@ -3008,7 +3132,27 @@ function Chat(p: any) {
   const [newCustom,setNewCustom]=useState('')
   const [attachOpen,setAttachOpen]=useState(false)
   const [plusOpen,setPlusOpen]=useState(false)
-  void openTray
+  // One outside tap dismisses ephemeral panels; let the target's click proceed.
+  useEffect(() => {
+    if (!tray && !attachOpen) return
+    const closeOutside = (event:PointerEvent) => {
+      const target=event.target
+      if (!(target instanceof Element)) return
+      if (tray && tray !== 'model' && !target.closest('.compose-tray,.compose-plus-panel,.cw-row')) setTray('')
+      if (attachOpen && !target.closest('.compose-attach-menu,.compose-plus-panel,.cw-row')) setAttachOpen(false)
+    }
+    document.addEventListener('pointerdown',closeOutside)
+    return () => document.removeEventListener('pointerdown',closeOutside)
+  },[tray,attachOpen])
+  useEffect(() => {
+    if (!plusOpen) return
+    const closeOutside = (event:PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && !target.closest('.compose-plus-panel,.cw-circle[aria-label="更多"]')) setPlusOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [plusOpen])
   // 点输入栏图标时浮出一条文字说明（1.4s 自动消失），图标本身只留图形。
   const [toolHint,setToolHint]=useState('')
   const hintTimerRef=useRef<number|undefined>(undefined)
@@ -3132,7 +3276,7 @@ function Chat(p: any) {
   // Android 返回键：聊天页内临时层优先关闭（灯泡图→搜索→多选→表情/更多面板），
   // 全关完才把返回事件交还给上层（房间页/根），由 App 决定是否退出。
   useEffect(()=>{
-    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||attachOpen
+    const anyLayer=!!lightbox||searchOpen||selectMode||emojiOpen||attachOpen||plusOpen||(tray!==''&&tray!=='model')
     if(!anyLayer)return
     const unregister=pushBackHandler(()=>{
       if(lightbox){setLightbox(null);return true}
@@ -3140,10 +3284,12 @@ function Chat(p: any) {
       if(selectMode){exitSelect();return true}
       if(emojiOpen){setEmojiOpen(false);return true}
       if(attachOpen){setAttachOpen(false);return true}
+      if(plusOpen){setPlusOpen(false);return true}
+      if(tray&&tray!=='model'){setTray('');return true}
       return false
     })
     return unregister
-  },[lightbox,searchOpen,selectMode,emojiOpen,attachOpen])
+  },[lightbox,searchOpen,selectMode,emojiOpen,attachOpen,plusOpen,tray])
   // 编辑中的消息被删除 / 撤回后退出编辑态（取消编辑本来就不改原消息）。
   // 依赖用底层 state 引用（currentMessages 的 ||[] 兜底每次渲染都是新数组）。
   const editWatch:ChatMessage[]|undefined=p.messages[chatPerson]
@@ -3252,13 +3398,20 @@ function Chat(p: any) {
     pin()
     // 进入聊天时消息/图片/键盘可能晚一步撑高，补几次并监听 DOM 变化，确保落在最新一条。
     const timers=[60,220,500,900,1400,2000].map(ms=>window.setTimeout(pin,ms))
-    const mo=new MutationObserver(()=>requestAnimationFrame(pin))
+    // A streamed reply can update text dozens of times per second. Coalesce scroll
+    // work into one animation frame, and never fight intentional history scrolling.
+    let queuedFrame=0
+    const schedulePin=()=>{
+      if(!scrollPinned.current || queuedFrame) return
+      queuedFrame=requestAnimationFrame(()=>{queuedFrame=0;pin()})
+    }
+    const mo=new MutationObserver(schedulePin)
     mo.observe(el,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['src']})
-    const onImgLoad=()=>requestAnimationFrame(pin)
+    const onImgLoad=schedulePin
     el.addEventListener('load',onImgLoad,true)
-    const ro=new ResizeObserver(()=>requestAnimationFrame(pin))
+    const ro=new ResizeObserver(schedulePin)
     ro.observe(el)
-    return ()=>{timers.forEach(t=>window.clearTimeout(t));mo.disconnect();ro.disconnect();el.removeEventListener('load',onImgLoad,true)}
+    return ()=>{timers.forEach(t=>window.clearTimeout(t));if(queuedFrame)cancelAnimationFrame(queuedFrame);mo.disconnect();ro.disconnect();el.removeEventListener('load',onImgLoad,true)}
   },[chatPerson,activeChatConversationId,p.person])
   // 打字时键盘把可视高度压小，容器 resize 后滚动位置会被浏览器重算；
   // 只要焦点还在输入框，就补滚到最新一条，保证「边打字边看得见聊天记录」。
@@ -3357,7 +3510,10 @@ function Chat(p: any) {
   const personAvatar=(p.characters&&p.characters[chatPerson]&&p.characters[chatPerson].avatar)||''
   // 我的头像按助手各存一份：在助手档案的「用户设置」里改。
   const userAvatar=(p.userSettings&&p.userSettings[chatPerson]&&p.userSettings[chatPerson].avatar)||''
-  const myName=String(p.roomName||'我')
+  // Display the name configured for this specific assistant, including old messages.
+  // "用户" is only a legacy room label, never override an explicit user setting.
+  const mySettings:UserSettings|undefined=p.userSettings?.[chatPerson]
+  const myName=String(mySettings?.userName?.trim()||mySettings?.callName?.trim()||p.roomName||'我')
   // 图片表情包：上传后缩到 128px 存 localStorage（控制体积），点击即作为图片附件进发送栏。
   function shrinkSticker(src:string):Promise<string>{return new Promise(resolve=>{const img=new Image();img.onload=()=>{const max=128;const scale=Math.min(1,max/Math.max(img.width,img.height,1));const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');if(!ctx){resolve(src);return}ctx.drawImage(img,0,0,w,h);let out='';try{out=c.toDataURL('image/webp',0.82)}catch{out=''}if(!out.startsWith('data:image/webp')){try{out=c.toDataURL('image/png')}catch{out=src}}resolve(out)};img.onerror=()=>resolve(src);img.src=src})}
   async function addImageStickers(list:FileList|null){if(!list||!list.length)return;const added:string[]=[];for(const file of Array.from(list).slice(0,9)){if(!file.type.startsWith('image/'))continue;const raw=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('图片读取失败'));r.readAsDataURL(file)}).catch(()=>'');if(raw)added.push(await shrinkSticker(raw))}if(!added.length)return;const next=[...imageStickers,...added].slice(-30);try{localStorage.setItem('ai-home.imageStickers',JSON.stringify(next))}catch{p.setChatError('图片表情保存失败：浏览器本地存储空间不足，可先「清空图片」再上传。');return}setImageStickers(next);if(stickerInput.current)stickerInput.current.value=''}
@@ -3507,7 +3663,7 @@ function Chat(p: any) {
   }
   return <div className="fullscreen-chat">
     {/* 全面屏顶栏：不铺返回/会话控件。历史会话从左侧抽屉点选，返回房间走系统返回手势或抽屉底部入口。 */}
-    <header className="chat-header chat-header-simple"><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}><IconPlus size={16}/></button><button type="button" className="btn-icon" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}><IconSwitch size={16}/></button></span></header>
+    <header className="chat-header chat-header-simple"><span className="chat-header-title"><button type="button" className="chat-avatar avatar-link" title="打开助手档案与用户设置" aria-label="打开助手档案" onClick={()=>p.openAssistantProfile(true)}>{personAvatar?<img src={personAvatar} alt=""/>:<img src={DEFAULT_AVATAR} alt=""/>}</button><b>{p.displayName(p.person)}</b></span><span className="chat-header-actions"><button type="button" className="btn-icon" aria-label="新对话" title="新对话" onClick={createConversation}><IconPlus size={16}/></button><button type="button" className="btn-icon chat-switch-assistant" aria-label="切换助手" title="切换助手" onClick={()=>{p.setPerson(p.person === YWX ? YS : YWX);p.setChatError('')}}><IconSwitch size={16}/></button></span></header>
     {searchOpen&&<div className="chat-search"><input autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchActiveIdx(-1)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();stepMatch(1)}if(e.key==='Escape'){closeSearch()}}} placeholder="搜索当前会话的聊天记录……" aria-label="搜索当前会话的聊天记录"/>{searchQuery.trim()&&<span className="chat-search-count" aria-live="polite">{searchActiveIdx>=0?`${searchActiveIdx+1}/${searchResult.total}`:`共 ${searchResult.total} 条`}</span>}<button type="button" aria-label="上一条匹配" title="上一条匹配" disabled={!searchResult.items.length} onClick={()=>stepMatch(-1)}><IconArrowUp size={15}/></button><button type="button" aria-label="下一条匹配" title="下一条匹配（Enter 同效）" disabled={!searchResult.items.length} onClick={()=>stepMatch(1)}><IconArrowDown size={15}/></button>{searchQuery.trim()&&<button type="button" onClick={()=>setSearchQuery('')}>清除</button>}</div>}
     {searchOpen&&searchQuery.trim()&&<div className="chat-search-results" role="list">{searchResult.items.length?searchResult.items.map((x:any,i:number)=><button type="button" role="listitem" className={i===searchActiveIdx?'current':''} key={(x.messageId||'idx-'+x.index)+'-'+i} onClick={()=>{setSearchActiveIdx(i);if(x.messageId)scrollToMatch(x.messageId)}}><b>{x.role==='user'?'你':'助手'} · 第 {x.index+1} 条{x.count>1?` · ${x.count} 处匹配`:''}</b><span>{x.snippet}</span></button>):<p>没有找到匹配的消息。</p>}{searchResult.total>searchResult.items.length&&<p className="chat-search-overflow">仅显示前 {searchResult.items.length} 条，共 {searchResult.total} 条匹配。</p>}</div>}
     {/* 会话切换已收进顶栏下拉，这里不再铺头像卡片。 */}
@@ -3551,22 +3707,28 @@ function Chat(p: any) {
     </div>}
     {/* 图标面板：点输入框底部的图标，在输入区上方展开；不遮罩、不打断聊天。 */}
     {tray&&tray!=='model'&&!selectMode&&<div className="compose-tray" role="dialog" aria-label="聊天工具面板">
-      <div className="compose-tray-head"><b>{tray==='bind'?'世界书 / MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{tray==='bind'&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}><IconSettings size={15}/></button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}><IconClose size={15}/></button></div>
+      <div className="compose-tray-head"><b>{tray==='world'?'世界书':tray==='mcp'?'MCP':'工具'}</b><small>{p.displayName(chatPerson)} 的本次绑定</small>{(tray==='world'||tray==='mcp')&&<button type="button" className="compose-tray-config" aria-label="完整绑定设置" title="完整绑定设置" onClick={()=>{setTray('');setBindOpen(true)}}><IconSettings size={15}/></button>}<button type="button" className="compose-tray-close" aria-label="关闭面板" onClick={()=>setTray('')}><IconClose size={15}/></button></div>
       <div className="compose-tray-body">
-        {tray==='bind'&&<>
-          <div className="tray-section">
+        {(tray==='world'||tray==='mcp')&&<>
+          {tray==='mcp'&&<div className="tray-section">
             <b className="tray-section-title">MCP</b>
             {quickMcp.error&&<p className="mcp-error">{quickMcp.error}</p>}
             {trayMcp.length===0&&<p className="muted tray-empty">还没有 MCP 服务，到设置里添加。</p>}
             {trayMcp.map(c=><label className="tray-option tray-switch-row" key={c.id}><span><i className="tray-no">{mcpNo(c.id)}</i> {c.name}<small>{c.url}</small></span><input type="checkbox" className="tray-switch" checked={(quickBinding.mcpIds===null?mcpAll:quickBinding.mcpIds).includes(c.id)} onChange={v=>patchBinding(toggleMcpId(quickBinding,c.id,v.target.checked,mcpAll))}/></label>)}
-          </div>
-          <div className="tray-section">
+          </div>}
+          {tray==='world'&&<div className="tray-section">
             <b className="tray-section-title">世界书</b>
             {trayWorld.length===0&&<p className="muted tray-empty">还没有世界书条目。</p>}
             {trayWorld.map(e=><label className="tray-option tray-switch-row" key={e.id}><span><i className="tray-no">{worldNo(e.id)}</i> {e.title||'未命名条目'}<small>{e.enabled?'已启用':'已停用'} · 打开后这位助手的对话里生效</small></span><input type="checkbox" className="tray-switch" checked={isWorldEntryBound(e,chatPerson)} onChange={v=>p.setWorldEntries((old:WorldEntry[])=>toggleWorldEntryBinding(old,chatPerson,e.id,v.target.checked))}/></label>)}
-          </div>
+          </div>}
         </>}
-        {tray==='tools'&&<div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>}
+        {tray==='tools'&&<div className="tray-tool-settings">
+          <label className="tray-option tray-switch-row"><span>时间注入<small>每轮请求时生成日期、时间与时区</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.time} onChange={e=>setToolPrefs({time:e.target.checked})}/></label>
+          <label className="tray-option tray-switch-row"><span>天气注入<small>仅查询你填写的城市；不开定位，失败不编造天气</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.weather} onChange={e=>setToolPrefs({weather:e.target.checked})}/></label>
+          {toolPrefs.weather&&<label className="tray-weather-city">天气城市<input type="text" value={toolPrefs.city} maxLength={80} autoComplete="off" placeholder="输入城市，例如 北京 / 东京" onChange={e=>setToolPrefs({city:e.target.value})}/><small>{toolPrefs.city.trim()?'会查询该城市的实时天气':'填写城市后才会尝试注入天气；不会使用定位'}</small></label>}
+          <label className="tray-option tray-switch-row"><span>工具调用<small>关闭后只与模型聊天，不向模型发送 MCP 或内置工具</small></span><input className="tray-switch" type="checkbox" checked={toolPrefs.tools} onChange={e=>setToolPrefs({tools:e.target.checked})}/></label>
+          <div className="tray-tool-grid">{CHAT_QUICK_TOOLS.map(t=><button type="button" className="tray-tool-card" key={t.id} onClick={()=>runQuickTool(t.id)}><b>{t.icon} {t.label}</b><small>{t.desc}</small></button>)}</div>
+        </div>}
       </div>
     </div>}
     {selectMode
@@ -3580,18 +3742,18 @@ function Chat(p: any) {
         <textarea ref={composeTextRef} className="cw-input" rows={5} value={p.draft} onChange={e=>p.setDraft(e.target.value)} placeholder="请输入您的问题…" aria-label="聊天消息" onFocus={()=>{pinToLatest();for(const ms of [80,180,320,480])window.setTimeout(pinToLatest,ms)}} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!(e.nativeEvent as any).isComposing){e.preventDefault();formRef.current?.requestSubmit()}}}/>
       </div>
       <div className="cw-row">
-        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型"><IconSparkles className="ui-icon-inline" size={14}/> {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span><IconChevronDown size={13}/></span></button>
-        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><IconEmoji size={17}/></button>
-        <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><IconPlus size={17}/></button>
+        <button type="button" className="compose-model-select" onClick={()=>{setPlusOpen(false);setEmojiOpen(false);openTray('model')}} aria-label="选择模型" onPointerDown={keepComposerFocus}><IconSparkles className="ui-icon-inline" size={14}/> {(()=>{const fixedId=fixedRouteId(p.routeState,chatPerson);const route=p.routeState.routes.find((r:any)=>r.id===fixedId);if(route){const vendor=p.vendors?.find((v:Vendor)=>v.id===route.vendorId);return `${vendor?.name||route.label||'独立线路'} · ${route.model}`}const profile=p.modelProfiles?.find((m:ModelProfile)=>m.id===quickBinding.modelProfileId)||p.modelProfiles?.find((m:ModelProfile)=>m.id===p.defaultModelId);if(!profile)return '选择模型';const vendor=p.vendors?.find((v:Vendor)=>v.id===profile.vendorId);return `${vendor?.name||profile.vendor||'未命名来源'} · ${profile.name||profile.model}`})()} <span><IconChevronDown size={13}/></span></button>
+        <button type="button" className={'cw-circle'+(emojiOpen?' active':'')} aria-label="表情包" onPointerDown={keepComposerFocus} onClick={()=>{setTray('');setAttachOpen(false);setPlusOpen(false);setEmojiTab('emoji');setEmojiOpen(v=>!v)}}><IconEmoji size={17}/></button>
+        <button type="button" className={'cw-circle'+(plusOpen?' active':'')} aria-label="更多" aria-expanded={plusOpen} onPointerDown={keepComposerFocus} onClick={()=>{setEmojiOpen(false);setTray('');setAttachOpen(false);setPlusOpen(v=>!v)}}><IconPlus size={17}/></button>
         <button type="button" className="cw-circle" aria-label="语音" title="语音输入" onClick={()=>showToolHint('语音输入待接入')}>♩</button>
-        {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
+        {p.sending&&!p.draft.trim()&&!files.length?<button type="button" className="cw-circle send stop" aria-label="停止生成" onClick={()=>p.stopGeneration()}>■</button>:<button type="submit" onPointerDown={keepComposerFocus} className="cw-circle send" aria-label="发送" disabled={!p.draft.trim()&&!files.length}><span aria-hidden="true">➤</span></button>}
       </div>
       {toolHint&&<div className="compose-tool-hint" role="status">{toolHint}</div>}
       {plusOpen&&<div className="compose-plus-panel" role="dialog" aria-label="更多功能">
         <div className="cp-grid">
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);cameraInput.current?.click()}}><span className="cp-ico"><IconPhoto size={18}/></span><small>拍照</small></button>
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">▣</span><small>世界书</small></button>
-          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('bind')}}><span className="cp-ico">⌘</span><small>MCP</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('world')}}><span className="cp-ico">▣</span><small>世界书</small></button>
+          <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('mcp')}}><span className="cp-ico">⌘</span><small>MCP</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);setAttachOpen(true)}}><span className="cp-ico"><IconFile size={18}/></span><small>文件</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);openTray('tools')}}><span className="cp-ico"><IconSettings size={18}/></span><small>工具</small></button>
           <button type="button" className="cp-item" onClick={()=>{setPlusOpen(false);if(searchOpen)closeSearch();else setSearchOpen(true)}}><span className="cp-ico"><IconSearch size={18}/></span><small>查找聊天记录</small></button>
@@ -3707,7 +3869,7 @@ const resourceTab=(section.startsWith('resources:')?section.slice('resources:'.l
     openSection('')
   }
   const settingsBackLabel=!section?'主页':section.startsWith('vendor:')?'供应商':'全部设置'
-  return <div className="settings-screen"><header className="settings-page-header"><button type="button" className="settings-page-back" onClick={settingsBack}><IconBack className="ui-icon-inline" size={15}/><span>{settingsBackLabel}</span></button><h2>{sectionTitle}</h2><span className="settings-page-head-spacer" aria-hidden="true"/></header>{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon">{(()=>{const CardIcon=cardIcons[card.id]||IconInfo;return <CardIcon size={19}/>})()}</span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true"><IconChevronRight size={14}/></span></button>)}</div></div>:<div className="settings-detail">{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} modelProfiles={modelProfiles} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
+  return <div className="settings-screen"><header className="settings-page-header"><button type="button" className="settings-page-back" onClick={settingsBack}><IconBack className="ui-icon-inline" size={15}/><span>{settingsBackLabel}</span></button><h2>{section==='vendor'||section==='vendor:account'?'':sectionTitle}</h2><span className="settings-page-head-spacer" aria-hidden="true"/></header>{!section?<div className="settings-groups settings-flat-list"><div className="settings-row-list">{cards.map(card=><button className="settings-row" key={card.id} onClick={()=>openSection(card.section)}><span className="settings-row-icon">{(()=>{const CardIcon=cardIcons[card.id]||IconInfo;return <CardIcon size={19}/>})()}</span><span className="settings-row-text"><b>{card.title}</b><small>{card.desc}</small></span><span className="settings-row-chev" aria-hidden="true"><IconChevronRight size={14}/></span></button>)}</div></div>:<div className="settings-detail">{activeGroup&&<SettingsTabBar title={activeGroup.title} items={activeGroup.tabs} value={section} onChange={openSection}/>}{section==='guide'&&<SettingsGuidePage/>}{section==='skill'&&<SettingsSkillPage people={ASSISTANT_PEOPLE} displayName={displayName}/>}{section==='memory'&&<SettingsMemoryPage people={ASSISTANT_PEOPLE} displayName={displayName} onOpenTool={onOpenTool}/>}{section==='system'&&<AndroidSystemSettings people={systemPeople||[]} displayName={displayName} avatarOf={avatarOf||(()=>'')}/>}{(section==='theme'||section.startsWith('theme:'))&&<SettingsSubNav section={section} onSelect={setSection}/>}{(section==='vendor'||section==='vendor:account')&&<SettingsSubNav section={section} onSelect={setSection}/>}{section==='bind'&&<><ResourceLibrary key="bind-library" initialTab="world" tabs={['world','mcp']} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName}/></>}{section.startsWith('vendor')&&section!=='vendor:account'&&<VendorCenter section={section} onSection={setSection} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} modelProfiles={modelProfiles} defaultModelId={defaultModelId} setDefaultModelId={setDefaultModelId}/>}{showResources&&<ResourceLibrary key={resourceTab||'resources'} initialTab={resourceTab||undefined} only={resourceOnly?(resourceTab||undefined):undefined} worldEntries={worldEntries} setWorldEntries={setWorldEntries} modelProfiles={modelProfiles} setModelProfiles={setModelProfiles} bindings={bindings} setBindings={setBindings} displayName={displayName} />}{(section==='theme'||section==='theme:global')&&<div className="theme-page"><ThemeSettings value={themePrefs} onChange={setThemePrefs}/></div>}{section==='theme:person'&&<AssistantThemeSettings personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} assets={customAssets} displayName={displayName}/>}{section==='vendor:account'&&<SubscriptionAccounts vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles} subscriptions={subscriptions} setSubscriptions={setSubscriptions}/>}{section==='usage'&&<div className="setting-card settings-inner-card"><b>AI 用量统计</b><UsageStats people={ASSISTANT_PEOPLE} conversations={conversations} models={Object.fromEntries(ASSISTANT_PEOPLE.map(p=>[p,(modelConfig[p]&&modelConfig[p].model)||((modelProfiles.find(x=>x.id===(bindings[p]&&bindings[p].modelProfileId))||{}).name)||'']))} displayName={displayName}/></div>}{section==='workspace'&&<div className="setting-card settings-inner-card"><b>工作区工具</b><p className="muted">按助手直接打开主动任务、自主生活、工具看板与技能库。</p><div className="settings-shortcuts">{ASSISTANT_PEOPLE.map(person=><div className="settings-shortcut-group" key={person}><b>{displayName(person)}</b><div><button type="button" onClick={()=>onOpenTool({person,tool:'工作流'})}>主动任务</button><button type="button" onClick={()=>onOpenTool({person,tool:'自主生活'})}>自主生活</button><button type="button" onClick={()=>onOpenTool({person,tool:'工具调用看板'})}>调用看板</button><button type="button" onClick={()=>onOpenTool({person,tool:'记忆面板'})}>记忆面板</button><button type="button" onClick={()=>onOpenTool({person,tool:'SKILL 技能库'})}>技能库</button></div></div>)}</div></div>}{section==='applock'&&<AppLockSettings/>}{section==='files'&&<div className="setting-card settings-inner-card"><WorkspaceSettings people={ASSISTANT_PEOPLE} displayName={displayName} onSaved={onWorkspaceSaved}/></div>}{section==='chatdisplay'&&<ChatDisplaySettings/>}{section==='data'&&<div className="settings-data-rows">
 <div className="setting-card settings-inner-card"><b>备份与恢复</b><BackupCenter people={systemPeople||[]} vendors={vendors} setVendors={setVendors} setModelProfiles={setModelProfiles}/></div>
 <div className="setting-card settings-inner-card"><b>{isLocalMode()?'本地数据':'云端数据'}</b><p>{isLocalMode()?(cloudStatus==='error'?'最近一次保存失败：浏览器存储空间可能不足，请清理旧聊天或附件后重试。':'所有聊天、人物与设置都保存在这台设备的浏览器存储里，不上传任何服务器。修改后稍等片刻会自动保存。'):cloudStatus==='error'?'最近一次保存失败，请检查连接后重试。':cloudStatus==='saving'?'正在保存最新更改…':'已启用自动保存。修改后请稍等片刻，数据会自动同步。'}</p></div>
 <div className="setting-card settings-inner-card"><b>时区（动态时间上下文）</b><p className="muted">助手感知到的日期、星期、时间与时段按此时区在服务端实时生成；默认 Asia/Shanghai（UTC+8）。只保存配置，不会获取你的位置或天气。</p><input className="memory-search" list="time-zone-options" value={tzInput} placeholder="如 Asia/Shanghai" aria-label="IANA 时区" onChange={e=>setTzDraft(e.target.value)} onBlur={()=>{if(!tzError&&tzInput.trim()){const tz=normalizeTimeZone(tzInput.trim());setTimeZone(tz);setTzDraft(null)}}}/><datalist id="time-zone-options">{['Asia/Shanghai','Asia/Hong_Kong','Asia/Taipei','Asia/Tokyo','Asia/Seoul','Asia/Singapore','Europe/London','Europe/Paris','America/New_York','America/Los_Angeles','UTC'].map(z=><option key={z} value={z}/>)}</datalist>{tzError?<p className="chat-error" style={{marginTop:8}}>{tzError}</p>:<p className="muted" style={{marginTop:8}}>当前生效：{timeZone} · 预览 {tzPreview.date} {tzPreview.weekday} {tzPreview.time}（{tzPreview.partOfDay}，{tzPreview.utcOffset}）</p>}</div>
@@ -3809,7 +3971,7 @@ function SettingsSubNav({section,onSelect}:{section:string;onSelect:(s:string)=>
   const isTheme=section==='theme'||section.startsWith('theme:')
   const rows=isTheme
     ? [{id:'theme:global',label:'全局主题'},{id:'theme:person',label:'助手主题'}]
-    : [{id:'vendor',label:'供应商列表'},{id:'vendor:default',label:'默认模型'},{id:'vendor:account',label:'订阅账号'}]
+    : [{id:'vendor',label:'供应商'},{id:'vendor:account',label:'订阅'}]
   const active=(section.startsWith('theme:')||section.startsWith('vendor:'))?section:rows[0].id
   return <div className="settings-subnav settings-tabs" role="tablist" aria-label={isTheme?'主题美化分组':'供应商分组'}>
     {rows.map(r=><button type="button" role="tab" aria-selected={active===r.id} className={'subnav-row'+(active===r.id?' active':'')} key={r.id} onClick={()=>onSelect(r.id)}><b>{r.label}</b></button>)}
@@ -3854,6 +4016,9 @@ function useMcpLibrary() {
   return { connections, error, setError, refresh }
 }
 
+// MCP 状态在资源页卸载后保留，避免切换世界书时重新握手并冻结界面。
+const mcpProbeCache = new Map<string, { ok: boolean; count?: number }>()
+const mcpProbeInflight = new Map<string, Promise<{ ok: boolean; count?: number }>>()
 const EMPTY_PROFILE = { id: '', name: '', endpoint: '', model: '', inputPrice: '', outputPrice: '', cachedInputPrice: '', usdToCny: '7.2' }
 
 function groupModelsByName(ids: string[]): { id: string; label: string; models: string[] }[] {
@@ -4279,10 +4444,7 @@ function VendorCenter({vendors,setVendors,setModelProfiles,section,onSection,mod
   return <div className="vendor-center">
     {isList&&<>
       <div className="vendor-kelivo-list-head">
-        <div className="vendor-head-tabs">
-          
-          <button type="button" className="vendor-head-title" onClick={()=>onSection('vendor:account')}>订阅账号</button>
-        </div>
+        <div className="vendor-head-tabs" aria-hidden="true"/>
         <div className="vendor-kelivo-head-actions">
           <button type="button" className="vendor-head-add" onClick={()=>{resetEditUI();setNewName('OpenAI');setNewEndpoint('https://api.openai.com/v1');onSection('vendor:add')}}><IconPlus className="ui-icon-inline" size={14}/> 添加</button>
           <button type="button" className={'vendor-head-hide'+(showHidden?' on':'')} aria-pressed={showHidden} onClick={()=>setShowHidden(v=>!v)}>隐藏</button>
@@ -4696,7 +4858,6 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
   // 已添加的服务收进一个下拉：默认只占一行，选中才展开详情与移除按钮。
   const [mcpCounts, setMcpCounts] = useState<Record<string, number | undefined>>({})
   const [mcpStatus, setMcpStatus] = useState<Record<string, 'ok' | 'fail'>>({})
-  const mcpStatusLoadedRef = useRef<Set<string>>(new Set())
   const [mcpEdit, setMcpEdit] = useState<Array<{ id: string; person: Person }>>([])
   const [mcpTest, setMcpTest] = useState<{ busy: boolean; ok?: boolean; message: string }>({ busy: false, message: '' })
   const [mcpFormOpen, setMcpFormOpen] = useState(false)
@@ -4712,32 +4873,45 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
     }
     return [...map.values()]
   }, [mcp.connections])
-  // 列表不再展开：进入 MCP tab 时后台探一次工具数/连通状态，小横条也能显示。
+  // 已连接服务直接使用本次启动的状态缓存；切换世界书不重复初始化 MCP。
   useEffect(() => {
     if (tab !== 'mcp') return
     let cancelled = false
-    const load = async () => {
-      const pending = mcpGroups.filter(group => !mcpStatusLoadedRef.current.has(group.key))
-      for (const group of pending) mcpStatusLoadedRef.current.add(group.key)
-      // 并行探测：4 个服务不用排队等，切到 MCP 页更快出状态。
-      await Promise.all(pending.map(async group => {
-        const connection = group.items[0]
-        if (!connection) return
-        try {
-          const response = await apiFetch('/api/mcp/' + encodeURIComponent(connection.id) + '/tools', {
-            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ person: connection.person }),
-          })
-          const data = await response.json().catch(() => ({}))
-          if (cancelled) return
-          setMcpStatus(old => ({ ...old, [group.key]: response.ok ? 'ok' : 'fail' }))
-          if (response.ok && Array.isArray(data.tools)) setMcpCounts(old => ({ ...old, [group.key]: data.tools.length }))
-        } catch {
-          if (!cancelled) setMcpStatus(old => ({ ...old, [group.key]: 'fail' }))
-        }
-      }))
+    for (const group of mcpGroups) {
+      const cached = mcpProbeCache.get(group.key)
+      if (cached) {
+        setMcpStatus(old => ({ ...old, [group.key]: cached.ok ? 'ok' : 'fail' }))
+        if (cached.count !== undefined) setMcpCounts(old => ({ ...old, [group.key]: cached.count }))
+        continue
+      }
+      const connection = group.items[0]
+      if (!connection) continue
+      let pending = mcpProbeInflight.get(group.key)
+      if (!pending) {
+        pending = (async () => {
+          try {
+            const response = await apiFetch('/api/mcp/' + encodeURIComponent(connection.id) + '/tools', {
+              method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ person: connection.person }),
+            })
+            const data = await response.json().catch(() => ({}))
+            const result = { ok: response.ok, count: response.ok && Array.isArray(data.tools) ? data.tools.length : undefined }
+            mcpProbeCache.set(group.key, result)
+            return result
+          } catch {
+            const result = { ok: false }
+            mcpProbeCache.set(group.key, result)
+            return result
+          } finally { mcpProbeInflight.delete(group.key) }
+        })()
+        mcpProbeInflight.set(group.key, pending)
+      }
+      void pending.then(result => {
+        if (cancelled) return
+        setMcpStatus(old => ({ ...old, [group.key]: result.ok ? 'ok' : 'fail' }))
+        if (result.count !== undefined) setMcpCounts(old => ({ ...old, [group.key]: result.count }))
+      })
     }
-    void load()
     return () => { cancelled = true }
   }, [tab, mcpGroups])
 
@@ -4786,6 +4960,10 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
       setMcpDraft({ name: '', url: '', token: '', owner: 'all' })
       setMcpTest({ busy: false, message: '' })
       setMcpFormOpen(false)
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
     finally { setMcpBusy(false) }
@@ -4807,6 +4985,10 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         const data = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(data.error || '更新 MCP 失败')
       }
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (error) {
       mcp.setError(error instanceof Error ? error.message : String(error))
@@ -4821,6 +5003,10 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         const r = await apiFetch('/api/mcp/' + c.id, { method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ person: c.person }) })
         if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '移除失败') }
       }
+      mcpProbeCache.clear()
+      mcpProbeInflight.clear()
+      setMcpStatus({})
+      setMcpCounts({})
       await mcp.refresh()
     } catch (err) { mcp.setError(err instanceof Error ? err.message : String(err)) }
   }
@@ -4849,7 +5035,7 @@ function ResourceLibrary({ initialTab, only, tabs, worldEntries, setWorldEntries
         <form className="resource-form" onSubmit={addMcp}>
           <label>服务名称<input value={mcpDraft.name} onChange={e=>setMcpDraft({...mcpDraft,name:e.target.value})} placeholder="例如：记事本服务" required/></label>
           <label>主机地址<input value={mcpDraft.url} onChange={e=>setMcpDraft({...mcpDraft,url:e.target.value})} placeholder="https://example.com/mcp" type="url" required/></label>
-          <label>Token（可选）<span className="mcp-token-field"><input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type={mcpShowToken ? "text" : "password"} autoComplete="new-password" placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/><button type="button" className="mcp-token-eye" aria-label={mcpShowToken?'隐藏 Token':'显示 Token'} onClick={()=>setMcpShowToken(v=>!v)}>{mcpShowToken?'隐藏':'显示'}</button></span></label>
+          <label>Token（可选）<span className="mcp-token-field"><input value={mcpDraft.token} onChange={e=>setMcpDraft({...mcpDraft,token:e.target.value})} type="text" autoComplete="off" inputMode="text" spellCheck={false} style={!mcpShowToken?{WebkitTextSecurity:'disc'} as React.CSSProperties:undefined} placeholder={mcpEdit.length?'留空表示不修改':'需要鉴权时再填'}/><button type="button" className="mcp-token-eye" aria-label={mcpShowToken?'隐藏 Token':'显示 Token'} onClick={()=>setMcpShowToken(v=>!v)}>{mcpShowToken?'隐藏':'显示'}</button></span></label>
           <div className="resource-form-actions"><button type="submit" disabled={mcpBusy}>{mcpBusy?'正在保存…':(mcpEdit.length?'保存修改':'添加服务')}</button><button type="button" className="ghost" disabled={mcpBusy||mcpTest.busy||!mcpDraft.url.trim()} onClick={()=>void testMcp()}>{mcpTest.busy?'测试中…':'测试链接'}</button></div>
           {mcpTest.message&&<small className={'mcp-test'+(mcpTest.ok===false?' bad':mcpTest.ok?' ok':'')}>{mcpTest.ok?<IconCheck className="ui-icon-inline" size={13}/>:<IconClose className="ui-icon-inline" size={13}/>} {mcpTest.message}</small>}
           <small>添加后所有助手都可用；到聊天窗口的「世界书 / MCP」里再按助手打开或关闭。</small>

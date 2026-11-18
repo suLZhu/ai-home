@@ -4230,3 +4230,155 @@ body.has-pack .settings-screen{
 .shell .vendor-kelivo-provider-status.off,
 .shell .vendor-cap-state.fail,
 .shell .mcp-test.bad{color:var(--icon-danger,var(--danger,#ac5f68))!important}
+
+/* 5.0 stabilization: consistent neutral icon buttons and flat chat model headings. */
+.shell .message-action.danger:not(.armed),
+.shell button.message-action.danger:not(.armed) {
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  color:var(--muted,#777)!important;
+}
+.shell .message-action.danger:not(.armed):hover,
+.shell .message-action.danger:not(.armed):active {background:transparent!important;color:var(--danger,#ac5f68)!important}
+.shell .mcp-tool-picker .mcp-card-edit{
+  box-sizing:border-box!important;flex:0 0 28px!important;width:28px!important;height:28px!important;
+  min-width:28px!important;min-height:28px!important;aspect-ratio:1!important;border-radius:50%!important;
+}
+.shell .mcp-tool-picker .mcp-card-edit svg{width:14px!important;height:14px!important;flex-shrink:0!important}
+.shell .model-sheet .model-vendor-heading:not(.static){
+  width:100%;border:0!important;border-radius:0!important;background:transparent!important;
+  box-shadow:none!important;outline:0!important;padding:9px 8px!important;
+}
+.shell .model-sheet .model-vendor-heading small{color:var(--muted,#888)!important;font-weight:400!important}
+.shell .model-sheet .model-sheet-main{min-width:0!important}
+.shell .model-sheet .model-sheet-pick .model-sheet-main b{white-space:normal;overflow-wrap:anywhere}
+
+/* 5.0 Android: make assistant switch reliably touchable, not just visually large. */
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions {
+  position:relative!important;z-index:5!important;gap:4px!important;overflow:visible!important;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant {
+  position:relative!important;z-index:6!important;display:grid!important;place-items:center!important;
+  flex:0 0 48px!important;width:48px!important;min-width:48px!important;
+  height:48px!important;min-height:48px!important;padding:0!important;margin:0!important;
+  border:0!important;border-radius:50%!important;
+  touch-action:manipulation!important;-webkit-tap-highlight-color:transparent;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant svg {
+  display:block!important;pointer-events:none!important;width:23px!important;height:23px!important;
+}
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple .chat-header-actions button.chat-switch-assistant::after {
+  content:none!important;pointer-events:none!important;
+}
+
+/* Conversation archive is a non-destructive action, separate from delete. */
+.shell .app-sidebar .sidebar-conv-archive-tab{
+  flex:0 0 auto!important;max-width:none!important;min-height:26px!important;height:26px!important;
+  border:0!important;border-radius:8px!important;background:transparent!important;
+  color:var(--muted,#8b8494)!important;padding:2px 6px!important;font-size:11px!important;
+  white-space:nowrap!important;cursor:pointer!important;
+}
+.shell .app-sidebar .sidebar-conv-archive-tab[aria-pressed="true"]{color:var(--accent,#8a79aa)!important}
+.shell .app-sidebar .sidebar-conv-archive-action{
+  flex:0 0 auto!important;min-width:36px!important;height:26px!important;min-height:26px!important;
+  padding:0 3px!important;background:transparent!important;border:0!important;box-shadow:none!important;
+  color:var(--muted,#8b8494)!important;font-size:11px!important;white-space:nowrap!important;
+  cursor:pointer!important;touch-action:manipulation!important;
+}
+.shell .app-sidebar .sidebar-conv-archive-action:active{color:var(--accent,#8a79aa)!important}
+.shell .app-sidebar .sidebar-conv-row{min-height:32px!important;height:auto!important}
+.shell .app-sidebar .sidebar-conv-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .app-sidebar .sidebar-archive-empty{margin:8px 6px;color:var(--muted,#8b8494);font-size:11px}
+
+/* Per-assistant chat tool panel: consistent switch rows and optional city field. */
+.shell .fullscreen-chat .tray-tool-settings{display:flex;flex-direction:column;gap:9px;min-width:0}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option{display:flex;align-items:center;gap:12px;min-height:54px;padding:9px 11px!important;border:1px solid var(--line,#e6e0e8);border-radius:13px}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option span{min-width:0;flex:1;font-size:13px}
+.shell .fullscreen-chat .tray-tool-settings>.tray-option small{font-size:11px;line-height:1.4}
+.shell .fullscreen-chat .tray-weather-city{display:flex;flex-direction:column;gap:5px;min-width:0;padding:9px 11px;font-size:12px;color:var(--ink,#333)}
+.shell .fullscreen-chat .tray-weather-city input{box-sizing:border-box;width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--line,#e6e0e8);border-radius:10px;background:var(--field,#fff);color:var(--ink,#333);font-size:14px}
+.shell .fullscreen-chat .tray-weather-city small{color:var(--muted,#888);line-height:1.4}
+.shell .fullscreen-chat .tray-tool-settings>.tray-tool-grid{margin-top:5px}
+
+/* Vendor and subscription are peer headings; no redundant elevated title. */
+.shell .settings-detail>.settings-subnav.settings-tabs{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px!important;margin:0 0 16px!important;border-bottom:1px solid var(--line,#e8e3e9);padding:0 2px 7px!important}
+.shell .settings-detail>.settings-subnav.settings-tabs .subnav-row{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-height:42px!important;font-size:15px!important}
+.shell .settings-detail>.settings-subnav.settings-tabs .subnav-row b{font-size:15px!important}
+.shell .settings-detail>.settings-subnav.settings-tabs .subnav-row.active{border:0!important;border-bottom:2px solid var(--accent,#8874a7)!important;background:transparent!important;box-shadow:none!important;font-weight:600!important}
+.shell #subscription-accounts .account-usage-panel{margin:6px 0 12px;padding:12px;border:1px solid var(--line,#ece6ec);border-radius:14px;background:var(--card,#fff);display:flex;flex-direction:column;gap:9px}
+.shell #subscription-accounts .account-usage-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.shell #subscription-accounts .account-usage-head b{font-size:13px}
+.shell #subscription-accounts .account-usage-head button{border:0!important;background:transparent!important;box-shadow:none!important;color:var(--accent,#8874a7)!important;padding:5px 8px!important}
+.shell #subscription-accounts .account-usage-note{font-size:11px;color:var(--muted,#888);line-height:1.5;margin:0}
+.shell #subscription-accounts .account-usage-window{display:flex;flex-direction:column;gap:5px;padding:5px 0}
+.shell #subscription-accounts .account-usage-window>b{font-size:12px}
+.shell #subscription-accounts .account-usage-window>div:not(.account-usage-bar){display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.shell #subscription-accounts .account-usage-bar{width:100%;height:7px;border-radius:9px;background:var(--line,#eee);overflow:hidden}
+.shell #subscription-accounts .account-usage-bar i{display:block;height:100%;border-radius:9px;background:var(--accent,#8874a7)}
+.shell #subscription-accounts .account-usage-window small,.shell #subscription-accounts .account-usage-panel>small{font-size:10px;color:var(--muted,#888)}
+.shell #subscription-accounts .account-usage-error{font-size:11px;line-height:1.5;color:var(--danger,#af656a);margin:0}
+
+/* Requested 5.0: collapsible request usage with approximate breakdown. */
+.request-stats-list details.request-stats-row{display:block}
+.request-stats-list details.request-stats-row>summary{cursor:pointer;list-style:none;min-height:36px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.request-stats-list details.request-stats-row>summary::-webkit-details-marker{display:none}
+.request-stats-list details.request-stats-row>summary::after{content:"⌄";color:var(--muted,#888);font-size:15px;transition:transform .16s}
+.request-stats-list details.request-stats-row[open]>summary::after{transform:rotate(180deg)}
+.request-token-breakdown{margin-top:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px;border-radius:12px;background:var(--field,#f8f7fa)}
+.request-token-breakdown>div:not(:first-child){display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.request-token-breakdown>div strong{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.request-token-breakdown>div:first-child{display:flex;flex-direction:column;gap:3px}
+.request-token-breakdown small{font-size:10px;color:var(--muted,#888);line-height:1.4}
+/* Existing workspace widgets now share the room page without overlaying navigation. */
+.room-screen>.room-widgets,.room-screen>.room-widgets-empty{position:relative;z-index:2;margin:10px 12px 18px}
+
+/* Assistant workspace widgets are interactive objects in the room scene. */
+.shell .room-screen .room-illustration .room-scene-widgets{
+ position:absolute;left:9px;right:9px;bottom:10px;z-index:10;
+ max-height:35%;overflow-y:auto;overscroll-behavior:contain;
+ border-radius:15px;pointer-events:auto;scrollbar-width:thin;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets{
+ margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:6px;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets-empty{display:none}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card{
+ padding:7px!important;min-height:42px!important;background:color-mix(in srgb,var(--card,#fff) 88%,transparent)!important;
+ backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:11px!important;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-text small{font-size:9px}
+
+/* Room scene is an icon desktop, not the workspace's horizontal cards. */
+.shell .room-screen .room-illustration .room-scene-widgets{max-height:42%;left:8px;right:8px;bottom:9px;background:transparent}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets{
+ display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:10px 7px;align-items:start;
+}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card{
+ display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;
+ min-height:76px!important;padding:5px 2px!important;border:0!important;box-shadow:none!important;
+ background:transparent!important;backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-icon{
+ width:46px;height:46px;border-radius:14px;font-size:25px;
+ background:var(--card,#fffdf9);box-shadow:0 3px 12px rgba(30,23,40,.14);
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-text{flex:none;width:100%;text-align:center}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-text b{
+ font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ text-shadow:0 1px 3px rgba(255,255,255,.95);
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-text small,
+.shell .room-screen .room-illustration .room-scene-widgets .room-widget-go{display:none}
+
+/* Optional roomX/roomY: pin individual icons in room coordinates. Other icons stay along bottom. */
+.shell .room-screen .room-illustration .room-scene-widgets{
+ inset:0;left:0;right:0;bottom:0;max-height:none;overflow:visible;pointer-events:none;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets{
+ position:absolute;inset:0;margin:0;padding:10px 8px;display:flex;flex-wrap:wrap;
+ gap:8px;align-content:flex-end;justify-content:flex-start;overflow-y:auto;pointer-events:none;
+}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card{
+ width:66px;max-width:66px;flex:0 0 66px;pointer-events:auto;
+}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card[style*="position: absolute"]{z-index:2}
+.widget-room-position{display:grid;grid-template-columns:1fr 1fr;gap:8px}

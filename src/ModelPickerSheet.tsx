@@ -4,7 +4,6 @@ import type { ModelProfile, PersonBinding } from './resourceBindings.mjs'
 import type { Vendor } from './vendors.mjs'
 import { buildModelCatalog, filterCatalog, profileIdForCatalogEntry } from './unifiedModels.mjs'
 import { routesForModel } from './modelRoutes.mjs'
-import { specForModel, specBadges } from './modelSpecs.mjs'
 import {
   addRoute, updateRoute, removeRoute, primaryRoute, setFixedRoute,
   selectLogicalModel, fixedRouteId, type RouteState,
@@ -47,15 +46,6 @@ function readFavorites(): string[] {
   } catch { return [] }
 }
 
-function vendorInitial(name: string) {
-  const s = (name || '').trim()
-  if (/gpt|openai|chatgpt/i.test(s)) return 'G'
-  if (/claude|anthropic/i.test(s)) return 'C'
-  if (/grok|xai|x\.ai/i.test(s)) return 'X'
-  if (/gemini|google/i.test(s)) return 'G'
-  if (/deepseek/i.test(s)) return 'D'
-  return s ? s.slice(0, 1).toUpperCase() : 'AI'
-}
 
 export function ModelPickerSheet({
   profiles, activeId, vendorKeys, binding, onPatchBinding, onPick, onClose,
@@ -159,14 +149,8 @@ export function ModelPickerSheet({
               }
             }
           }
-          const badgesOf=(choice:Choice)=>{
-            const vendor=vendors.find(v=>v.id===choice.vendorId)
-            if(!vendor) return [] as {id:string;label:string;tone:string}[]
-            return specBadges(specForModel(vendor,choice.model))
-          }
           const renderRow=(choice:Choice)=>{
             const selected=choice.routeId?fixed===choice.routeId:activeId===choice.profileId&&!fixed
-            const badges=badgesOf(choice)
             return <div className={'model-sheet-row'+(selected?' selected':'')} key={choice.id}>
               <button type="button" className="model-sheet-pick" aria-pressed={selected} onClick={()=>{
                 onPatchBinding({...binding,modelProfileId:choice.profileId})
@@ -176,8 +160,7 @@ export function ModelPickerSheet({
                   return setFixedRoute(next,person,choice.routeId)
                 })
               }}>
-                <span className="model-sheet-avatar">{vendorInitial(choice.name)}</span>
-                <span className="model-sheet-main"><b>{choice.name}</b><small>{choice.model}</small>{badges.length>0&&<span className="model-sheet-specs">{badges.map(b=><em key={b.id} className={'m-spec-badge '+b.tone}>{b.label}</em>)}</span>}</span>
+                <span className="model-sheet-main"><b>{choice.name}</b></span>
                 {choice.subscription&&<span className="model-sheet-badge">订阅</span>}
                 {selected&&<span className="model-sheet-check"><IconCheck size={13}/></span>}
               </button>

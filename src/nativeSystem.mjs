@@ -108,6 +108,32 @@ export async function readClipboardText() {
   return ''
 }
 
+const asyncGetCallbacks = new Map()
+if (typeof globalThis !== 'undefined') {
+  globalThis.__aihomeAsyncGetDone = (requestId, raw) => {
+    const cb=asyncGetCallbacks.get(String(requestId))
+    if(cb)cb(raw)
+  }
+}
+/** Native background HTTPS GET. Do not fall back to synchronous native I/O. */
+export async function nativeHttpGetAsync(url, headers = {}, timeoutMs = 26000) {
+  const b=bridge()
+  if(!b||typeof b.httpGetAsync!=='function')return null
+  const id='get-'+Date.now()+'-'+Math.random().toString(36).slice(2)
+  return await new Promise(resolve=>{
+    let timer
+    const finish=raw=>{
+      if(timer)clearTimeout(timer)
+      asyncGetCallbacks.delete(id)
+      resolve(raw===null?{error:'读取用量超时'}:parse(raw))
+    }
+    asyncGetCallbacks.set(id,finish)
+    timer=setTimeout(()=>finish(null),timeoutMs)
+    try{b.httpGetAsync(id,String(url||''),JSON.stringify(headers||{}))}
+    catch(error){finish(JSON.stringify({error:String(error?.message||'原生请求失败')}))}
+  })
+}
+
 export function nativeHttpGet(url, headers = {}) {
   const b = bridge()
   if (!b || typeof b.httpGet !== 'function') return null

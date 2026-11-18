@@ -10,7 +10,7 @@
 .backup-kind-actions button,.backup-restore{display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 12px;border-radius:999px;font-size:11px;font-weight:600;cursor:pointer;box-sizing:border-box}
 .backup-save{border:0;background:var(--accent,#8871a5);color:#fbf9fd}
 .backup-restore{border:1px solid var(--line,#ddd5c7);background:var(--surface,#fffdf9);color:var(--ink,#403b35)}
-.backup-restore input{display:none}
+.backup-restore input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;clip-path:inset(50%)}
 .backup-restore.disabled{opacity:.55;pointer-events:none}
 .backup-files{margin-top:2px;padding:10px 12px;border:1px solid var(--line,#ddd5c7);border-radius:12px;background:var(--surface-elevated,var(--card,#fff))}
 .backup-files-head{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:6px;border-bottom:1px dashed var(--line,#ddd5c7)}

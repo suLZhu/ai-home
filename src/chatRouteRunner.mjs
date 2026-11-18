@@ -43,14 +43,14 @@ export function routeChatTarget(r) {
 
 // 返回值：{ ok, upstream, routeId, routeLabel, report, error, status }
 export async function runRouteChat({
-  routes = [], body = {}, timeZone = '', signal = null,
+  routes = [], body = {}, timeZone = '', includeTimeContext = true, signal = null,
   fetchImpl = fetch, maxAttempts = MAX_ROUTE_ATTEMPTS, now = new Date(),
 } = {}) {
   const list = normalizeChatRoutes(routes)
   if (!list.length) return { ok: false, error: '没有可用线路：请检查线路地址与 API Key', report: createRouteReport(), status: 400 }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, error: '缺少请求体', report: createRouteReport(), status: 400 }
 
-  const chatBody = { ...body, messages: injectTimeContext(body.messages, now, timeZone) }
+  const chatBody = { ...body, messages: includeTimeContext ? injectTimeContext(body.messages, now, timeZone) : (Array.isArray(body.messages) ? body.messages.slice() : []) }
   let report = createRouteReport(str(body.model))
   const limit = Math.max(1, Math.min(MAX_ROUTE_ATTEMPTS, Math.floor(Number(maxAttempts) || MAX_ROUTE_ATTEMPTS)))
 

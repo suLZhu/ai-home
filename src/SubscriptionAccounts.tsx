@@ -4,7 +4,8 @@ import { syncVendorProfiles, type Vendor, type VendorModel } from './vendors.mjs
 import type { ModelProfile } from './resourceBindings.mjs'
 import { makePkce, buildLoginConfig, chatGptAccountIdFromToken } from './subscriptionOAuth.mjs'
 import { startOAuthLogin } from './nativeOAuth.mjs'
-import { nativeHttpGet, nativeHttpPost, openExternalUrl } from './nativeSystem.mjs'
+import { nativeHttpGet, nativeHttpPost, nativeHttpGetAsync, openExternalUrl } from './nativeSystem.mjs'
+import { fetchSubscriptionUsage, type SubscriptionUsageWindow } from './subscriptionUsage.mjs'
 // P1-9：上游原始 JSON / 错误码统一转成中文短句，原文只在「查看详情」里展开。
 import { formatLoginError, type LoginErrorInfo } from './loginError.mjs'
 import { apiFetch } from './apiBase.mjs'
@@ -200,6 +201,9 @@ async function fetchRemoteModels(endpoint: string, token: string, channelId = ''
 
 export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, subscriptions, setSubscriptions }: Props) {
   const [busy, setBusy] = useState('')
+  const [usageBusy,setUsageBusy]=useState('')
+  const [usageExpanded,setUsageExpanded]=useState('')
+  const [usageByChannel,setUsageByChannel]=useState<Record<string,{windows:SubscriptionUsageWindow[];error:string;checkedAt:string}>>({})
   const [menu, setMenu] = useState('')
   const [errorInfo, setErrorInfo] = useState<LoginErrorInfo | null>(null)
   const [showErrorDetail, setShowErrorDetail] = useState(false)
@@ -211,6 +215,20 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
   // 可登录的渠道只有这三家，全部直接列出来；不再做无意义的分类筛选条。
   const rows = ROWS
   const accountOf = (id: string) => subscriptions.find(s => s.channelId === id)
+  const refreshUsage = async (a:SubscriptionAccount) => {
+    const channel=a.channelId
+    const vendor=vendors.find(v=>v.id===(a.vendorId||channelById(channel)?.vendorId))
+    const token=(vendor?.keys||[]).find(k=>k.id===a.vendorKeyId)?.value||''
+    setUsageBusy(channel)
+    setUsageExpanded(channel)
+    try{
+      const updated=await ensureFreshToken(a,token)
+      if(updated.error && !updated.token){setUsageByChannel(old=>({...old,[channel]:{windows:[],error:updated.error,checkedAt:new Date().toLocaleTimeString('zh-CN')}}));return}
+      const result=await fetchSubscriptionUsage(channel,updated.token,updated.account.accountId||'',nativeHttpGetAsync)
+      setUsageByChannel(old=>({...old,[channel]:{...result,checkedAt:new Date().toLocaleTimeString('zh-CN')}}))
+    }catch(error){setUsageByChannel(old=>({...old,[channel]:{windows:[],error:error instanceof Error?error.message:'查询失败',checkedAt:new Date().toLocaleTimeString('zh-CN')}}))}
+    finally{setUsageBusy('')}
+  }
 
   // 凭据只有一份：订阅登录拿到的令牌直接进供应商的多 KEY 队列；
   // 模型清单同一处写进该供应商，勾选结果立刻同步到聊天模型池。
@@ -562,7 +580,20 @@ export function SubscriptionAccounts({ vendors, setVendors, setModelProfiles, su
             {on && <div className="account-row-links">
               <button type="button" className={expanded ? 'active' : ''}
                 onClick={() => openModels(a!)}><IconGrid className="ui-icon-inline" size={13}/> 选择模型 · {picked.length || 0}</button>
+              <button type="button" className={usageExpanded===r.id?'active':''} onClick={()=>{if(usageExpanded===r.id)setUsageExpanded('');else if(usageByChannel[r.id])setUsageExpanded(r.id);else void refreshUsage(a!)}} aria-expanded={usageExpanded===r.id}>用量 / 剩余</button>
               <button type="button" onClick={() => setMenu(menu === r.id ? '' : r.id)} aria-label="更多账号操作"><IconMore size={15}/></button>
+            </div>}
+            {on&&usageExpanded===r.id&&<div className="account-usage-panel" data-usage-for={r.id}>
+              <div className="account-usage-head"><b>订阅额度</b><button type="button" disabled={usageBusy===r.id} onClick={()=>void refreshUsage(a!)}>{usageBusy===r.id?'查询中…':'刷新'}</button></div>
+              <p className="account-usage-note">显示订阅限额周期的使用比例与剩余比例，不是 API Token 余额。</p>
+              {usageBusy===r.id&&!usageByChannel[r.id]&&<p className="muted">正在读取账号用量…</p>}
+              {usageByChannel[r.id]?.error&&<p className="account-usage-error">{usageByChannel[r.id].error}</p>}
+              {usageByChannel[r.id]?.windows?.map(w=><div className="account-usage-window" key={w.label}>
+                <b>{w.label}</b><div><span>已用 {w.used.toFixed(1)}%</span><span>剩余 {w.remaining.toFixed(1)}%</span></div>
+                <div className="account-usage-bar" role="meter" aria-label={w.label+'已用比例'} aria-valuemin={0} aria-valuemax={100} aria-valuenow={w.used}><i style={{width:w.used+'%'}}/></div>
+                {w.resetAt&&<small>重置时间：{(()=>{const v=w.resetAt;const d=typeof v==='number'?new Date(v*1000):new Date(v);return Number.isNaN(d.getTime())?'未知':d.toLocaleString('zh-CN')})()}</small>}
+              </div>)}
+              {usageByChannel[r.id]&&<small>最近查询：{usageByChannel[r.id].checkedAt} · 数据来自订阅用量接口</small>}
             </div>}
             {expanded && <div className="account-models" data-models-for={r.id}>
               <p className="account-models-lead">勾选的模型会进入聊天模型面板；可自己增删。</p>

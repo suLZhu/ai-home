@@ -25,6 +25,7 @@ export type RoomLayout = {
 
 export const ROOM_LAYOUT_KEY: (person: string) => string
 export const DEFAULT_ROOM_LAYOUT: RoomLayout
+export function normalizeRoomStyle(input: unknown): Record<string, string | number> | undefined
 export function normalizeRoomLayout(input: unknown): RoomLayout
 export function loadRoomLayout(person: string, storage?: Storage): RoomLayout
 export function saveRoomLayout(person: string, layout: unknown, storage?: Storage): RoomLayout

@@ -1278,3 +1278,18 @@ html,body{
   border-color:#e5c8c8!important;
   background:#fff!important;
 }
+
+
+/* Android 全屏聊天头部：最终主题层不得覆盖系统状态栏安全区。
+   原通用 .chat-header 将高度锁死为 48px 并清空 padding，导致头像/标题进入状态栏。 */
+.shell.shell-chat-lock .fullscreen-chat .chat-header.chat-header-simple {
+  box-sizing:border-box!important;
+  height:auto!important;
+  min-height:calc(var(--app-safe-top,0px) + 54px)!important;
+  padding-top:calc(var(--app-safe-top,0px) + 8px)!important;
+  padding-bottom:8px!important;
+  align-items:center!important;
+}
+
+/* 5.0: chat model source headings are plain text, not legacy outlined buttons. */
+.shell .model-sheet .model-vendor-heading{border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:0!important}

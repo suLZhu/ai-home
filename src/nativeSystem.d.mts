@@ -25,6 +25,7 @@ export declare function readBackupFile(name: string): { ok: boolean; name?: stri
 export declare function deleteBackupFile(name: string): boolean
 
 export declare function nativeHttpGet(url: string, headers?: Record<string, string>): { status?: number; body?: string; error?: string } | null
+export declare function nativeHttpGetAsync(url: string, headers?: Record<string,string>, timeoutMs?: number): Promise<{status?:number;body?:string;error?:string}|null>
 
 export declare function nativeHttpPost(url: string, headers?: Record<string, string>, body?: string): { status?: number; body?: string; error?: string } | null
 export declare function openExternalUrl(url: string): boolean

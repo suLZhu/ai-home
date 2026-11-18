@@ -1,8 +1,9 @@
 // 房间工作区里的小组件：记账本 / 清单 / 便签 / 计数器。
 // 助手通过 widget_* 工具创建，长期保存；只有用户点删除才会消失。
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './RoomWidgets.css'
 import { apiFetch } from './apiBase.mjs'
+import { openNativeWebView, openExternalUrl } from './nativeSystem.mjs'
 import { confirmDialog } from './uiDialog'
 import { IconCheck, IconChevronRight, IconClose, IconEdit, IconGrid, IconLedger, IconMinus, IconPlus, IconSparkles, IconTrash, type IconComponent } from './icons'
 
@@ -25,6 +26,29 @@ const TYPE_META: Record<WidgetType, { icon: IconComponent; label: string }> = {
   counter: { icon: IconGrid, label: '计数器' },
 }
 
+function widgetIcon(widget: RoomWidget): string {
+  const value=String(widget.config?.icon||'').trim()
+  return value && value.length<=12 ? value : ''
+}
+function safeWidgetUrl(value: unknown): string {
+  try {
+    const url=new URL(String(value||''))
+    if(url.protocol!=='https:' && url.protocol!=='http:')return ''
+    return url.href
+  } catch {return ''}
+}
+
+function boundedPlacement(value: unknown): number | null {
+  if (value === '' || value == null) return null
+  const n=Number(value)
+  return Number.isFinite(n) && n>=0 && n<=100 ? n : null
+}
+function widgetPosition(widget: RoomWidget): CSSProperties | undefined {
+  const x=boundedPlacement(widget.config?.roomX)
+  const y=boundedPlacement(widget.config?.roomY)
+  return x!=null&&y!=null ? { position:'absolute',left:`${x}%`,top:`${y}%`,transform:'translate(-50%,-50%)' } : undefined
+}
+
 function money(value: number): string {
   const n = Number(value) || 0
   return (n < 0 ? '-¥' : '¥') + Math.abs(n).toFixed(2)
@@ -42,7 +66,7 @@ function ledgerTotals(config: any) {
 }
 
 function summary(widget: RoomWidget): string {
-  if (widget.type === 'custom') return String(widget.config?.summary || '').trim() || 'AI 定制小组件'
+  if (widget.type === 'custom') return String(widget.config?.summary || '').trim() || (safeWidgetUrl(widget.config?.url)?'网页入口':String(widget.config?.html||'').trim()?'AI 定制页面':'尚未设置内容')
   if (widget.type === 'ledger') {
     const { balance, entries } = ledgerTotals(widget.config)
     return entries.length ? '结余 ' + money(balance) + ' · ' + entries.length + ' 笔' : '还没有记账'
@@ -88,8 +112,8 @@ export function RoomWidgets({ person }: { person: string }) {
     {error && <p className="room-widgets-error" role="alert">{error}</p>}
     {widgets.map(widget => {
       const WidgetIcon = TYPE_META[widget.type]?.icon || IconGrid
-      return <button type="button" className={'room-widget-card type-' + widget.type} key={widget.id} onClick={() => setOpen(widget)}>
-      <span className="room-widget-icon" aria-hidden="true"><WidgetIcon size={18}/></span>
+      return <button type="button" className={'room-widget-card type-' + widget.type} key={widget.id} style={widgetPosition(widget)} onClick={() => setOpen(widget)}>
+      <span className="room-widget-icon" aria-hidden="true">{widgetIcon(widget) || <WidgetIcon size={18}/>}</span>
       <span className="room-widget-text">
         <b>{widget.title}</b>
         <small>{summary(widget)}</small>
@@ -156,6 +180,11 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
   const [kind, setKind] = useState<'expense' | 'income'>('expense')
   const [item, setItem] = useState('')
   const [noteText, setNoteText] = useState(String(widget.config?.text || ''))
+  const [iconDraft,setIconDraft]=useState(String(widget.config?.icon||''))
+  const [htmlDraft,setHtmlDraft]=useState(String(widget.config?.html||''))
+  const [urlDraft,setUrlDraft]=useState(String(widget.config?.url||''))
+  const [roomXDraft,setRoomXDraft]=useState(widget.config?.roomX==null?'':String(widget.config.roomX))
+  const [roomYDraft,setRoomYDraft]=useState(widget.config?.roomY==null?'':String(widget.config.roomY))
   const customTimerRef = useRef<number | undefined>(undefined)
   const customDataRef = useRef<any>(widget.config?.data || {})
   const saveCustomData = useCallback((data: any) => {
@@ -248,6 +277,14 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
     finally { setBusy(false) }
   }
 
+  async function saveAppearance() {
+    if((roomXDraft.trim()&&!roomYDraft.trim())||(!roomXDraft.trim()&&roomYDraft.trim())){setError('房间位置需要同时填写横向和纵向百分比，或者都留空');return}
+    if((roomXDraft.trim()&&boundedPlacement(roomXDraft)===null)||(roomYDraft.trim()&&boundedPlacement(roomYDraft)===null)){setError('房间位置请填写 0–100 的数字');return}
+    const url=urlDraft.trim()
+    if(url && !safeWidgetUrl(url)){setError('网页地址必须以 http:// 或 https:// 开头');return}
+    await save({config:{...current.config,icon:iconDraft.trim().slice(0,12),roomX:roomXDraft.trim()?boundedPlacement(roomXDraft):null,roomY:roomYDraft.trim()?boundedPlacement(roomYDraft):null,...(current.type==='custom'?{url:url?safeWidgetUrl(url):'',html:htmlDraft}: {})}})
+  }
+
   const ledger = ledgerTotals(current.config)
   return <div className="widget-sheet-scrim" onClick={onClose}>
     <div className="widget-sheet" role="dialog" aria-modal="true" aria-label={current.title} onClick={event => event.stopPropagation()}>
@@ -258,9 +295,22 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
       <input className="widget-title-input" value={title} onChange={event => setTitle(event.target.value)} onBlur={() => void rename()} aria-label="小组件名称" />
       {error && <p className="widget-error" role="alert">{error}</p>}
 
+      <div className="widget-customize-panel">
+        <label>房间图标（表情 / 符号）<input aria-label="自定义图标" value={iconDraft} maxLength={12} onChange={e=>setIconDraft(e.target.value)} placeholder="例如 🌷、🌐、📌" /></label>
+        <div className="widget-room-position"><label>横向位置 0–100%<input aria-label="房间横向位置" value={roomXDraft} inputMode="decimal" placeholder="留空自动排列" onChange={e=>setRoomXDraft(e.target.value)}/></label><label>纵向位置 0–100%<input aria-label="房间纵向位置" value={roomYDraft} inputMode="decimal" placeholder="留空自动排列" onChange={e=>setRoomYDraft(e.target.value)}/></label></div>
+        {current.type==='custom' && <>
+          <label>网页地址（可选）<input aria-label="小组件网页地址" value={urlDraft} onChange={e=>setUrlDraft(e.target.value)} placeholder="https://example.com" inputMode="url" /></label>
+          <label>自定义 HTML 页面<textarea aria-label="小组件 HTML 内容" rows={4} value={htmlDraft} onChange={e=>setHtmlDraft(e.target.value)} placeholder="输入 HTML 内容；或填写上面的网页地址" /></label>
+        </>}
+        <button type="button" className="widget-save" disabled={busy} onClick={()=>void saveAppearance()}>保存小组件外观与内容</button>
+      </div>
       {current.type === 'custom' && <>
-        <CustomWidgetFrame widget={current} onData={saveCustomData}/>
-        <p className="custom-widget-hint">AI 定制小组件 · 数据自动保存在这台设备</p>
+        {safeWidgetUrl(current.config?.url)
+          ? <div className="widget-url-preview"><span>这是网页入口，点击下方按钮打开网页。</span><button type="button" className="widget-open-website" onClick={()=>{const url=safeWidgetUrl(current.config.url);if(url&&!openNativeWebView(url,current.title)&&!openExternalUrl(url))window.open(url,'_blank','noopener')}}>打开网页</button></div>
+          : String(current.config?.html||'').trim()
+          ? <CustomWidgetFrame widget={current} onData={saveCustomData}/>
+          : <div className="widget-content-empty">这个小组件还没有网页或 HTML 内容。可以在上方填写网页地址，或让助手生成页面后保存。</div>}
+        <p className="custom-widget-hint">网页链接在独立页面打开；AI HTML 在隔离沙箱运行。数据自动保存。</p>
       </>}
 
       {current.type === 'ledger' && <>

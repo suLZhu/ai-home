@@ -183,7 +183,13 @@ public class MainActivity extends BridgeActivity {
             // 取最近一次非零值做兜底，过滤 IME 过渡帧的瞬零，避免顶栏在键盘连开关时漂移。
             if (top > 0) lastGoodTop = top;
             if (bottom > 0) lastGoodBottom = bottom;
-            safeTopDp = lastGoodTop;
+            // Some OEM edge-to-edge windows report a zero status-bar inset even
+            // while the status bar is visibly drawn over the WebView. Use the
+            // Android system status-bar dimension as a fallback, in physical dp.
+            int statusBarRes = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            int statusBarPx = statusBarRes > 0 ? getResources().getDimensionPixelSize(statusBarRes) : 0;
+            int statusBarDp = Math.round(statusBarPx / density);
+            safeTopDp = Math.max(lastGoodTop, statusBarDp);
             safeBottomDp = lastGoodBottom;
             imeBottomDp = Math.round(ime.bottom / density);
             injectSafeArea();
