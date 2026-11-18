@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './RoomWidgets.css'
 import { apiFetch } from './apiBase.mjs'
+import { openNativeWebView, openExternalUrl } from './nativeSystem.mjs'
 import { confirmDialog } from './uiDialog'
 import { IconCheck, IconChevronRight, IconClose, IconEdit, IconGrid, IconLedger, IconMinus, IconPlus, IconSparkles, IconTrash, type IconComponent } from './icons'
 
@@ -305,7 +306,7 @@ function WidgetSheet({ widget, onClose, onSaved }: { widget: RoomWidget; onClose
       </div>
       {current.type === 'custom' && <>
         {safeWidgetUrl(current.config?.url)
-          ? <div className="widget-url-preview"><span>这是网页入口，点击下方按钮打开网页。</span><a href={safeWidgetUrl(current.config.url)} target="_blank" rel="noopener noreferrer">打开网页</a></div>
+          ? <div className="widget-url-preview"><span>这是网页入口，点击下方按钮打开网页。</span><button type="button" className="widget-open-website" onClick={()=>{const url=safeWidgetUrl(current.config.url);if(url&&!openNativeWebView(url,current.title)&&!openExternalUrl(url))window.open(url,'_blank','noopener')}}>打开网页</button></div>
           : String(current.config?.html||'').trim()
           ? <CustomWidgetFrame widget={current} onData={saveCustomData}/>
           : <div className="widget-content-empty">这个小组件还没有网页或 HTML 内容。可以在上方填写网页地址，或让助手生成页面后保存。</div>}
