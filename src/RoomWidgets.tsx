@@ -1,6 +1,6 @@
 // 房间工作区里的小组件：记账本 / 清单 / 便签 / 计数器。
 // 助手通过 widget_* 工具创建，长期保存；只有用户点删除才会消失。
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './RoomWidgets.css'
 import { apiFetch } from './apiBase.mjs'
 import { confirmDialog } from './uiDialog'
@@ -42,7 +42,7 @@ function boundedPlacement(value: unknown): number | null {
   const n=Number(value)
   return Number.isFinite(n) && n>=0 && n<=100 ? n : null
 }
-function widgetPosition(widget: RoomWidget): React.CSSProperties | undefined {
+function widgetPosition(widget: RoomWidget): CSSProperties | undefined {
   const x=boundedPlacement(widget.config?.roomX)
   const y=boundedPlacement(widget.config?.roomY)
   return x!=null&&y!=null ? { position:'absolute',left:`${x}%`,top:`${y}%`,transform:'translate(-50%,-50%)' } : undefined
