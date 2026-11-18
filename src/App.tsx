@@ -1687,7 +1687,7 @@ export default function App() {
               }else if(name==='widget_create'){
                 const html=String(args.html||'').trim()
                 const url=String(args.url||'').trim()
-                if(url && !/^https?:\\/\\//i.test(url))throw new Error('网页地址必须以 http:// 或 https:// 开头')
+                if(url && !url.startsWith('https://') && !url.startsWith('http://'))throw new Error('网页地址必须以 http:// 或 https:// 开头')
                 if(!html && !url)throw new Error('请提供 HTML 内容或网页地址，不能创建空白小组件')
                 const type='custom'
                 const config={html,url,icon:String(args.icon||'').trim().slice(0,12),data:args.data&&typeof args.data==='object'&&!Array.isArray(args.data)?args.data:{},summary:String(args.summary||'')}
