@@ -15,3 +15,9 @@
 .qj-home-person-info em{align-self:flex-start;font-style:normal;font-size:10px;border-radius:9px;padding:3px 7px;background:#edf2ea;color:#758574}
 .qj-home-chevron{font-size:22px;color:#98a396}
 .qj-home-heading{font-size:12px;letter-spacing:.2em;color:#899288;margin:6px 4px -8px}
+
+/* 在聊天顶部直接切换两个助手，不必退回主页或打开菜单。 */
+.qj-chat-switch{display:flex;align-items:center;gap:3px;flex-shrink:0;padding:3px;border:1px solid var(--qj-line);border-radius:11px;background:#f7f8f6}
+.qj-chat-switch button{border:0;border-radius:8px;background:transparent;padding:7px 9px;font-size:11px;white-space:nowrap;color:#7a8478}
+.qj-chat-switch button.selected{background:#e2ecdf;color:#405d3f;font-weight:700}
+@media(max-width:355px){.qj-chat-switch button{padding:7px 6px}.qj-topbar{gap:5px;padding:0 8px}}
