@@ -103,3 +103,4 @@ export default function LayoutPrototype() {
     </aside></div>}
     <div className="qj-preview-label">UI 原型 · 虚拟内容 · 不连接任何账号或数据</div>
   </div>
+}
