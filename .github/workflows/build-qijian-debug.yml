@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   android-debug:
@@ -67,3 +67,18 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish direct APK download for UI preview
+        if: github.ref == 'refs/heads/feature/ui-clean-slate-preview'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' -type f | head -1)"
+          test -n "$APK"
+          TAG="ui-preview-${GITHUB_SHA:0:7}"
+          gh release create "$TAG" "$APK#qijian-layout-preview.apk" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "栖间纯页面原型 ${GITHUB_SHA:0:7}" \
+            --notes "仅供安卓手机验收页面布局；模拟数据，不含真实聊天功能。" \
+            --prerelease
