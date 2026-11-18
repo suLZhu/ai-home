@@ -1,0 +1,105 @@
+import { useState } from 'react'
+import './LayoutPrototype.css'
+
+type View = 'chat' | 'room' | 'settings' | 'theme' | 'profile'
+type Person = '小晏' | '言朔'
+const people: Person[] = ['小晏', '言朔']
+const settingItems = [
+  ['外观与主题', '主题包、背景、字体、图标'],
+  ['AI 与模型', '供应商、订阅、模型'],
+  ['聊天与消息', '消息、待发送、通知'],
+  ['工具与扩展', '网页、图片、MCP'],
+  ['记忆与上下文', '记忆、世界书、上下文'],
+  ['房间与助手', '资料、房间与小组件'],
+  ['应用与设备', '后台、设备锁、备份'],
+  ['诊断与维护', '请求记录、耗时与错误']
+] as const
+
+export default function LayoutPrototype() {
+  const [view, setView] = useState<View>('chat')
+  const [person, setPerson] = useState<Person>('小晏')
+  const [drawer, setDrawer] = useState(false)
+  const [section, setSection] = useState<string | null>(null)
+  const [menu, setMenu] = useState(false)
+  const [conversation, setConversation] = useState('今天的聊天')
+  const [theme, setTheme] = useState('银杏奶灰')
+
+  function go(next: View) {
+    setView(next)
+    setSection(null)
+    setDrawer(false)
+    setMenu(false)
+  }
+  const title = view === 'chat' ? person : view === 'room' ? person + '的房间' :
+    view === 'settings' ? (section || '设置') :
+    view === 'theme' ? '主题中心' : person + '的资料'
+  return <div className="qj-preview">
+    <div className="qj-status" aria-hidden="true"><span>10:24</span><span>●  ▰  ▰  100%</span></div>
+    <header className="qj-topbar">
+      {view === 'chat' ? <button className="qj-icon" aria-label="打开侧边栏" onClick={() => setDrawer(true)}>☰</button> :
+       <button className="qj-icon" aria-label="返回" onClick={() => {
+         if (section) setSection(null)
+         else if (view === 'theme') go('settings')
+         else go('chat')
+       }}>‹</button>}
+      <div className="qj-top-title"><strong>{title}</strong><small>{view === 'chat' ? conversation : '页面布局测试版 · 仅演示'}</small></div>
+      {view === 'chat' ? <button className="qj-icon" aria-label="更多" onClick={() => setMenu(v => !v)}>⋯</button> :
+        <span className="qj-icon-placeholder" />}
+    </header>
+    <main className="qj-main">
+      {view === 'chat' && <div className="qj-chat">
+        <div className="qj-chat-date">今天 10:24</div>
+        <div className="qj-message from"><span className="qj-avatar">{person.slice(0, 1)}</span><p>早上好。今天有什么想聊的？</p></div>
+        <div className="qj-message mine"><p>我们先把栖间的页面布局定下来。</p></div>
+        <div className="qj-message from"><span className="qj-avatar">{person.slice(0, 1)}</span><p>好，这一版只展示页面，不接入真实聊天功能。你可以逐页看看哪里需要改。</p></div>
+      </div>}
+      {view === 'room' && <div className="qj-page">
+        <div className="qj-room-hero"><div className="qj-room-art"><div className="qj-window">☀</div><div className="qj-shelf">▤ ▤ ▤</div><div className="qj-sofa">▰</div><div className="qj-floor"/></div>
+          <b>{person}的小空间</b><span>自由布置 · 图片 · 视频 · 小组件</span></div>
+        <h3 className="qj-label">房间入口</h3>
+        <div className="qj-row-group">
+          <button className="qj-row" onClick={() => setSection('房间布置')}><span>房间布置</span><small>查看布局预览</small><i>›</i></button>
+          <button className="qj-row" onClick={() => setSection('我的作品')}><span>我的作品</span><small>图片、视频、音乐</small><i>›</i></button>
+        </div>
+        {section && <div className="qj-inline-note">「{section}」页面结构预留，本轮不接真实功能。</div>}
+      </div>}
+      {view === 'settings' && <div className="qj-page">
+        {section ? <>
+          <div className="qj-section-head"><h2>{section}</h2><p>这里先验证二级页面的统一高度、顶部和列表样式。</p></div>
+          <div className="qj-row-group"><div className="qj-row"><span>基础设置</span><small>后续接入原有功能</small><i>›</i></div><div className="qj-row"><span>高级选项</span><small>不常用内容收纳于此</small><i>›</i></div></div>
+          {section === '外观与主题' && <button className="qj-primary" onClick={() => go('theme')}>进入主题中心</button>}
+        </> : <>
+          <div className="qj-section-head"><h2>设置中心</h2><p>常用功能在前，其他功能集中管理。</p></div>
+          <div className="qj-row-group">{settingItems.map(([name, desc]) => <button key={name} className="qj-row" onClick={() => setSection(name)}>
+            <span>{name}</span><small>{desc}</small><i>›</i></button>)}</div>
+        </>}
+      </div>}
+      {view === 'theme' && <div className="qj-page">
+        <h3 className="qj-label">一键主题包</h3>
+        <div className="qj-theme-list">{['银杏奶灰','月影浅紫','夜幕星雾'].map(name => <button key={name} className={'qj-theme-tile ' + (theme === name ? 'selected' : '')} onClick={() => setTheme(name)}><span className={'qj-swatch '+(name==='月影浅紫'?'lavender':name==='夜幕星雾'?'night':'')} /><b>{name}</b><small>{theme === name ? '已选择' : '预览样式'}</small></button>)}</div>
+        <p className="qj-inline-note">主题包应用功能留待页面验收后接入。</p>
+      </div>}
+      {view === 'profile' && <div className="qj-page">
+        <div className="qj-profile"><div className="qj-large-avatar">{person.slice(0, 1)}</div><h2>{person}</h2><p>独立助手资料与专属设置</p></div>
+        <div className="qj-row-group"><button className="qj-row" onClick={() => go('room')}><span>进入房间</span><i>›</i></button><button className="qj-row" onClick={() => {go('settings');setSection('房间与助手')}}><span>专属设置</span><i>›</i></button></div>
+      </div>}
+    </main>
+    {view === 'chat' && <div className="qj-composer"><button className="qj-icon" aria-label="添加附件" onClick={() => setMenu(v=>!v)}>＋</button><div className="qj-compose-placeholder">输入消息…（仅预览）</div><button className="qj-send" aria-label="发送，仅预览">➤</button></div>}
+    <nav className="qj-bottom" aria-label="主要导航">
+      <button className={view === 'chat'?'active':''} onClick={() => go('chat')}><span>▤</span>聊天</button>
+      <button className={view === 'room'?'active':''} onClick={() => go('room')}><span>⌂</span>房间</button>
+      <button className={view === 'settings'||view==='theme'?'active':''} onClick={() => go('settings')}><span>⚙</span>设置</button>
+    </nav>
+    {menu && <div className="qj-mini-menu"><button onClick={() => go('profile')}>助手详情</button><button onClick={() => go('room')}>进入房间</button><button onClick={()=>setMenu(false)}>关闭</button></div>}
+    {drawer && <div className="qj-drawer-layer"><button className="qj-scrim" aria-label="关闭菜单" onClick={() => setDrawer(false)} /><aside className="qj-drawer">
+      <div className="qj-drawer-title"><b>栖间</b><button className="qj-icon" aria-label="关闭侧边栏" onClick={()=>setDrawer(false)}>×</button></div>
+      <h3 className="qj-label">我的助手</h3>
+      {people.map(p => <button className={'qj-assistant '+(p === person?'selected':'')} key={p} onClick={()=>{setPerson(p);setConversation('今天的聊天');setDrawer(false);setView('chat')}}><span className="qj-avatar">{p.slice(0,1)}</span><span>{p}</span><small>›</small></button>)}
+      <h3 className="qj-label">当前会话</h3>
+      {['今天的聊天','栖间功能规划'].map(c => <button className={'qj-drawer-conv '+(conversation===c?'selected':'')} key={c} onClick={()=>{setConversation(c);setDrawer(false)}}>{c}</button>)}
+      <button className="qj-new" onClick={()=>{setConversation('新会话');setDrawer(false)}}>＋ 新建会话</button>
+      <div className="qj-drawer-spacer" />
+      <button className="qj-drawer-settings" onClick={()=>go('settings')}>⚙　设置</button>
+    </aside></div>}
+    <div className="qj-preview-label">UI 原型 · 虚拟内容 · 不连接任何账号或数据</div>
+  </div>
