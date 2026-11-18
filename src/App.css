@@ -4368,3 +4368,17 @@ body.has-pack .settings-screen{
 }
 .shell .room-screen .room-illustration .room-scene-widgets .room-widget-text small,
 .shell .room-screen .room-illustration .room-scene-widgets .room-widget-go{display:none}
+
+/* Optional roomX/roomY: pin individual icons in room coordinates. Other icons stay along bottom. */
+.shell .room-screen .room-illustration .room-scene-widgets{
+ inset:0;left:0;right:0;bottom:0;max-height:none;overflow:visible;pointer-events:none;
+}
+.shell .room-screen .room-illustration .room-scene-widgets .room-widgets{
+ position:absolute;inset:0;margin:0;padding:10px 8px;display:flex;flex-wrap:wrap;
+ gap:8px;align-content:flex-end;justify-content:flex-start;overflow-y:auto;pointer-events:none;
+}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card{
+ width:66px;max-width:66px;flex:0 0 66px;pointer-events:auto;
+}
+.shell .room-screen .room-illustration .room-scene-widgets button.room-widget-card[style*="position: absolute"]{z-index:2}
+.widget-room-position{display:grid;grid-template-columns:1fr 1fr;gap:8px}
