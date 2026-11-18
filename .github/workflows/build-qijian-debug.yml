@@ -5,6 +5,7 @@ on:
     branches:
       - fix/subscription-model-selection-theme-docs
       - fix/kelivo-provider-model-management
+      - feature/layout-unification-preview
     paths:
       - '.github/workflows/build-qijian-debug.yml'
       - 'src/**'
