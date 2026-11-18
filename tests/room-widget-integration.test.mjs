@@ -11,3 +11,17 @@ test('custom HTML widgets remain in sandboxed iframe',()=>{
  assert.match(widgets,/sandbox="allow-scripts allow-forms"/)
  assert.doesNotMatch(widgets,/sandbox="[^"]*allow-same-origin/)
 })
+
+test('widget editor offers emoji icon, safe external URL and explicit empty page state',()=>{
+ const widgets=readFileSync(new URL('../src/RoomWidgets.tsx',import.meta.url),'utf8')
+ assert.match(widgets,/aria-label="自定义图标"/)
+ assert.match(widgets,/aria-label="小组件网页地址"/)
+ assert.match(widgets,/aria-label="小组件 HTML 内容"/)
+ assert.match(widgets,/widget-content-empty/)
+ assert.match(widgets,/https:/)
+})
+test('assistant widget creation refuses blank custom widget content',()=>{
+ const app=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8')
+ assert.match(app,/不能创建空白小组件/)
+ assert.match(app,/config=\{html,url,icon:/)
+})
