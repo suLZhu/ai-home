@@ -69,3 +69,5 @@
 .widget-url-preview{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:12px;background:var(--field,#f7f4f8);font-size:12px}
 .widget-url-preview a{display:inline-flex;align-self:flex-start;padding:9px 14px;border-radius:9px;background:var(--accent,#8871a5);color:white;text-decoration:none}
 .room-widget-icon{font-family:system-ui,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
+
+.widget-url-preview .widget-open-website{display:inline-flex;align-self:flex-start;padding:9px 14px;border:0;border-radius:9px;background:var(--accent,#8871a5);color:#fff;font:inherit;font-size:12px}
