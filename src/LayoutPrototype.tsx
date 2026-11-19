@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import './LayoutPrototype.css'
 import { settingItems } from './layout/sections'
 import { ProviderPreview, SubscriptionPreview, UsageLedgerPreview } from './ProviderUsagePreview'
+import { SettingsSectionsPreview } from './SettingsSectionsPreview'
 
 type View = 'home' | 'chat' | 'room' | 'settings' | 'theme' | 'profile'
 type Person = '小晏' | '言朔'
@@ -97,11 +98,8 @@ export default function LayoutPrototype() {
         {section ? <>
           {section === '供应商' ? <ProviderPreview /> :
             section === '订阅' ? <SubscriptionPreview /> :
-            section === 'AI 用量账本' ? <UsageLedgerPreview /> : <>
-              <div className="qj-section-head"><h2>{section}</h2><p>这里先验证二级页面的统一高度、顶部和列表样式。</p></div>
-              <div className="qj-row-group"><div className="qj-row"><span>基础设置</span><small>后续接入原有功能</small><i>›</i></div><div className="qj-row"><span>高级选项</span><small>不常用内容收纳于此</small><i>›</i></div></div>
-              {section === '外观与主题' && <button className="qj-primary" onClick={() => go('theme')}>进入主题中心</button>}
-            </>}
+            section === 'AI 用量账本' ? <UsageLedgerPreview /> :
+            <SettingsSectionsPreview section={section} onTheme={() => go('theme')} />}
         </> : <>
           <div className="qj-section-head"><h2>设置中心</h2><p>常用功能在前，其他功能集中管理。</p></div>
           <div className="qj-row-group">{settingItems.map(([name, desc]) => <button key={name} className="qj-row" onClick={() => openSection(name)}>
