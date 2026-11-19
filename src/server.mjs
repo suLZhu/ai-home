@@ -3,6 +3,7 @@ import { randomBytes, createHash, timingSafeEqual, createCipheriv, createDeciphe
 import { isIP } from 'node:net'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { createMcpConnectionPool } from './server/mcpConnectionPool.mjs'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -242,18 +243,32 @@ function validateRemoteUrl(raw) {
   }
   return u
 }
+const mcpConnectionPool = createMcpConnectionPool({
+  createClient: async row => {
+    const saved = (() => {
+      try { return JSON.parse(decryptSecret(row.token_enc)) }
+      catch { return { token: decryptSecret(row.token_enc), headers: {} } }
+    })()
+    const token = typeof saved.token === 'string' ? saved.token : ''
+    const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(saved.headers && typeof saved.headers === 'object' ? saved.headers : {}) }
+    const transport = new StreamableHTTPClientTransport(new URL(row.url), { requestInit: { headers, redirect: 'error' } })
+    const client = new Client({ name: 'ai-home', version: '0.1.0' }, { capabilities: {} })
+    try { await client.connect(transport); return { client } }
+    catch (error) { await client.close().catch(() => {}); throw error }
+  },
+})
 async function withMcpClient(row, operation) {
   if (!row || !row.enabled) throw Object.assign(new Error('找不到已启用且绑定当前人物的 MCP 服务'), { status: 404 })
   validateRemoteUrl(row.url)
-  let saved
-  try { saved = JSON.parse(decryptSecret(row.token_enc)) } catch { saved = { token: decryptSecret(row.token_enc), headers: {} } }
-  const token = typeof saved.token === 'string' ? saved.token : ''
-  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(saved.headers && typeof saved.headers === 'object' ? saved.headers : {}) }
-  const transport = new StreamableHTTPClientTransport(new URL(row.url), { requestInit: { headers, redirect: 'error' } })
-  const client = new Client({ name: 'ai-home', version: '0.1.0' }, { capabilities: {} })
-  try { await client.connect(transport); return await operation(client) }
-  finally { await client.close().catch(() => {}) }
+  // 临时测试连接不进入长期池；已保存配置按 id / updated_at 复用。
+  if (!row.id) {
+    const tempId = 'test-' + randomUUID()
+    try { return await mcpConnectionPool.use(tempId, 'test', row, operation) }
+    finally { await mcpConnectionPool.drop(tempId) }
+  }
+  return mcpConnectionPool.use(row.id, row.updated_at, row, operation)
 }
+
 function getClientKey(req) {
   return String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim()
 }
@@ -890,6 +905,7 @@ const apiServer = createServer(async (req, res) => {
     const body = await readBody(req).catch(() => ({}))
     if (!isValidAssistantId(body.person)) return send(res, 400, { error: '必须指定人物身份' })
     const result = db.prepare('DELETE FROM mcp_connections WHERE id=? AND person=?').run(mcpMatch[1], body.person)
+    if (result.changes) void mcpConnectionPool.drop(mcpMatch[1])
     return result.changes ? send(res, 200, { ok: true }) : send(res, 404, { error: '未找到该人物绑定的 MCP 服务' })
   }
   if (mcpMatch && req.method === 'PUT' && !mcpMatch[2]) {
@@ -911,6 +927,7 @@ const apiServer = createServer(async (req, res) => {
       } else {
         db.prepare('UPDATE mcp_connections SET name=?, url=?, enabled=?, token_enc=?, updated_at=? WHERE id=? AND person=?').run(name, remote.toString(), enabled, encryptSecret(JSON.stringify({ token, headers: {} })), updatedAt, mcpMatch[1], person)
       }
+      void mcpConnectionPool.drop(mcpMatch[1])
       const next = db.prepare('SELECT * FROM mcp_connections WHERE id=? AND person=?').get(mcpMatch[1], person)
       return send(res, 200, { connection: publicMcp(next) })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '更新 MCP 配置失败' }) }
