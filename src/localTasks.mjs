@@ -26,6 +26,7 @@ export function normalizeLocalTask(raw) {
     prompt: str(raw.prompt).slice(0, 12000),
     run_at: new Date(at).toISOString(),
     recurrence: RECURRENCE.includes(raw.recurrence) ? raw.recurrence : 'once',
+    interval_minutes: Number(raw.interval_minutes) === 120 ? 120 : 0,
     status: STATUS.includes(raw.status) ? raw.status : 'scheduled',
     last_run_at: str(raw.last_run_at) || null,
     created_at: str(raw.created_at) || new Date().toISOString(),
@@ -46,6 +47,7 @@ export function makeLocalTask(input, id, now = Date.now()) {
     prompt: input && input.prompt,
     run_at: input && input.runAt,
     recurrence: (input && input.recurrence) || 'once',
+    interval_minutes: input && input.intervalMinutes,
     status: 'scheduled',
     last_run_at: null,
     created_at: iso,
@@ -71,7 +73,7 @@ export function dueLocalTasks(tasks, now = Date.now()) {
 export function nextRunAt(task, now = Date.now()) {
   const base = Date.parse(str(task && task.run_at))
   if (!Number.isFinite(base)) return null
-  const step = task.recurrence === 'daily' ? DAY : task.recurrence === 'weekly' ? WEEK : 0
+  const step = Number(task.interval_minutes) > 0 ? Number(task.interval_minutes) * 60000 : task.recurrence === 'daily' ? DAY : task.recurrence === 'weekly' ? WEEK : 0
   if (!step) return null
   let t = base
   // 一次除算到位：离线几天甚至几年也不会循环上千次，更不会补发历史提醒。
