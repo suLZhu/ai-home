@@ -21,3 +21,13 @@
 .qj-chat-switch button{border:0;border-radius:8px;background:transparent;padding:7px 9px;font-size:11px;white-space:nowrap;color:#7a8478}
 .qj-chat-switch button.selected{background:#e2ecdf;color:#405d3f;font-weight:700}
 @media(max-width:355px){.qj-chat-switch button{padding:7px 6px}.qj-topbar{gap:5px;padding:0 8px}}
+
+/* 固定布局：聊天标题区内的头像为助手详情入口。无需右上角更多菜单。 */
+.qj-chat-identity{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;padding:0;border:0;background:transparent}
+.qj-chat-identity .qj-avatar{width:32px;height:32px}
+.qj-chat-identity .qj-top-title{flex:1}
+.qj-chat-switch{margin-left:auto}
+.qj-tool-tray{position:absolute;z-index:11;left:12px;right:12px;bottom:calc(136px + env(safe-area-inset-bottom,0px));padding:17px 16px;border:1px solid var(--qj-line);border-radius:15px;background:#fff;box-shadow:0 8px 24px #0002}
+.qj-tool-tray strong{font-size:14px}
+.qj-tool-tray p{margin:8px 0 12px;color:var(--qj-muted);font-size:12px}
+.qj-tool-tray button{border:0;border-radius:9px;background:var(--qj-soft);padding:8px 14px}
