@@ -116,6 +116,7 @@ if (!workflowColumns.includes('created_by')) db.exec("ALTER TABLE scheduled_task
 if (!workflowColumns.includes('temporary')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0')
 // Timer tasks must write back into the conversation they were created from.
 if (!workflowColumns.includes('conversation_id')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN conversation_id TEXT')
+if (!workflowColumns.includes('interval_minutes')) db.exec('ALTER TABLE scheduled_tasks ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 0')
 migrateDatabase(db)
 
 // 启动滚动备份：见 server/backup.mjs（VACUUM INTO 一致性快照，保留 5 份，
@@ -970,11 +971,12 @@ const apiServer = createServer(async (req, res) => {
         const title = String(body.title || '').trim().slice(0, 160)
         const prompt = String(body.prompt || '').trim().slice(0, 12000)
         const runAt = String(body.runAt || '')
-        const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
+        const intervalMinutes = Number(body.intervalMinutes) === 120 ? 120 : 0
+        const recurrence = intervalMinutes ? 'daily' : (['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once')
         if (!title || !prompt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '工作流内容或时间无效' })
         const id = randomUUID()
         const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
-        db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,created_by,temporary,conversation_id) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,person,body.temporary === true ? 1 : 0,conversationId)
+        db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,created_by,temporary,conversation_id,interval_minutes) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,person,body.temporary === true ? 1 : 0,conversationId,intervalMinutes)
         return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
       }
       if (!['pause','resume','delete'].includes(action)) return send(res, 400, { error: '不支持的操作' })
@@ -1006,11 +1008,12 @@ const apiServer = createServer(async (req, res) => {
       const title = String(body.title || '').trim().slice(0, 160)
       const prompt = String(body.prompt || '').trim().slice(0, 12000)
       const runAt = String(body.runAt || '')
-      const recurrence = ['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once'
+      const intervalMinutes = Number(body.intervalMinutes) === 120 ? 120 : 0
+        const recurrence = intervalMinutes ? 'daily' : (['once','daily','weekly'].includes(body.recurrence) ? body.recurrence : 'once')
       if (!title || !prompt || !runAt || !Number.isFinite(Date.parse(runAt))) return send(res, 400, { error: '请填写任务名称、执行内容和有效执行时间' })
       const now = new Date().toISOString(), id = randomUUID()
       const conversationId = typeof body.conversationId === 'string' && body.conversationId.length <= 120 ? body.conversationId : null
-      db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,conversation_id) VALUES (?,?,?,?,?,?,'scheduled',?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,conversationId)
+      db.prepare("INSERT INTO scheduled_tasks (id,person,title,prompt,run_at,recurrence,status,created_at,updated_at,conversation_id,interval_minutes) VALUES (?,?,?,?,?,?,'scheduled',?,?,?,?)").run(id,person,title,prompt,new Date(runAt).toISOString(),recurrence,now,now,conversationId,intervalMinutes)
       return send(res, 201, { task: db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(id) })
     } catch (error) { return send(res, error.status || 400, { error: error.message || '创建任务失败' }) }
   }
