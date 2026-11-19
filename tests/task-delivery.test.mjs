@@ -647,3 +647,38 @@ test('20 崩溃遗留 ready 任务在启动时恢复重跑', async () => {
 })
 
 console.log('task delivery suite: 20 scenarios registered')
+
+
+test('定时主动聊天直接向用户说话，而不复述任务说明', async () => {
+  const db = makeDb()
+  const requests = installModel([textReply('在干什么呀？今天忙不忙？')])
+  const taskId = insertTask(db, { conversationId: 'conv-chat', title: '每两小时找阿懒聊天' })
+  db.prepare('UPDATE scheduled_tasks SET prompt=? WHERE id=?').run('每2小时来找我聊天，问问我在做什么', taskId)
+  const runner = new AgentRunner(makeCtx(db))
+  const bus = new AgentEventBus()
+  let runId = null
+  bus.subscribe(event => { if (event.type === 'run_created' && event.taskId === taskId) runId = event.runId })
+  assert.equal(createTaskScheduler({ db, runner, bus, deliverTask: entry => addTaskResult(db, entry) }).tick(), 1)
+  assert.ok(await waitFor(() => runId && getAgentRun(db, runId)?.status !== 'running'))
+  assert.equal(getAgentRun(db, runId).source, 'scheduled_chat')
+  assert.ok(requests[0].messages[0].content.includes('私有指令'))
+  assert.ok(requests[0].messages[0].content.includes('绝不把它复述给用户'))
+  const env = parseTaskEnvelope(listInbox(db).find(x => x.kind === 'task_result').content)
+  assert.equal(env.answer, '在干什么呀？今天忙不忙？')
+  assert.equal(env.conversationId, 'conv-chat')
+})
+
+test('非聊天型定时任务继续按正常执行与结果汇报处理', async () => {
+  const db = makeDb()
+  const requests = installModel([textReply('今天的待办已经整理好了。')])
+  const taskId = insertTask(db, { title: '整理待办', conversationId: 'conv-tasks' })
+  db.prepare('UPDATE scheduled_tasks SET prompt=? WHERE id=?').run('整理今天的待办事项并汇报',taskId)
+  const runner = new AgentRunner(makeCtx(db))
+  let runId = null
+  const bus = new AgentEventBus()
+  bus.subscribe(event => { if (event.type === 'run_created' && event.taskId === taskId) runId = event.runId })
+  createTaskScheduler({ db, runner, bus, deliverTask: entry => addTaskResult(db, entry) }).tick()
+  assert.ok(await waitFor(() => runId && getAgentRun(db, runId)?.status !== 'running'))
+  assert.equal(getAgentRun(db, runId).source, 'scheduled')
+  assert.ok(!requests[0].messages[0].content.includes('定时聊天专用规则'))
+})
