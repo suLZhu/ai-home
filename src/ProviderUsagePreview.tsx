@@ -65,6 +65,14 @@ export function ProviderPreview() {
   function patch(patch: Partial<Provider>) {
     setProviders(items => items.map(x => x.id === active ? { ...x, ...patch } : x)); setSaved(false)
   }
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  function removeCurrent() {
+    if (!current) return
+    setProviders(items => items.filter(item => item.id !== current.id))
+    setActive(providers.find(item => item.id !== current.id)?.id || '')
+    setConfirmDelete(false)
+    setSaved(false)
+  }
   function add() {
     const id = 'new-'+Date.now()
     setProviders(p => [...p, { id, name: '新供应商', url: '', key: '', selected: [], available: sampleModels }])
@@ -72,7 +80,7 @@ export function ProviderPreview() {
   }
   return <div className="pup-wrap">
     <header className="pup-head"><h2>供应商</h2><p>名称、网址、Key、模型。常用配置集中在一页。</p></header>
-    <div className="pup-provider-nav">{providers.map(x => <button key={x.id} className={active === x.id ? 'active' : ''} onClick={() => {setActive(x.id);setSaved(false)}}>{x.name}</button>)}<button className="pup-add" onClick={() => setNewOne(x => !x)}>＋ 添加</button></div>
+    <div className="pup-provider-nav">{providers.map(x => <button key={x.id} className={active === x.id ? 'active' : ''} onClick={() => {setActive(x.id);setSaved(false);setConfirmDelete(false)}}>{x.name}</button>)}<button className="pup-add" onClick={() => setNewOne(x => !x)}>＋ 添加</button></div>
     {newOne && <div className="pup-simple-card"><p className="pup-hint">新增一个独立供应商，之后可以填写名称、网址和 Key。</p><button className="pup-main-button" onClick={add}>创建供应商</button></div>}
     {current && <div className="pup-simple-card">
       <label className="pup-field"><span>供应商名称</span><input value={current.name} onChange={e => patch({ name: e.target.value })}/></label>
@@ -80,31 +88,41 @@ export function ProviderPreview() {
       <label className="pup-field"><span>API Key</span><input type="password" placeholder="填写后在本机保存" value={current.key} onChange={e => patch({ key: e.target.value })}/></label>
       <ModelSelector key={current.id} selected={current.selected} options={current.available} onChange={selected => patch({ selected })}/>
       <details className="pup-advanced"><summary>高级选项（多 Key / 请求路径 / 接口测试）</summary><p>这部分将复用原版栖间已有功能，先不占用主页面。</p></details>
-      <button className="pup-main-button" onClick={() => setSaved(true)}>{saved ? '✓ 演示配置已保存' : '保存供应商'}</button>
+      <div className="pup-provider-actions"><button className="pup-main-button" onClick={() => setSaved(true)}>{saved ? '✓ 演示配置已保存' : '保存供应商'}</button><button className="pup-delete-button" onClick={() => setConfirmDelete(true)}>删除供应商</button></div>
+      {confirmDelete && <div className="pup-delete-confirm" role="dialog" aria-label="确认删除供应商"><p>确定删除「{current.name}」吗？此操作仅影响本次预览的模拟配置。</p><div><button onClick={() => setConfirmDelete(false)}>取消</button><button className="danger" onClick={removeCurrent}>确认删除</button></div></div>}
     </div>}
     <p className="pup-footnote">当前为交互原型，数据只在页面内演示；不向真实接口发送 Key。</p>
   </div>
 }
 
+type PreviewChannel = 'gpt' | 'claude' | 'grok'
+const subscriptionChannels: Array<{ id: PreviewChannel; name: string; info: string; detail: string; models: Model[] }> = [
+  { id: 'gpt', name: 'ChatGPT', info: 'OpenAI · ChatGPT / Codex', detail: '原版已有账号授权入口；实际订阅调用仍需协议适配。', models: [{id:'gpt-4.1',family:'GPT'}] },
+  { id: 'claude', name: 'Claude', info: 'Anthropic · Pro / Max', detail: '原版已有 Claude Code 授权流程；可用模型以账号实测为准。', models: [{id:'claude-sonnet',family:'Claude'},{id:'claude-opus',family:'Claude'}] },
+  { id: 'grok', name: 'Grok', info: 'xAI · Grok / X', detail: '原版已有设备码登录入口；模型与订阅调用仍待联调。', models: [{id:'grok',family:'Grok'}] },
+]
+
 export function SubscriptionPreview() {
-  const [logged, setLogged] = useState(false)
-  const [account, setAccount] = useState('')
-  const [models, setModels] = useState(['claude-sonnet'])
+  const [selectedChannel, setSelectedChannel] = useState<PreviewChannel>('gpt')
+  const [logged, setLogged] = useState<PreviewChannel[]>([])
+  const [modelsByChannel, setModelsByChannel] = useState<Record<PreviewChannel,string[]>>({gpt:[],claude:[],grok:[]})
   const [showLogin, setShowLogin] = useState(false)
-  const options = [{id:'claude-sonnet',family:'Claude'},{id:'claude-opus',family:'Claude'},{id:'gpt-4.1',family:'GPT'}]
+  const channel = subscriptionChannels.find(x => x.id === selectedChannel)!
+  const connected = logged.includes(selectedChannel)
   return <div className="pup-wrap">
-    <header className="pup-head"><h2>订阅</h2><p>独立管理订阅账号，登录后选择可用模型，不需要填写接口网址。</p></header>
-    <div className="pup-simple-card">
-      <div className="pup-subscription-top"><span className="pup-account-icon">◈</span><div><b>订阅账号</b><small>{logged ? account : '未登录 · 连接后自动获取模型'}</small></div><button className="pup-outline" onClick={() => setShowLogin(x => !x)}>{logged ? '账号管理' : '登录账号'}</button></div>
-      {showLogin && <div className="pup-login-info">
-        <b>登录方式</b>
-        <p>最终版沿用栖间现有的订阅渠道登录流程，不在这里要求你填写 API URL。</p>
-        <button className="pup-main-button" onClick={() => {setLogged(true);setAccount('已连接的订阅账号 · 演示');setShowLogin(false)}}>模拟登录成功</button>
-      </div>}
-      {logged && <ModelSelector selected={models} options={options} onChange={setModels} isDemo/>}
-      <div className="pup-sub-usage"><b>订阅使用量</b><small>不计算金额</small><div className="pup-kpi"><div><span>总 Token</span><b>{logged ? '126,800' : '—'}</b></div><div><span>已缓存</span><b>{logged ? '48,900' : '—'}</b></div><div><span>未缓存</span><b>{logged ? '77,900' : '—'}</b></div></div><p>显示接口实际返回的用量；登录与用量获取需按订阅渠道分别适配。</p></div>
+    <header className="pup-head"><h2>订阅账号</h2><p>按平台独立管理。登录后再获取模型，不需要填写接口网址。</p></header>
+    <div className="pup-channel-list" role="group" aria-label="选择订阅渠道">
+      {subscriptionChannels.map(c => <button key={c.id} className={'pup-channel '+(selectedChannel===c.id?'active':'')} onClick={() => { setSelectedChannel(c.id); setShowLogin(false) }} aria-pressed={selectedChannel===c.id}>
+        <span><b>{c.name}</b><small>{c.info}</small></span><em>{logged.includes(c.id)?'演示已连接':'未登录'}</em>
+      </button>)}
     </div>
-    <p className="pup-footnote">此页为交互预览：模拟登录不代表已接入真实的订阅认证与模型拉取。</p>
+    <div className="pup-simple-card">
+      <div className="pup-subscription-top"><span className="pup-account-icon">◈</span><div><b>{channel.name} 订阅</b><small>{connected?'模拟账号已连接':'未登录 · 连接后读取可用模型'}</small></div><button className="pup-outline" onClick={() => setShowLogin(x => !x)}>{connected?'管理':'登录'}</button></div>
+      {showLogin && <div className="pup-login-info"><b>{channel.name} 登录方式</b><p>{channel.detail} 正式版复用原有授权流程，此处不填写网址和密码。</p><div className="pup-demo-actions"><button className="pup-main-button" onClick={() => {setLogged(old=>old.includes(selectedChannel)?old:[...old,selectedChannel]);setShowLogin(false)}}>模拟连接</button>{connected&&<button className="pup-outline" onClick={() => {setLogged(old=>old.filter(id=>id!==selectedChannel));setShowLogin(false)}}>模拟退出</button>}</div></div>}
+      {connected && <ModelSelector selected={modelsByChannel[selectedChannel]} options={channel.models} onChange={models=>setModelsByChannel(old=>({...old,[selectedChannel]:models}))} isDemo/>}
+      <div className="pup-sub-usage"><div className="pup-section-label"><b>订阅使用量</b><small>只统计 Token，不计金额</small></div><div className="pup-kpi"><div><span>总 Token</span><b>—</b></div><div><span>已缓存</span><b>—</b></div><div><span>未缓存</span><b>—</b></div></div><p>正式版按实际接口返回统计，不虚构订阅额度和模型。</p></div>
+    </div>
+    <p className="pup-footnote">目前原版内置的订阅授权渠道为 ChatGPT、Claude、Grok；其他平台如需接入，必须先验证官方授权及聊天协议，不能把 API Key 误当订阅登录。本页均为模拟交互。</p>
   </div>
 }
 
