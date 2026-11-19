@@ -1,26 +1,18 @@
 import { useState } from 'react'
 import './LayoutPrototype.css'
+import { settingItems } from './layout/sections'
 
 type View = 'home' | 'chat' | 'room' | 'settings' | 'theme' | 'profile'
 type Person = '小晏' | '言朔'
 const people: Person[] = ['小晏', '言朔']
-const settingItems = [
-  ['外观与主题', '主题包、背景、字体、图标'],
-  ['AI 与模型', '供应商、订阅、模型'],
-  ['聊天与消息', '消息、待发送、通知'],
-  ['工具与扩展', '网页、图片、MCP'],
-  ['记忆与上下文', '记忆、世界书、上下文'],
-  ['房间与助手', '资料、房间与小组件'],
-  ['应用与设备', '后台、设备锁、备份'],
-  ['诊断与维护', '请求记录、耗时与错误']
-] as const
+
 
 export default function LayoutPrototype() {
   const [view, setView] = useState<View>('home')
   const [person, setPerson] = useState<Person>('小晏')
   const [drawer, setDrawer] = useState(false)
   const [section, setSection] = useState<string | null>(null)
-  const [menu, setMenu] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [conversation, setConversation] = useState('今天的聊天')
   const [theme, setTheme] = useState('银杏奶灰')
 
@@ -28,7 +20,7 @@ export default function LayoutPrototype() {
     setView(next)
     setSection(null)
     setDrawer(false)
-    setMenu(false)
+    setToolsOpen(false)
   }
   const title = view === 'home' ? '栖间' : view === 'chat' ? person : view === 'room' ? person + '的房间' :
     view === 'settings' ? (section || '设置') :
@@ -42,12 +34,12 @@ export default function LayoutPrototype() {
          else if (view === 'theme') go('settings')
          else go('home')
        }}>‹</button>}
-      <div className="qj-top-title"><strong>{title}</strong><small>{view === 'chat' ? conversation : '页面布局测试版 · 仅演示'}</small></div>
+      {view === 'chat' ? <button className="qj-chat-identity" aria-label="查看当前助手详情" onClick={() => go('profile')}><span className="qj-avatar">{person.slice(0,1)}</span><span className="qj-top-title"><strong>{title}</strong><small>{conversation}</small></span></button> : <div className="qj-top-title"><strong>{title}</strong><small>页面布局测试版 · 仅演示</small></div>}
       {view === 'chat' && <div className="qj-chat-switch" aria-label="快速切换聊天助手">
         {people.map(p => <button key={p} className={p === person ? 'selected' : ''} onClick={() => setPerson(p)} aria-pressed={p === person}>{p}</button>)}
       </div>}
-      {view === 'chat' ? <button className="qj-icon" aria-label="更多" onClick={() => setMenu(v => !v)}>⋯</button> :
-        <span className="qj-icon-placeholder" />}
+
+
     </header>
     <main className="qj-main">
       {view === 'home' && <div className="qj-home">
@@ -103,13 +95,13 @@ export default function LayoutPrototype() {
         <div className="qj-row-group"><button className="qj-row" onClick={() => go('room')}><span>进入房间</span><i>›</i></button><button className="qj-row" onClick={() => {go('settings');setSection('房间与助手')}}><span>专属设置</span><i>›</i></button></div>
       </div>}
     </main>
-    {view === 'chat' && <div className="qj-composer"><button className="qj-icon" aria-label="添加附件" onClick={() => setMenu(v=>!v)}>＋</button><div className="qj-compose-placeholder">输入消息…（仅预览）</div><button className="qj-send" aria-label="发送，仅预览">➤</button></div>}
+    {view === 'chat' && <div className="qj-composer"><button className="qj-icon" aria-label="添加附件" onClick={() => setToolsOpen(v=>!v)}>＋</button><div className="qj-compose-placeholder">输入消息…（仅预览）</div><button className="qj-send" aria-label="发送，仅预览">➤</button></div>}
     <nav className="qj-bottom" aria-label="主要导航">
       <button className={view === 'home'||view === 'chat'?'active':''} onClick={() => go('home')}><span>▤</span>主页</button>
       <button className={view === 'room'?'active':''} onClick={() => go('room')}><span>⌂</span>房间</button>
       <button className={view === 'settings'||view==='theme'?'active':''} onClick={() => go('settings')}><span>⚙</span>设置</button>
     </nav>
-    {menu && <div className="qj-mini-menu"><button onClick={() => go('profile')}>助手详情</button><button onClick={() => go('room')}>进入房间</button><button onClick={()=>setMenu(false)}>关闭</button></div>}
+    {toolsOpen && <div className="qj-tool-tray"><strong>聊天工具（占位）</strong><p>以后在这里添加图片、附件和网页功能；不改变聊天页面框架。</p><button onClick={() => setToolsOpen(false)}>收起</button></div>}
     {drawer && <div className="qj-drawer-layer"><button className="qj-scrim" aria-label="关闭菜单" onClick={() => setDrawer(false)} /><aside className="qj-drawer">
       <div className="qj-drawer-title"><b>栖间</b><button className="qj-icon" aria-label="关闭侧边栏" onClick={()=>setDrawer(false)}>×</button></div>
       <h3 className="qj-label">我的助手</h3>
