@@ -1,0 +1,29 @@
+.qj-subpage{display:flex;flex-direction:column;gap:13px;padding-bottom:18px}
+.qj-subpage-intro h2{margin:0;font-size:18px;font-weight:700}
+.qj-subpage-intro p{margin:3px 0 0;font-size:11px;color:#8b9388}
+.qj-subpage-group h3{font-size:11px;letter-spacing:.06em;color:#808a7e;font-weight:600;margin:0 4px 7px}
+.qj-subpage-list{border:1px solid #e7eae5;border-radius:13px;background:#fff;overflow:hidden}
+.qj-subpage-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:9px 12px;min-height:54px;border:0;border-bottom:1px solid #edf0ea;width:100%;text-align:left;background:#fff}
+.qj-subpage-row:last-child{border-bottom:0}
+.qj-subpage-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+.qj-subpage-copy b{font-size:13px;font-weight:600}
+.qj-subpage-copy small{font-size:10px;color:#858f83;line-height:1.35}
+.qj-subpage-right{flex-shrink:0;font-size:17px;color:#8f9c8e}
+.qj-subpage-switch{width:34px;height:20px;padding:2px;flex-shrink:0;background:#dce0d9;border-radius:30px;transition:background .15s}
+.qj-subpage-switch i{display:block;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px #0002;transition:transform .15s}
+.qj-subpage-switch.on{background:#8ba582}
+.qj-subpage-switch.on i{transform:translateX(14px)}
+.qj-subpage-notice{margin:0;font-size:11px;color:#657b60}
+.qj-dialog-layer{position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:22px;background:#1f291f70}
+.qj-dialog{width:min(100%,360px);max-height:min(85dvh,650px);overflow-y:auto;background:#fff;border-radius:17px;padding:19px;box-shadow:0 14px 36px #0002}
+.qj-dialog h3{font-size:16px;margin:0 0 7px}
+.qj-dialog p{margin:0;color:#7e887b;font-size:12px;line-height:1.65}
+.qj-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.qj-dialog-actions button{padding:9px 17px;border:0;border-radius:10px;background:#e7efe3;color:#47633f;font-size:12px;font-weight:600}
+.qj-dialog-actions .qj-dialog-cancel{background:#f2f4f0;color:#63705f}
+.qj-dialog-actions .qj-dialog-danger{background:#ad554d;color:#fff}
+.qj-dialog-options{margin-top:12px;border:1px solid #e9ece7;border-radius:11px;overflow:hidden}
+.qj-dialog-options button{width:100%;display:flex;align-items:center;justify-content:space-between;padding:11px 12px;background:#fff;border:0;border-bottom:1px solid #eef0ed;text-align:left;font-size:12px}
+.qj-dialog-options button:last-child{border-bottom:0}
+.qj-dialog-options span{color:#789071}
+.qj-dialog .qj-dialog-warning{margin-top:12px;color:#a35a50}
