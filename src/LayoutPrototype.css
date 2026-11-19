@@ -46,3 +46,11 @@
 .qj-bottom{height:calc(59px + env(safe-area-inset-bottom,0px));padding:3px 12px calc(4px + env(safe-area-inset-bottom,0px))}
 .qj-bottom button span{font-size:21px}
 .qj-preview-label{bottom:calc(59px + env(safe-area-inset-bottom,0px))}
+
+/* 聊天页面密度调整：让一行能容纳更多文字，短消息不再占据厚重的大气泡。 */
+.qj-chat{padding:15px 12px 24px;gap:13px}
+.qj-chat-date{font-size:10px;margin-bottom:1px}
+.qj-message{max-width:97%;gap:7px}
+.qj-message .qj-avatar{width:30px;height:30px;font-size:12px}
+.qj-message p{font-size:13px;line-height:1.53;padding:9px 11px;border-radius:13px;letter-spacing:0;overflow-wrap:anywhere}
+.qj-message.mine p{border-radius:13px}
