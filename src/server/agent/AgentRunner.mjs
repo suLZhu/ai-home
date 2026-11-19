@@ -16,10 +16,15 @@ import { createToolRegistry } from './ToolRegistry.mjs'
 import { executeToolCall } from './ToolExecutor.mjs'
 import { getAgentRun, finishAgentRun } from './AgentRunStore.mjs'
 import { buildTimeContext, timeContextText, normalizeTimeZone, DEFAULT_TIME_ZONE } from '../../timeContext.mjs'
+import { scheduledConversationInstructions } from './scheduledConversation.mjs'
 
 export const MAX_ROUNDS = 5
 
 function buildSystemPrompt(run, displayName) {
+  if (run.source === 'scheduled_chat') return [
+    `你是 ${displayName}。任务已到达预定时间；请用你自己的口吻给用户发消息。`,
+    scheduledConversationInstructions(),
+  ].join('\n')
   return [
     `【当前扮演角色】你是 ${displayName}（服务端身份 ID：${run.assistantId}）。你正在通过工具助手执行用户交给你的任务，而不是普通闲聊。`,
     '【工具使用规则】',
