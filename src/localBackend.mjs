@@ -1042,7 +1042,7 @@ export async function localHandle(path, init) {
       const b = await readBody(init)
       const task = makeLocalTask({
         person: b.person, title: b.title, prompt: b.prompt, runAt: b.runAt,
-        recurrence: b.recurrence, conversationId: b.conversationId,
+        recurrence: b.recurrence, intervalMinutes: b.intervalMinutes, conversationId: b.conversationId,
       }, uuid())
       if (!task) return json(400, { error: '请填写任务名称、执行内容和有效执行时间' })
       const all = readJSON(K.tasks, [])
@@ -1110,7 +1110,7 @@ export async function localHandle(path, init) {
       const list = Array.isArray(all) ? all : []
       if (b.action === 'create') {
         const task = makeLocalTask({
-          person, title: b.title, prompt: b.prompt, runAt: b.runAt, recurrence: b.recurrence,
+          person, title: b.title, prompt: b.prompt, runAt: b.runAt, recurrence: b.recurrence, intervalMinutes: b.intervalMinutes,
           createdBy: person, temporary: b.temporary === true, conversationId: b.conversationId,
         }, uuid())
         if (!task) return json(400, { error: '工作流内容或时间无效' })
