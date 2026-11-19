@@ -45,6 +45,7 @@ export default function LayoutPrototype() {
     view === 'settings' ? (section || '设置') :
     view === 'theme' ? '主题中心' : person + '的资料'
   return <div className="qj-preview">
+    <div className="qj-status" aria-hidden="true" />
     <header className="qj-topbar">
       {(view === 'chat' || view === 'home') ? <button className="qj-icon" aria-label="打开侧边栏" onClick={() => setDrawer(true)}>☰</button> :
        <button className="qj-icon" aria-label="返回" onClick={() => {
