@@ -49,6 +49,7 @@ import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSea
 import { RECOVERY_BACKUP_KEY, decideCloudLoadAction, classifyCloudLoadError, shouldBackupBeforeApply, buildRecoveryBackup, pickActiveConversationIds, pickActiveMessagesFromSnapshot } from './cloudRecovery.mjs'
 // 模型请求诊断（黑匣子）：只旁路观察最终 payload，绝不改请求、绝不记录凭证。
 // 资源库绑定层：设置区一次性添加模型/MCP/世界书，聊天窗口按助手选择由哪个使用。
+import { createToolExecutionBudget } from './toolExecutionBudget.mjs'
 import { emptyBinding, normalizeProfiles, normalizeBindings, normalizePool, isInPool, togglePool, poolLabel, resolveModelConfig, resolveMcpConnections, isWorldEntryBound, toggleWorldEntryBinding, toggleMcpId, type ModelProfile, type PersonBinding, type ChatPool } from './resourceBindings.mjs'
 // 供应商中心：预置服务商 + 模型多选 + 多 KEY；勾选结果同步进模型预设池。
 import { normalizeVendors, syncVendorProfiles, allVendorKeys, resolveVendorKey, resolveKeyCandidates, chatRequestUrl, modelListUrl, groupModels, orderedKeys, DEFAULT_API_PATH, type Vendor } from './vendors.mjs'
@@ -1528,7 +1529,8 @@ export default function App() {
           }
         }
       } catch { /* MCP is optional; continue with normal model chat. */ }
-      for(let round=0;round<loadChatDisplay().toolRoundLimit&&!finished;round++){
+      const toolBudget=createToolExecutionBudget({roundLimit:loadChatDisplay().toolRoundLimit})
+      for(let round=0;round<toolBudget.roundLimit&&!finished;round++){
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
@@ -1565,6 +1567,7 @@ export default function App() {
         if(!toolCalls.length){finished=true;break}
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
         for(const call of toolCalls){
+          if(!toolBudget.tryStartTool()) throw new Error('本次消息的工具调用已达到安全上限（64 次），请缩小任务后继续。')
           const route=toolRoutes.get(call.function.name)
           let resultContent=''
           let callKey:string|null=null
@@ -1774,7 +1777,7 @@ export default function App() {
             }
           })
         }
-        if(round===4) throw new Error('工具调用轮数达到安全上限（5 轮），请缩小任务后重试。')
+        if(toolBudget.isLastRound(round)) throw new Error('连续工具调用已达到所选上限（'+toolBudget.roundLimit+' 轮），请缩小任务或调整轮数后继续。')
       }
       genDebug('generation_completed',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,elapsedMs:Math.max(1,Math.round(performance.now()-requestStartedAt)),completionTokens:usageTotals.completionTokens||0})
       const elapsedMs=Math.max(1,Math.round(performance.now()-requestStartedAt))
