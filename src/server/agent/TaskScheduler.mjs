@@ -15,6 +15,7 @@
 // starve other due tasks inside one tick.
 import { createAgentRun } from './AgentRunStore.mjs'
 import { isValidAssistantId } from '../identity.mjs'
+import { isScheduledConversationTask } from './scheduledConversation.mjs'
 
 // Boot recovery: re-schedule once-tasks interrupted by a crash/restart. The
 // next tick (within 15s) retries them; their dead run rows are already marked
@@ -62,7 +63,7 @@ export function createTaskScheduler(ctx) {
     inFlight.add(task.id)
     const run = createAgentRun(db, {
       assistantId: task.person,
-      source: 'scheduled',
+      source: isScheduledConversationTask(task.prompt, task.title) ? 'scheduled_chat' : 'scheduled',
       prompt: task.prompt,
       taskId: task.id,
       // Timer tasks write back into the conversation they were created from;
