@@ -682,3 +682,27 @@ test('非聊天型定时任务继续按正常执行与结果汇报处理', async
   assert.equal(getAgentRun(db, runId).source, 'scheduled')
   assert.ok(!requests[0].messages[0].content.includes('定时聊天专用规则'))
 })
+
+
+test('每两小时重复任务运行后推进两小时，错过多轮也只补最近一次', async () => {
+  const db=makeDb()
+  db.exec("ALTER TABLE scheduled_tasks ADD COLUMN interval_minutes INTEGER NOT NULL DEFAULT 0")
+  installModel([textReply('老婆，在忙什么呀？')])
+  const taskId=insertTask(db,{title:'每两小时主动聊天',conversationId:'conv-2h',recurrence:'daily'})
+  const original=db.prepare('SELECT run_at FROM scheduled_tasks WHERE id=?').get(taskId).run_at
+  db.prepare('UPDATE scheduled_tasks SET interval_minutes=120 WHERE id=?').run(taskId)
+  const runner=new AgentRunner(makeCtx(db))
+  const bus=new AgentEventBus()
+  let runId
+  bus.subscribe(event=>{if(event.type==='run_created'&&event.taskId===taskId)runId=event.runId})
+  const scheduler=createTaskScheduler({db,runner,bus,deliverTask:entry=>addTaskResult(db,entry)})
+  assert.equal(scheduler.tick(),1)
+  assert.ok(await waitFor(()=>runId&&getAgentRun(db,runId)?.status!=='running'))
+  const updated=db.prepare('SELECT * FROM scheduled_tasks WHERE id=?').get(taskId)
+  assert.equal(updated.interval_minutes,120)
+  assert.equal(updated.status,'scheduled')
+  assert.ok(Date.parse(updated.run_at)>Date.now())
+  assert.equal((Date.parse(updated.run_at)-Date.parse(original))%(120*60000),0)
+  assert.equal(scheduler.tick(),0)
+  assert.equal(listInbox(db).filter(x=>x.kind==='task_result').length,1)
+})
