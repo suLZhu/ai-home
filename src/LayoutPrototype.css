@@ -31,3 +31,18 @@
 .qj-tool-tray strong{font-size:14px}
 .qj-tool-tray p{margin:8px 0 12px;color:var(--qj-muted);font-size:12px}
 .qj-tool-tray button{border:0;border-radius:9px;background:var(--qj-soft);padding:8px 14px}
+
+
+/* 二级设置更紧凑：保留可点击面积，但减少反复滚动。 */
+.qj-page{padding:12px 14px 24px}
+.qj-section-head{padding:0 2px 9px}
+.qj-section-head h2{font-size:17px;margin-bottom:3px}
+.qj-row-group{border-radius:13px}
+.qj-row{min-height:51px;padding:8px 13px;gap:0}
+.qj-row span{font-size:13px}
+.qj-row small{font-size:10px;line-height:1.35}
+.qj-topbar{height:54px}
+.qj-top-title strong{font-size:16px}
+.qj-bottom{height:calc(59px + env(safe-area-inset-bottom,0px));padding:3px 12px calc(4px + env(safe-area-inset-bottom,0px))}
+.qj-bottom button span{font-size:21px}
+.qj-preview-label{bottom:calc(59px + env(safe-area-inset-bottom,0px))}
