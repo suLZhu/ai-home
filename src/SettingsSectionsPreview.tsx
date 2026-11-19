@@ -35,11 +35,6 @@ const pages: Record<string, Group[]> = {
       { title: '网页工具', detail: '联网搜索、内置浏览器' },
       { title: '工具调用记录', detail: '查看本次调用、结果和错误' },
     ] },
-    { heading: '定时与主动任务', rows: [
-      { title: '定时任务', detail: '创建、编辑和管理重复任务' },
-      { title: '主动聊天', detail: '设置助手主动联系的规则' },
-      { title: '任务执行记录', detail: '最近触发、结果与失败原因' },
-    ] },
   ],
   '记忆与上下文': [
     { heading: '每位助手独立保存', rows: [
