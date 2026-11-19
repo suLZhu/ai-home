@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import './LayoutPrototype.css'
 import { settingItems } from './layout/sections'
 import { ProviderPreview, SubscriptionPreview, UsageLedgerPreview } from './ProviderUsagePreview'
@@ -16,6 +16,24 @@ export default function LayoutPrototype() {
   const [toolsOpen, setToolsOpen] = useState(false)
   const [conversation, setConversation] = useState('今天的聊天')
   const [theme, setTheme] = useState('银杏奶灰')
+  const mainRef = useRef<HTMLElement>(null)
+  const settingsScrollRef = useRef(0)
+  const previousNav = useRef({view: 'home' as View, section: null as string | null})
+  useLayoutEffect(() => {
+    const before = previousNav.current
+    if (mainRef.current) {
+      if (view === 'settings' && !section && before.view === 'settings' && before.section) {
+        mainRef.current.scrollTop = settingsScrollRef.current
+      } else if (view !== before.view || section !== before.section) {
+        mainRef.current.scrollTop = 0
+      }
+    }
+    previousNav.current = {view, section}
+  }, [view, section])
+  function openSection(name: string) {
+    if (view === 'settings' && !section) settingsScrollRef.current = mainRef.current?.scrollTop || 0
+    setSection(name)
+  }
 
   function go(next: View) {
     setView(next)
@@ -27,7 +45,6 @@ export default function LayoutPrototype() {
     view === 'settings' ? (section || '设置') :
     view === 'theme' ? '主题中心' : person + '的资料'
   return <div className="qj-preview">
-    <div className="qj-status" aria-hidden="true"><span>10:24</span><span>●  ▰  ▰  100%</span></div>
     <header className="qj-topbar">
       {(view === 'chat' || view === 'home') ? <button className="qj-icon" aria-label="打开侧边栏" onClick={() => setDrawer(true)}>☰</button> :
        <button className="qj-icon" aria-label="返回" onClick={() => {
@@ -42,7 +59,7 @@ export default function LayoutPrototype() {
 
 
     </header>
-    <main className="qj-main">
+    <main className="qj-main" ref={mainRef}>
       {view === 'home' && <div className="qj-home">
         <div className="qj-home-hero"><strong>10:24</strong><span>星期三 · 11月18日</span><p>晚上好。家里很安静，说点什么吧。</p></div>
         <div className="qj-home-people">
@@ -86,7 +103,7 @@ export default function LayoutPrototype() {
             </>}
         </> : <>
           <div className="qj-section-head"><h2>设置中心</h2><p>常用功能在前，其他功能集中管理。</p></div>
-          <div className="qj-row-group">{settingItems.map(([name, desc]) => <button key={name} className="qj-row" onClick={() => setSection(name)}>
+          <div className="qj-row-group">{settingItems.map(([name, desc]) => <button key={name} className="qj-row" onClick={() => openSection(name)}>
             <span>{name}</span><small>{desc}</small><i>›</i></button>)}</div>
         </>}
       </div>}
