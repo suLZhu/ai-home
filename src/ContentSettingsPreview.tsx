@@ -60,7 +60,7 @@ export function ContentSettingsPreview({ type }: {type:'memory'|'chat'|'diagnost
   const [notice,setNotice] = useState('')
   const groups = type==='memory'?memoryGroups:type==='chat'?chatGroups:diagnosticGroups
   const title = type==='memory'?'记忆与上下文':type==='chat'?'聊天与消息':'诊断与维护'
-  function open(name:string,desc:string) {setTopic(name);setSearch('');setNotice('')}
+  function open(name:string) {setTopic(name);setSearch('');setNotice('')}
   const previewRow = (name:string,desc:string,onClick:()=>void,right='›')=><button key={name} className="qj-content-row" onClick={onClick}><span><b>{name}</b><small>{desc}</small></span><em>{right}</em></button>
   const toggle = (name:string,desc:string) =>previewRow(name,desc,()=>setSwitches(old=>({...old,[name]:!old[name]})),switches[name]?'演示开启':'演示关闭')
   return <div className="qj-content-page">
@@ -68,7 +68,7 @@ export function ContentSettingsPreview({ type }: {type:'memory'|'chat'|'diagnost
       {topic&&<button className="qj-content-back" onClick={()=>setTopic('')}>‹ 返回分类</button>}
       <h2>{topic||title}</h2><p>交互布局预览 · 模拟数据不会写入真实设置</p>
     </header>
-    {!topic && groups.map(group=><section className="qj-content-group" key={group.title}><h3>{group.title}</h3><div className="qj-content-list">{group.rows.map(x=>previewRow(x.name,x.desc,()=>open(x.name,x.desc)))}</div></section>)}
+    {!topic && groups.map(group=><section className="qj-content-group" key={group.title}><h3>{group.title}</h3><div className="qj-content-list">{group.rows.map(x=>previewRow(x.name,x.desc,()=>open(x.name)))}</div></section>)}
     {!!topic && <>
       {type==='memory' && ['记忆条目','记忆搜索','世界书'].includes(topic) ? <>
         <div className="qj-content-tabs">{(['小晏','言朔'] as const).map(x=><button key={x} className={who===x?'active':''} onClick={()=>setWho(x)}>{x}</button>)}</div>
