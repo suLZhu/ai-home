@@ -54,3 +54,65 @@
 .qj-message .qj-avatar{width:30px;height:30px;font-size:12px}
 .qj-message p{font-size:12px;line-height:1.55;padding:9px 11px;border-radius:13px;letter-spacing:0;overflow-wrap:anywhere}
 .qj-message.mine p{border-radius:13px}
+
+
+/* 视觉收边：统一表面层级、边界、点击反馈和底栏质感。 */
+.qj-preview{
+  --qj-surface:#ffffff;
+  --qj-surface-soft:#fafbf9;
+  --qj-line-soft:#edf0eb;
+  --qj-shadow-soft:0 8px 26px #2434240a;
+  --qj-radius-lg:16px;
+  --qj-radius-md:13px;
+  background:linear-gradient(180deg,#fff 0%,#fcfdfb 100%);
+}
+.qj-topbar{
+  background:#ffffffed;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.qj-row-group,.qj-home-person,.qj-room-hero,.qj-theme-tile{
+  box-shadow:var(--qj-shadow-soft);
+}
+.qj-row,.qj-home-person,.qj-theme-tile,.qj-bottom button,.qj-chat-switch button,.qj-assistant,.qj-drawer-conv,.qj-new{
+  transition:background .16s ease,border-color .16s ease,transform .12s ease;
+}
+.qj-row:active,.qj-home-person:active,.qj-theme-tile:active,.qj-assistant:active,.qj-drawer-conv:active,.qj-new:active{
+  transform:scale(.992);
+}
+.qj-row:active,.qj-home-person:active{background:#f7f9f6}
+.qj-bottom{
+  background:#ffffffef;
+  backdrop-filter:blur(15px);
+  -webkit-backdrop-filter:blur(15px);
+  box-shadow:0 -7px 24px #26352608;
+}
+.qj-bottom button.active{
+  background:#edf3ea;
+  box-shadow:inset 0 0 0 1px #dfe8dc;
+}
+.qj-home-person{
+  background:linear-gradient(180deg,#fff,#fbfcfa);
+  border-color:#e8ece5;
+}
+.qj-home-person-info em{
+  border:1px solid #e2eadf;
+}
+.qj-theme-tile.selected{
+  box-shadow:0 8px 24px #536d4b17,inset 0 0 0 1px #b7c9b1;
+}
+.qj-composer{
+  background:#ffffffef;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.qj-compose-placeholder{
+  background:#f8faf7;
+}
+.qj-tool-tray,.qj-drawer,.qj-mini-menu{
+  border-color:#e5eae2;
+  box-shadow:0 16px 42px #1d291d1f;
+}
+.qj-drawer{
+  background:linear-gradient(180deg,#fff,#fbfcfa);
+}
