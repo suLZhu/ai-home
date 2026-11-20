@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { apiFetch } from './apiBase.mjs'
-import { blankVendor, groupModels, modelListUrl, normalizeVendors, syncVendorProfiles, type Vendor } from './vendors.mjs'
+import { blankVendor, groupModels, modelListUrl, normalizeVendors, syncVendorProfiles, type Vendor, type VendorModel } from './vendors.mjs'
 import './ProviderUsagePreview.css'
 
 const VENDORS_KEY='ai-home.vendors'
@@ -84,8 +84,8 @@ export function RealProviderPreview(){
       const ids=Array.isArray(data?.models)?data.models.map((x:any)=>String(x)).filter(Boolean):[]
       if(!ids.length){setMessage('接口正常，但没有返回模型列表。');return}
       const old=new Map((current.models||[]).map(m=>[m.id,m]))
-      const models=ids.map((id:string)=>old.get(id)||{id,name:id,selected:false,source:'remote'})
-      for(const m of current.models||[])if(!models.some(x=>x.id===m.id)&&m.selected)models.push(m)
+      const models: VendorModel[]=ids.map((id:string)=>old.get(id)||{id,name:id,selected:false,source:'remote'})
+      for(const m of current.models||[])if(!models.some((x:VendorModel)=>x.id===m.id)&&m.selected)models.push(m)
       patch({models});setMessage('已获取 '+ids.length+' 个模型。')
     }catch(e){setMessage(e instanceof Error?e.message:'获取模型失败。')}
     finally{setBusy(false)}
