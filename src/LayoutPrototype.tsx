@@ -4,6 +4,7 @@ import { settingItems } from './layout/sections'
 import { ProviderPreview, SubscriptionPreview, UsageLedgerPreview } from './ProviderUsagePreview'
 import { SettingsSectionsPreview } from './SettingsSectionsPreview'
 import { ModelFunctionsPreview, ScheduledTasksPreview } from './FeaturePagesPreview'
+import { AdvancedSettingsPreview } from './AdvancedSettingsPreview'
 
 type View = 'home' | 'chat' | 'room' | 'settings' | 'theme' | 'profile'
 type Person = '小晏' | '言朔'
@@ -102,6 +103,8 @@ export default function LayoutPrototype() {
             section === 'AI 用量账本' ? <UsageLedgerPreview /> :
             section === '模型功能' ? <ModelFunctionsPreview /> :
             section === '定时任务' ? <ScheduledTasksPreview /> :
+            section === '工具与扩展' ? <AdvancedSettingsPreview kind="tools" /> :
+            section === '应用与设备' ? <AdvancedSettingsPreview kind="device" /> :
             <SettingsSectionsPreview section={section} onTheme={() => go('theme')} />}
         </> : <>
           <div className="qj-section-head"><h2>设置中心</h2><p>常用功能在前，其他功能集中管理。</p></div>
