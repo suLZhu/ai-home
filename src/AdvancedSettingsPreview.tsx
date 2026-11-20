@@ -101,7 +101,10 @@ export function AdvancedSettingsPreview({ kind }: { kind: 'tools' | 'device' }) 
       <h3>{dialog.title}</h3><p>{dialog.description}</p>
       {dialog.options && <div className="qj-dialog-options">{dialog.options.map(opt=><button key={opt} onClick={()=>{if(panel==='mcp'&&tools.length){if(opt==='删除示例服务')setTools([]);else setTools(xs=>xs.map(x=>({...x,enabled:opt==='模拟启用'})))}setNotice('仅模拟界面操作，没有连接真实服务。');setDialog(null)}}>{opt}<span>›</span></button>)}</div>}
       {dialog.destructive&&<p className="qj-dialog-warning">演示模式不会执行破坏性操作。</p>}
-      <div className="qj-dialog-actions"><button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>关闭</button></div>
+      <div className="qj-dialog-actions">
+        <button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>{dialog.destructive?'取消':'关闭'}</button>
+        {dialog.destructive&&<button className="qj-dialog-danger" onClick={()=>{setNotice('演示确认完成，真实数据和权限没有改变。');setDialog(null)}}>确认操作</button>}
+      </div>
     </div></div>}
   </div>
 }
