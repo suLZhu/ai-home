@@ -89,7 +89,17 @@ export function ProviderPreview() {
       <ModelSelector key={current.id} selected={current.selected} options={current.available} onChange={selected => patch({ selected })}/>
       <details className="pup-advanced"><summary>高级选项（多 Key / 请求路径 / 接口测试）</summary><p>这部分将复用原版栖间已有功能，先不占用主页面。</p></details>
       <div className="pup-provider-actions"><button className="pup-main-button" onClick={() => setSaved(true)}>{saved ? '✓ 演示配置已保存' : '保存供应商'}</button><button className="pup-delete-button" onClick={() => setConfirmDelete(true)}>删除供应商</button></div>
-      {confirmDelete && <div className="pup-delete-confirm" role="dialog" aria-label="确认删除供应商"><p>确定删除「{current.name}」吗？此操作仅影响本次预览的模拟配置。</p><div><button onClick={() => setConfirmDelete(false)}>取消</button><button className="danger" onClick={removeCurrent}>确认删除</button></div></div>}
+      {confirmDelete && <div className="qj-dialog-layer" onClick={() => setConfirmDelete(false)}>
+        <div className="qj-dialog" role="dialog" aria-modal="true" aria-label="确认删除供应商" onClick={e => e.stopPropagation()}>
+          <h3>删除供应商？</h3>
+          <p>确定删除「{current.name}」吗？</p>
+          <p className="qj-dialog-warning">当前为预览，只会移除页面内的模拟配置，不会修改真实供应商数据。</p>
+          <div className="qj-dialog-actions">
+            <button className="qj-dialog-cancel" onClick={() => setConfirmDelete(false)}>取消</button>
+            <button className="qj-dialog-danger" onClick={removeCurrent}>确认删除</button>
+          </div>
+        </div>
+      </div>}
     </div>}
     <p className="pup-footnote">当前为交互原型，数据只在页面内演示；不向真实接口发送 Key。</p>
   </div>
