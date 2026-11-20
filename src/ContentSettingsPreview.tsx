@@ -88,7 +88,7 @@ export function ContentSettingsPreview({ type }: {type:'memory'|'chat'|'diagnost
         {previewRow('查看检查内容','权限、任务、请求和日志',()=>setDialog({name:topic,desc:'正式版从原有诊断、日志或备份系统获取最新状态，不展示虚构的成功结果。'}))}
         {topic==='清理缓存'&&previewRow('清理临时缓存','危险操作需要二次确认',()=>setDialog({name:'确认清理缓存',desc:'演示版不会真正清理或删除任何数据。',danger:true}))}
       </div>}
-      {topic && !(['记忆条目','记忆搜索','世界书','聊天字号','待发送消息','通知偏好','提示铃声'].includes(topic) || type==='diagnostic')&&type!=='diagnostic'&&
+      {topic && type!=='diagnostic' && !['记忆条目','记忆搜索','世界书','聊天字号','待发送消息','通知偏好','提示铃声'].includes(topic) &&
         <div className="qj-content-panel">{previewRow('基础设置','查看和编辑当前功能选项',()=>setDialog({name:topic,desc:'这里将复用栖间原版的实际功能及数据；当前展示统一编辑窗口。'}))}
         {previewRow('高级选项','收纳不常用的细节',()=>setDialog({name:'高级选项',desc:'正式版只展示实际可用的配置项，不增加虚假功能。'}))}</div>}
     </>}
