@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { AndroidSystemSettings } from './AndroidSystemSettings'
+import { AppLockSettings } from './AppLockSettings'
 import './AdvancedSettingsPreview.css'
 
 type Panel = { id: string; title: string; note: string }
@@ -17,28 +19,14 @@ const devicePanels: Panel[] = [
   { id: 'lock', title: '应用锁', note: 'PIN、锁定名单与排除名单' },
   { id: 'backup', title: '备份与恢复', note: '导出、恢复及同步状态' },
 ]
-const demoApps = [
-  { id: 'com.example.browser', name: '示例浏览器' },
-  { id: 'com.example.notes', name: '示例笔记' },
-  { id: 'com.example.music', name: '示例音乐' },
-  { id: 'com.example.gallery', name: '示例相册' },
-]
-
 export function AdvancedSettingsPreview({ kind }: { kind: 'tools' | 'device' }) {
   const [panel, setPanel] = useState('')
   const [dialog, setDialog] = useState<Dialog | null>(null)
-  const [locked, setLocked] = useState<string[]>(['com.example.notes'])
-  const [excluded, setExcluded] = useState<string[]>(['com.example.music'])
-  const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
   const [tools, setTools] = useState([{ id: 'sample', name: '示例 MCP 服务', enabled: false }])
   const items = kind === 'tools' ? toolPanels : devicePanels
   useEffect(() => { setPanel(''); setDialog(null); setNotice('') }, [kind])
 
-  function selectMode(id: string, next: 'locked' | 'excluded' | 'none') {
-    setLocked(xs => xs.filter(x => x !== id).concat(next === 'locked' ? [id] : []))
-    setExcluded(xs => xs.filter(x => x !== id).concat(next === 'excluded' ? [id] : []))
-  }
   function row(label: string, detail: string, onClick: () => void, right = '›') {
     return <button type="button" className="qj-advanced-row" key={label} onClick={onClick}><span><b>{label}</b><small>{detail}</small></span><em>{right}</em></button>
   }
@@ -74,10 +62,13 @@ export function AdvancedSettingsPreview({ kind }: { kind: 'tools' | 'device' }) 
       {row('修改权限','写入、删除、执行命令',()=>setDialog({title:'修改权限',description:'敏感操作需要清楚的确认与审计。',destructive:true}))}
       {row('工作区自检','检查状态并显示中文结论',()=>setDialog({title:'工作区自检',description:'助手自动排查尚未接入，当前仅预留布局。'}))}
     </div>}
-    {panel === 'notify' && <div className="qj-advanced-list">
-      {row('消息提示声音','以系统通知渠道的实际设置为准',()=>setDialog({title:'通知铃声',description:'Android 8 及以上由系统通知渠道管理铃声。正式版提供打开系统渠道设置及真机通知测试。'}))}
-      {row('振动与锁屏','检查系统通知权限和提示模式',()=>setDialog({title:'振动与锁屏',description:'需要系统授权；页面开关不代表渠道真的有声音。'}))}
-      {row('发送测试通知','需要原生 Android 真正投递通知',()=>setDialog({title:'测试通知',description:'当前为布局预览，不发送假通知或播放假铃声。'}))}
+    {panel === 'notify' && <div className="qj-advanced-body">
+      <AndroidSystemSettings
+        people={['assistant-yanweixi','assistant-yanshuo']}
+        displayName={id=>id==='assistant-yanweixi'?'小晏':'言朔'}
+        avatarOf={()=>''}
+      />
+      <p className="qj-advanced-note">这里已接入真实 Android 通知偏好、系统能力状态与测试通知；电脑预览会自动显示不可用。</p>
     </div>}
     {panel === 'background' && <div className="qj-advanced-list">
       {row('后台持续生成','退出页面后继续生成回复',()=>setDialog({title:'后台持续生成',description:'正式版读取后台服务真实状态，不用模拟开关冒充成功。'}))}
@@ -85,11 +76,8 @@ export function AdvancedSettingsPreview({ kind }: { kind: 'tools' | 'device' }) 
       {row('悬浮窗权限','显示授权状态',()=>setDialog({title:'悬浮窗',description:'需要原生设备权限，浏览器预览不可请求。'}))}
     </div>}
     {panel === 'lock' && <div className="qj-advanced-body">
-      <div className="qj-advanced-toolbar"><strong>应用锁</strong><button onClick={()=>setDialog({title:'设置 PIN',description:'正式版复用原生 PIN、无障碍授权与校验流程。演示数据与本机应用互不影响。'})}>设置 PIN</button></div>
-      <input className="qj-advanced-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="搜索应用（演示名单）" aria-label="搜索应用"/>
-      <div className="qj-advanced-list">{demoApps.filter(app=>app.name.includes(search.trim())||app.id.includes(search.trim())).map(app=>
-        <div className="qj-app-choice" key={app.id}><div><b>{app.name}</b><small>{app.id}</small></div><select aria-label={app.name+' 管理方式'} value={locked.includes(app.id)?'locked':excluded.includes(app.id)?'excluded':'none'} onChange={e=>selectMode(app.id,e.target.value as 'locked'|'excluded'|'none')}><option value="none">不锁定</option><option value="locked">锁定</option><option value="excluded">排除</option></select></div>)}</div>
-      <p className="qj-advanced-note">锁定 {locked.length} 个 · 排除 {excluded.length} 个（仅模拟）。排除的应用不会再被锁定；栖间自身与必要系统入口不可锁。</p>
+      <AppLockSettings />
+      <p className="qj-advanced-note">应用锁已接入原生真实应用列表、PIN 与无障碍服务状态。排除名单仍是下一步要补的原生能力。</p>
     </div>}
     {panel === 'backup' && <div className="qj-advanced-list">
       {row('导出备份','配置、助手与聊天资料',()=>setDialog({title:'导出备份',description:'正式版复用原有导出功能，演示模式不生成真实备份。'}))}
