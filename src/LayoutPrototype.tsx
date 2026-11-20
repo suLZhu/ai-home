@@ -5,6 +5,7 @@ import { ProviderPreview, SubscriptionPreview, UsageLedgerPreview } from './Prov
 import { SettingsSectionsPreview } from './SettingsSectionsPreview'
 import { ModelFunctionsPreview, ScheduledTasksPreview } from './FeaturePagesPreview'
 import { AdvancedSettingsPreview } from './AdvancedSettingsPreview'
+import { ContentSettingsPreview } from './ContentSettingsPreview'
 
 type View = 'home' | 'chat' | 'room' | 'settings' | 'theme' | 'profile'
 type Person = '小晏' | '言朔'
@@ -105,6 +106,9 @@ export default function LayoutPrototype() {
             section === '定时任务' ? <ScheduledTasksPreview /> :
             section === '工具与扩展' ? <AdvancedSettingsPreview kind="tools" /> :
             section === '应用与设备' ? <AdvancedSettingsPreview kind="device" /> :
+            section === '记忆与上下文' ? <ContentSettingsPreview type="memory" /> :
+            section === '聊天与消息' ? <ContentSettingsPreview type="chat" /> :
+            section === '诊断与维护' ? <ContentSettingsPreview type="diagnostic" /> :
             <SettingsSectionsPreview section={section} onTheme={() => go('theme')} />}
         </> : <>
           <div className="qj-section-head"><h2>设置中心</h2><p>常用功能在前，其他功能集中管理。</p></div>
