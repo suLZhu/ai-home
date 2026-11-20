@@ -2,9 +2,9 @@ import { useState } from 'react'
 import './RoomAssistantPreview.css'
 
 type Assistant = '小晏' | '言朔'
-type Dialog = { title: string; text: string; danger?: boolean; action?: 'delete-conversation'|'remove-widget' }
+type Dialog = { title: string; text: string; danger?: boolean; action?: 'delete-conversation'|'remove-widget'; targetId?: string }
 
-const conversations = [
+const initialConversations = [
   { id: 'today', title: '今天的聊天', detail: '最近消息 · 10:24' },
   { id: 'plan', title: '栖间功能规划', detail: '昨天 · 18:42' },
 ]
@@ -19,6 +19,7 @@ export function RoomAssistantPreview() {
   const [page,setPage] = useState<'root'|'profile'|'sessions'|'room'|'widgets'>('root')
   const [roomStyle,setRoomStyle] = useState('浅色房间')
   const [enabledWidgets,setEnabledWidgets] = useState(['note'])
+  const [conversationList,setConversationList] = useState(initialConversations)
   const [dialog,setDialog] = useState<Dialog|null>(null)
   const [notice,setNotice] = useState('')
 
@@ -58,7 +59,7 @@ export function RoomAssistantPreview() {
 
     {page==='sessions'&&<div className="qj-ra-panel">
       <div className="qj-ra-toolbar"><strong>{assistant}的会话</strong><button onClick={()=>setNotice('演示：正式版在这里创建真实会话。')}>＋ 新建</button></div>
-      <div className="qj-ra-list">{conversations.map(c=><div className="qj-ra-session" key={c.id}><button onClick={()=>setNotice('演示打开「'+c.title+'」')}><b>{c.title}</b><small>{c.detail}</small></button><button className="more" onClick={()=>setDialog({title:'删除会话？',text:'确认后仅从预览中演示移除，不会删除真实聊天。',danger:true,action:'delete-conversation'})}>⋯</button></div>)}</div>
+      <div className="qj-ra-list">{conversationList.map(c=><div className="qj-ra-session" key={c.id}><button onClick={()=>setNotice('演示打开「'+c.title+'」')}><b>{c.title}</b><small>{c.detail}</small></button><button className="more" onClick={()=>setDialog({title:'删除会话？',text:'确认后仅从预览中演示移除，不会删除真实聊天。',danger:true,action:'delete-conversation',targetId:c.id})}>⋯</button></div>)}</div>
       <p className="qj-ra-note">正式版返回该列表时应保留原来的滚动位置。</p>
     </div>}
 
@@ -72,14 +73,18 @@ export function RoomAssistantPreview() {
 
     {page==='widgets'&&<div className="qj-ra-panel">
       <div className="qj-ra-toolbar"><strong>已启用 {enabledWidgets.length} 个</strong><button onClick={()=>setNotice('演示：以后可从组件库添加。')}>＋ 添加组件</button></div>
-      <div className="qj-ra-list">{widgets.map(w=><div className="qj-ra-widget" key={w.id}><div><b>{w.title}</b><small>{w.detail}</small></div>{enabledWidgets.includes(w.id)?<button onClick={()=>setDialog({title:'移除组件？',text:'仅从房间中移除，不删除组件数据。',danger:true,action:'remove-widget'})}>移除</button>:<button onClick={()=>setEnabledWidgets(old=>[...old,w.id])}>添加</button>}</div>)}</div>
+      <div className="qj-ra-list">{widgets.map(w=><div className="qj-ra-widget" key={w.id}><div><b>{w.title}</b><small>{w.detail}</small></div>{enabledWidgets.includes(w.id)?<button onClick={()=>setDialog({title:'移除组件？',text:'仅从房间中移除，不删除组件数据。',danger:true,action:'remove-widget',targetId:w.id})}>移除</button>:<button onClick={()=>setEnabledWidgets(old=>[...old,w.id])}>添加</button>}</div>)}</div>
       <p className="qj-ra-note">组件数据、排序和自由拖动留待真实房间功能接入后测试。</p>
     </div>}
 
     {notice&&<p className="qj-ra-notice" role="status">{notice}</p>}
     {dialog&&<div className="qj-dialog-layer" onClick={()=>setDialog(null)}><div className="qj-dialog" role="dialog" aria-modal="true" aria-label={dialog.title} onClick={e=>e.stopPropagation()}>
       <h3>{dialog.title}</h3><p>{dialog.text}</p>{dialog.danger&&<p className="qj-dialog-warning">当前为预览，不会修改真实数据。</p>}
-      <div className="qj-dialog-actions"><button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>取消</button><button className="qj-dialog-danger" onClick={()=>{if(dialog.action==='remove-widget')setEnabledWidgets([]);setNotice('演示操作完成，真实数据没有改变。');setDialog(null)}}>确认</button></div>
+      <div className="qj-dialog-actions"><button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>取消</button><button className="qj-dialog-danger" onClick={()=>{
+        if(dialog.action==='remove-widget'&&dialog.targetId)setEnabledWidgets(old=>old.filter(id=>id!==dialog.targetId))
+        if(dialog.action==='delete-conversation'&&dialog.targetId)setConversationList(old=>old.filter(item=>item.id!==dialog.targetId))
+        setNotice('演示操作完成，真实数据没有改变。');setDialog(null)
+      }}>确认</button></div>
     </div></div>}
   </div>
 }
