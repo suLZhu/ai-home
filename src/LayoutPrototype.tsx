@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import './LayoutPrototype.css'
 import { settingItems } from './layout/sections'
-import { ProviderPreview, SubscriptionPreview, UsageLedgerPreview } from './ProviderUsagePreview'
+import { SubscriptionPreview, UsageLedgerPreview } from './ProviderUsagePreview'
+import { RealProviderPreview } from './RealProviderPreview'
 import { SettingsSectionsPreview } from './SettingsSectionsPreview'
 import { ModelFunctionsPreview, ScheduledTasksPreview } from './FeaturePagesPreview'
 import { AdvancedSettingsPreview } from './AdvancedSettingsPreview'
@@ -100,7 +101,7 @@ export default function LayoutPrototype() {
       </div>}
       {view === 'settings' && <div className="qj-page">
         {section ? <>
-          {section === '供应商' ? <ProviderPreview /> :
+          {section === '供应商' ? <RealProviderPreview /> :
             section === '订阅' ? <SubscriptionPreview /> :
             section === 'AI 用量账本' ? <UsageLedgerPreview /> :
             section === '模型功能' ? <ModelFunctionsPreview /> :
