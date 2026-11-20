@@ -97,7 +97,10 @@ export function ContentSettingsPreview({ type }: {type:'memory'|'chat'|'diagnost
       <h3>{dialog.name}</h3><p>{dialog.desc}</p>
       {dialog.choices&&<div className="qj-dialog-options">{dialog.choices.map(x=><button key={x} onClick={()=>{setNotice(x+'：演示操作，不修改真实数据');setDialog(null)}}>{x}<span>›</span></button>)}</div>}
       {dialog.danger&&<p className="qj-dialog-warning">此版本不会实际清理。</p>}
-      <div className="qj-dialog-actions"><button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>关闭</button></div>
+      <div className="qj-dialog-actions">
+        <button className="qj-dialog-cancel" onClick={()=>setDialog(null)}>{dialog.danger?'取消':'关闭'}</button>
+        {dialog.danger&&<button className="qj-dialog-danger" onClick={()=>{setNotice('演示确认完成，真实缓存和数据没有改变。');setDialog(null)}}>确认清理</button>}
+      </div>
     </div></div>}
   </div>
 }
