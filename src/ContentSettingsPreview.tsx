@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChatDisplaySettings } from './ChatDisplay'
 import './ContentSettingsPreview.css'
 
 type Topic = { name: string; desc: string }
@@ -77,7 +78,7 @@ export function ContentSettingsPreview({ type }: {type:'memory'|'chat'|'diagnost
         <button className="qj-content-primary" onClick={()=>setDialog({name:'新增'+(topic==='世界书'?'条目':'记忆'),desc:'正式版添加标题、正文、触发关键词和助手绑定。'})}>＋ 新增{topic==='世界书'?'条目':'记忆'}</button>
         <p className="qj-content-note">当前只是独立助手数据区的布局示范，演示内容不代表真实记忆。</p>
       </> : null}
-      {topic==='聊天字号'&&<div className="qj-content-panel"><p>当前预览聊天文字大小：{fontSize} 号</p><div className="qj-content-pills">{['12','13','14','15','16'].map(x=><button key={x} className={fontSize===x?'active':''} onClick={()=>setFontSize(x)}>{x} 号</button>)}</div><div className="qj-content-chat-sample" style={{fontSize:Number(fontSize)}}>文字大小预览：一行容纳更多文字，阅读也要舒服。</div><small>这里只调整样例，功能接入后同步到真实聊天界面。</small></div>}
+      {topic==='聊天字号'&&<div className="qj-content-panel"><p>当前预览聊天文字大小：{fontSize} 号</p><div className="qj-content-pills">{['12','13','14','15','16'].map(x=><button key={x} className={fontSize===x?'active':''} onClick={()=>setFontSize(x)}>{x} 号</button>)}</div><div className="qj-content-chat-sample" style={{fontSize:Number(fontSize)}}>文字大小预览：一行容纳更多文字，阅读也要舒服。</div><small>字号这项仍是新版布局预览；头像、名称、时间、Token、思考与工具调用已经接入真实聊天展示设置。</small><ChatDisplaySettings /></div>}
       {topic==='待发送消息'&&<div className="qj-content-panel">{toggle('开启待发送区','生成上一条回复时允许排队输入')}{toggle('发送前允许编辑','待发送内容可随时修改或撤回')}<p className="qj-content-note">两个开关仅演示交互；真实排队机制待功能集成。</p></div>}
       {topic==='通知偏好'&&<div className="qj-content-panel">{toggle('新消息提醒','其他会话或后台收到消息时通知')}{toggle('主动任务通知','任务完成后的主动消息')}{toggle('振动提醒','以 Android 系统通知渠道为准')}</div>}
       {topic==='提示铃声'&&<div className="qj-content-panel">
