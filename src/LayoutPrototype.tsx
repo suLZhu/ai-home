@@ -93,10 +93,10 @@ export default function LayoutPrototype() {
           <b>{person}的小空间</b><span>自由布置 · 图片 · 视频 · 小组件</span></div>
         <h3 className="qj-label">房间入口</h3>
         <div className="qj-row-group">
-          <button className="qj-row" onClick={() => setSection('房间布置')}><span>房间布置</span><small>查看布局预览</small><i>›</i></button>
+          <button className="qj-row" onClick={() => {setView('settings');setSection('房间与助手')}}><span>房间布置</span><small>进入房间与助手设置</small><i>›</i></button>
           <button className="qj-row" onClick={() => setSection('我的作品')}><span>我的作品</span><small>图片、视频、音乐</small><i>›</i></button>
         </div>
-        {section && <div className="qj-inline-note">「{section}」页面结构预留，本轮不接真实功能。</div>}
+        {section === '我的作品' && <div className="qj-inline-note">「我的作品」归入后续的栖间图库项目，本轮不制作假页面。</div>}
       </div>}
       {view === 'settings' && <div className="qj-page">
         {section ? <>
