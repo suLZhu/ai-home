@@ -27,3 +27,32 @@
 .qj-dialog-options button:last-child{border-bottom:0}
 .qj-dialog-options span{color:#789071}
 .qj-dialog .qj-dialog-warning{margin-top:12px;color:#a35a50}
+
+
+/* 统一二级页卡片与弹窗层级。 */
+.qj-subpage-list{
+  box-shadow:0 8px 24px #24342408;
+}
+.qj-subpage-row{
+  transition:background .15s ease;
+}
+.qj-subpage-row:active{
+  background:#f8faf7;
+}
+.qj-dialog-layer{
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+}
+.qj-dialog{
+  border:1px solid #edf0eb;
+  box-shadow:0 22px 60px #15201526;
+}
+.qj-dialog-actions button{
+  min-width:74px;
+}
+.qj-dialog-options button{
+  transition:background .15s ease;
+}
+.qj-dialog-options button:active{
+  background:#f7f9f6;
+}
