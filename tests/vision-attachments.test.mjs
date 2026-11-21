@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {messageWithVision,stableAttachmentReference,visionPartForAttachment} from '../src/visionAttachments.mjs'
+import {messageWithVision,stableAttachmentReference,visionPartForAttachment,historyVisionMessageIndexes,historicalMessageWithoutVision} from '../src/visionAttachments.mjs'
 
 test('image sticker data URL is actually sent as image_url', async()=>{
   const url='data:image/webp;base64,AAAA'
@@ -28,4 +28,21 @@ test('missing image bytes emit explicit missing-content warning, not a claim of 
 test('stable reference excludes stale blob URLs',()=>{
   assert.equal(stableAttachmentReference({preview:'blob:123'}),'')
   assert.equal(stableAttachmentReference({assetId:'a1'}),'/api/attachments/a1')
+})
+
+
+test('history vision budget keeps only newest image message',()=>{
+  const messages=[
+    {role:'user',content:'旧图',attachments:[{name:'old.png',type:'image/png'}]},
+    {role:'assistant',content:'看到了'},
+    {role:'user',content:'新图',attachments:[{name:'new.png',type:'image/png'}]},
+  ]
+  assert.deepEqual([...historyVisionMessageIndexes(messages,1)],[2])
+})
+
+test('older image history becomes a lightweight textual marker',()=>{
+  const out=historicalMessageWithoutVision({role:'user',content:'之前这张',attachments:[{name:'huge.png',type:'image/png'}]})
+  assert.equal(out.role,'user')
+  assert.match(String(out.content),/较早图片未重复发送/)
+  assert.match(String(out.content),/huge\.png/)
 })
