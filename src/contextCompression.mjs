@@ -93,6 +93,63 @@ export function buildSummarySystemMessage(summary, coveredMessages) {
   ].join('\n')
 }
 
+function recallTerms(query) {
+  const raw = String(query || '').trim()
+  if (!raw) return []
+  const terms = []
+  const seen = new Set()
+  const push = value => {
+    const term = String(value || '').trim()
+    if (term.length < 2 || seen.has(term)) return
+    seen.add(term)
+    terms.push(term)
+  }
+  for (const token of raw.split(/[\s，。！？、,.!?；;：:（）()【】“”"'<>]+/).filter(Boolean)) {
+    push(token)
+    // 中文长句常会换个说法继续聊；补少量 2~4 字片段，提高“那个之前说过的事”召回率。
+    if (/[㐀-鿿]/u.test(token) && token.length > 4) {
+      for (let size = 4; size >= 2 && terms.length < 18; size--) {
+        for (let i = 0; i + size <= token.length && terms.length < 18; i += Math.max(1, size - 1)) push(token.slice(i, i + size))
+      }
+    }
+    if (terms.length >= 18) break
+  }
+  return terms.slice(0, 18)
+}
+
+/**
+ * 当前聊天窗的本地旧原文召回。
+ * 只搜已经因为摘要/窗口预算而没有逐条发送的消息；纯同步、零网络，
+ * 用于在长对话中自动把与本轮话题最相关的旧细节补回上下文。
+ */
+export function searchMessageList(messages, query, limit = 4) {
+  const terms = recallTerms(query)
+  if (!terms.length) return []
+  const list = Array.isArray(messages) ? messages : []
+  const hits = []
+  for (let index = 0; index < list.length; index++) {
+    const message = list[index]
+    if (!message || (message.role !== 'user' && message.role !== 'assistant')) continue
+    const content = String(message.content || '').trim()
+    if (!content) continue
+    let score = 0
+    for (const term of terms) {
+      if (!content.includes(term)) continue
+      score += term.length >= 5 ? 4 : term.length >= 3 ? 2 : 1
+    }
+    if (!score) continue
+    hits.push({
+      index,
+      role: message.role,
+      at: message.at || '',
+      content: content.slice(0, 900),
+      score,
+    })
+  }
+  hits.sort((a, b) => b.score - a.score || b.index - a.index)
+  return hits.slice(0, Math.min(8, Math.max(1, Number(limit) || 4)))
+}
+
 /**
  * conversation_search 工具的实现：检索当前助手所有会话的原始消息（包括已被压缩的）。
  * 按关键词命中数排序，同分时较新的在前。
