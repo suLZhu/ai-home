@@ -9,6 +9,7 @@ on:
     paths:
       - '.github/workflows/build-qijian-debug.yml'
       - 'src/**'
+      - 'tests/**'
       - 'android/**'
       - 'package*.json'
       - 'capacitor.config.ts'
