@@ -4230,3 +4230,28 @@ body.has-pack .settings-screen{
 .shell .vendor-kelivo-provider-status.off,
 .shell .vendor-cap-state.fail,
 .shell .mcp-test.bad{color:var(--icon-danger,var(--danger,#ac5f68))!important}
+
+
+/* 设置一级入口：主标题已经足够明确时不再重复解释，条目同步收紧。 */
+.settings-screen .settings-flat-list .settings-row{
+  min-height:46px!important;
+  padding:7px 11px!important;
+  gap:9px!important;
+}
+.settings-screen .settings-flat-list .settings-row-icon{
+  width:30px!important;
+  height:30px!important;
+  flex-basis:30px!important;
+  border-radius:9px!important;
+}
+.settings-screen .settings-flat-list .settings-row-text{
+  justify-content:center!important;
+  gap:0!important;
+}
+.settings-screen .settings-flat-list .settings-row-text b{
+  font-size:12.5px!important;
+  line-height:1.2!important;
+}
+.settings-screen .settings-flat-list .settings-row-text small{
+  display:none!important;
+}
