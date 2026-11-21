@@ -3015,8 +3015,11 @@ function RequestStats({ messages }: { messages: ChatMessage[] }) {
           <span>输出 {Number(u.completionTokens || 0).toLocaleString()}</span>
           <span>合计 {total.toLocaleString()}</span>
           {u.cachedTokens || u.cacheReadTokens ? <span>缓存 {Number(u.cachedTokens || u.cacheReadTokens || 0).toLocaleString()}</span> : null}
+          {u.preflightMs!==undefined ? <span>前置 {(Number(u.preflightMs) / 1000).toFixed(1)}s</span> : null}
+          {u.firstTokenMs!==undefined ? <span>首包 {(Number(u.firstTokenMs) / 1000).toFixed(1)}s</span> : null}
+          {u.streamMs!==undefined ? <span>生成 {(Number(u.streamMs) / 1000).toFixed(1)}s</span> : null}
           {u.tokensPerSecond ? <span>{Math.round(Number(u.tokensPerSecond))} tok/s</span> : null}
-          {u.elapsedMs ? <span>{(Number(u.elapsedMs) / 1000).toFixed(1)}s</span> : null}
+          {u.elapsedMs ? <span>总计 {(Number(u.elapsedMs) / 1000).toFixed(1)}s</span> : null}
         </div>
       </div>
     })}</div>
