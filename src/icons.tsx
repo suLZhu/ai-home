@@ -5,7 +5,7 @@ import type { CSSProperties, ReactElement } from 'react'
 export type IconProps = { size?: number; className?: string }
 export type IconComponent = (props: IconProps) => ReactElement
 
-const ICON_KEYS = ["home","chat","user","settings","clock","memory","grid","calendar","coffee","photo","music","ledger","book","plus","sun","star","flower","list","palette","plug","chart","sparkles","folder","shield","info","back","chevron-right","chevron-down","chevron-up","close","edit","trash","eye","eye-off","arrow-up","arrow-down","switch","share","test","search","minus","file","warning","mail","lock","check","more","video","copy","refresh","emoji","menu"] as const
+const ICON_KEYS = ["home","chat","user","settings","clock","memory","grid","calendar","coffee","photo","music","ledger","book","plus","sun","star","flower","list","palette","plug","chart","sparkles","folder","shield","info","back","chevron-right","chevron-down","chevron-up","close","edit","trash","eye","eye-off","arrow-up","arrow-down","switch","share","test","search","minus","file","warning","mail","lock","check","more","video","copy","refresh","emoji","menu","mic","stop","send"] as const
 const ICON_INDEX: Record<string,number> = Object.fromEntries(ICON_KEYS.map((k,i)=>[k,i]))
 
 function IconImage({name,size=20,className}:{name:string}&IconProps){
@@ -67,3 +67,6 @@ export const IconCopy: IconComponent = props => <IconImage name="copy" {...props
 export const IconRefresh: IconComponent = props => <IconImage name="refresh" {...props}/>
 export const IconEmoji: IconComponent = props => <IconImage name="emoji" {...props}/>
 export const IconMenu: IconComponent = props => <IconImage name="menu" {...props}/>
+export const IconMic: IconComponent = props => <IconImage name="mic" {...props}/>
+export const IconStop: IconComponent = props => <IconImage name="stop" {...props}/>
+export const IconSend: IconComponent = props => <IconImage name="send" {...props}/>
