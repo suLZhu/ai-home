@@ -1384,6 +1384,10 @@ export default function App() {
     // 用户消息一入列就要求立刻落盘（把防抖哨兵标记为已超期），堵住「发送后 700ms 内刷新丢消息」。
     firstDirtyAtRef.current = Date.now() - CLOUD_FLUSH_MAX_MS
     const preflightStartedAt=performance.now()
+    const requestStartedAt=preflightStartedAt
+    let preflightFinishedAt=preflightStartedAt
+    let upstreamStartedAt=0
+    let firstTokenAt=0
     // Recall older original messages from this assistant's own conversations.
     // Search failures never block a chat request. The active conversation is excluded
     // because its recent messages are already provided verbatim below.
@@ -1392,8 +1396,8 @@ export default function App() {
     if (text.length >= 2) {
       // 记忆相关请求是增强项，不得拖住普通聊天：并行发起，超过软超时就跳过。
       const [recallResponse, memResponse] = await Promise.all([
-        fetchWithSoftTimeout('/api/memory/search?person='+encodeURIComponent(target)+'&q='+encodeURIComponent(text.slice(0,160))+'&exclude='+encodeURIComponent(sendConversationId||''), { credentials:'include' }, 1800, abortController.signal).catch(()=>null),
-        fetchWithSoftTimeout('/api/memory/records?person=' + encodeURIComponent(target) + '&lifecycle=active', { credentials:'include' }, 1800, abortController.signal).catch(()=>null),
+        fetchWithSoftTimeout('/api/memory/search?person='+encodeURIComponent(target)+'&q='+encodeURIComponent(text.slice(0,160))+'&exclude='+encodeURIComponent(sendConversationId||''), { credentials:'include' }, 900, abortController.signal).catch(()=>null),
+        fetchWithSoftTimeout('/api/memory/records?person=' + encodeURIComponent(target) + '&lifecycle=active', { credentials:'include' }, 900, abortController.signal).catch(()=>null),
       ])
       if (recallResponse?.ok) {
         try {
@@ -1409,7 +1413,7 @@ export default function App() {
           if (list.length) {
             const mm = readMemoryModels()
             const embedTarget = mm.embed.model ? embeddingTarget(vendors, mm.embed) : null
-            const queryVector = embedTarget ? await settleWithin(embedText(embedTarget, text.slice(0, 500)).catch(()=>null), 1600, null) : null
+            const queryVector = embedTarget ? await settleWithin(embedText(embedTarget, text.slice(0, 500)).catch(()=>null), 700, null) : null
             const scored = list.map(record => {
               const keywords = String(record.keywords || '').split(/[,，、\s]+/).filter(Boolean)
               const keywordScore = keywords.filter(keyword => text.includes(keyword)).length
@@ -1425,9 +1429,6 @@ export default function App() {
         } catch { /* optional memory parse/rank failure */ }
       }
     }
-    const requestStartedAt=preflightStartedAt
-    const preflightFinishedAt=performance.now()
-
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
     // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
     let lastStreamLog=0
@@ -1453,25 +1454,10 @@ export default function App() {
       let summaryFailed=false
       const compaction=planCompaction(visibleHistory)
       if(compaction.needed){
-        const chunk=visibleHistory.slice(0,compaction.cut)
-        try{
-          const summaryBody={model:activeModel.model.trim(),messages:buildSummaryPrompt(contextSummary,chunk),stream:false}
-          const summaryResponse=await fetchWithSoftTimeout('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:summaryBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})},6000,abortController.signal)
-          if(!summaryResponse.ok)throw new Error('HTTP '+summaryResponse.status)
-          const summaryData=await summaryResponse.json()
-          const summaryText=summaryData?.choices?.[0]?.message?.content
-          if(typeof summaryText!=='string'||!summaryText.trim())throw new Error('摘要为空')
-          contextSummary=summaryText.trim()
-          summaryThroughId=String(chunk[chunk.length-1]?.id||summaryThroughId)
-          summaryCovered+=chunk.length
-          coveredIndex+=chunk.length
-          visibleHistory=priorHistory.slice(coveredIndex+1)
-          setConversations(old=>({...old,[target]:(old[target]||[]).map(c=>c.id===sendConversationId?{...c,summary:contextSummary,summaryThroughId,summaryThrough:summaryCovered,summaryAt:new Date().toISOString()}:c)}))
-        }catch{
-          // 压缩失败：退回最近 20 条，同时明确告诉模型有旧对话没带上，别假装记得。
-          summaryFailed=true
-          visibleHistory=priorHistory.slice(-CONTEXT_LIMITS.keepMessages)
-        }
+        // 首条真实模型请求优先：不再为了更新摘要先额外打一轮 /api/chat。
+        // 已有摘要继续使用；本轮只保留最近消息。更早的原文需要时由 conversation_search 回查。
+        summaryFailed=true
+        visibleHistory=visibleHistory.slice(-CONTEXT_LIMITS.keepMessages)
       }
       // Restore previously uploaded image bytes for the model; a filename is not vision.
       const fetchVisionImage = (url:string) => url.startsWith('/api/attachments/')
@@ -1485,7 +1471,7 @@ export default function App() {
         if(m.role!=='user'||!m.attachments?.length)return {role:m.role,content:m.content}
         if(!historyVisionIndexes.has(index))return historicalMessageWithoutVision(m)
         const recentImages=m.attachments.filter(a=>a.type.startsWith('image/')).slice(-2)
-        return messageWithVision(m.role,m.content,recentImages,fetchVisionImage)
+        return settleWithin(messageWithVision(m.role,m.content,recentImages,fetchVisionImage),1200,historicalMessageWithoutVision(m))
       }))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
       for(const a of attachments.filter(a=>a.type.startsWith('image/'))){
@@ -1568,14 +1554,14 @@ export default function App() {
       }
 
       try {
-        const listResponse=await fetchWithSoftTimeout('/api/mcp?person='+encodeURIComponent(target),{credentials:'include'},1200,abortController.signal)
+        const listResponse=await fetchWithSoftTimeout('/api/mcp?person='+encodeURIComponent(target),{credentials:'include'},800,abortController.signal)
         if(listResponse.ok){
           const listData=await listResponse.json()
           const activeConnections=resolveMcpConnections(listData.connections, bindings[target])
           // MCP schema 也是增强项：并行读取，每个连接都有软超时，慢服务不再串行拖住聊天。
           const toolResults=await Promise.all(activeConnections.map(async connection=>{
             try{
-              const toolResponse=await fetchWithSoftTimeout('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})},1500,abortController.signal)
+              const toolResponse=await fetchWithSoftTimeout('/api/mcp/'+connection.id+'/tools',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({person:target})},1200,abortController.signal)
               if(!toolResponse.ok)return null
               return {connection,toolData:await toolResponse.json()}
             }catch{return null}
@@ -1603,8 +1589,11 @@ export default function App() {
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        if(!upstreamStartedAt){
+          preflightFinishedAt=performance.now()
+          upstreamStartedAt=preflightFinishedAt
+        }
         setGenerationStages(prev=>({...prev,[sendScope]:'connecting'}))
-        if(!upstreamStartedAt)upstreamStartedAt=performance.now()
         let response=await chatProxy()
         if(!response.ok){
           const detail=await response.text()
