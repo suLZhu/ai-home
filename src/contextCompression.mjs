@@ -10,9 +10,9 @@
 // 纯函数放这里，React/网络/存储都不依赖，可直接单测。
 
 export const CONTEXT_LIMITS = {
-  maxMessages: 32,   // 超过这个条数就考虑压缩
-  keepMessages: 20,  // 压缩后至少保留的最近消息数
-  maxChars: 24000,   // 最近消息的字数预算；超了就从最旧的开始多压几条
+  maxMessages: 24,   // 超过这个条数就考虑压缩
+  keepMessages: 14,  // 压缩后至少保留的最近消息数
+  maxChars: 16000,   // 最近消息的字数预算；超了就从最旧的开始多压几条
 }
 
 function textLen(message) {
@@ -57,7 +57,7 @@ const SUMMARY_SYSTEM = [
  * 构造压缩请求的 messages。已有摘要会和新增旧对话一起给模型合并。
  * 从最新往回取，保证最近的细节优先进入预算。
  */
-export function buildSummaryPrompt(previousSummary, messages, { maxChars = 20000 } = {}) {
+export function buildSummaryPrompt(previousSummary, messages, { maxChars = 12000 } = {}) {
   const list = Array.isArray(messages) ? messages : []
   const lines = []
   let budget = maxChars
