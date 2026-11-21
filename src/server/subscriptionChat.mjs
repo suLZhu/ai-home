@@ -364,9 +364,11 @@ export function subscriptionProtocolConfig(protocol, token, accountId) {
   }
   const headers = {
     Authorization: 'Bearer ' + token,
-    originator: 'qijian',
-    version: '0.159.0',
-    'User-Agent': 'qijian/2.3',
+    // Align ChatGPT-plan traffic with the current first-party Codex client identity.
+    // The backend has tightened validation over time; stale qijian/0.159 metadata can
+    // authenticate and list models yet still fail on /codex/responses.
+    originator: 'codex_cli_rs',
+    'User-Agent': 'codex_cli_rs/0.167.1 (Qijian Android)',
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
   }
