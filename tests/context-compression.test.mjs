@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   CONTEXT_LIMITS, planCompaction, buildSummaryPrompt,
-  buildSummarySystemMessage, searchHistory,
+  buildSummarySystemMessage, searchHistory, searchMessageList,
 } from '../src/contextCompression.mjs'
 
 const messages = (n, role = 'user', text = '一段对话') =>
@@ -44,6 +44,24 @@ test('前情提要消息告诉模型覆盖了多少条、可以回顾原文', ()
   assert.match(text, /更早的 12 条对话已压缩/)
   assert.match(text, /摘要正文/)
   assert.match(text, /conversation_search/)
+})
+
+
+
+test('当前聊天窗旧原文召回优先找与本轮相关的细节', () => {
+  const old = [
+    { role: 'user', content: '周六去桂花茶店，下午三点见。', at: '2026-11-14T10:00:00.000Z' },
+    { role: 'assistant', content: '记住了，三点到楼下等你。', at: '2026-11-14T10:01:00.000Z' },
+    { role: 'user', content: '客厅的灯以后换成暖色。', at: '2026-11-14T10:02:00.000Z' },
+  ]
+  const hits = searchMessageList(old, '桂花茶三点那个安排还记得吗', 4)
+  assert.ok(hits.length >= 1)
+  assert.match(hits[0].content, /桂花茶|三点/)
+  assert.ok(!hits.some(hit => /暖色/.test(hit.content) && hit.score >= hits[0].score))
+})
+
+test('当前聊天窗召回对空查询不返回内容', () => {
+  assert.deepEqual(searchMessageList(messages(10), ''), [])
 })
 
 test('conversation_search 检索原始消息并隔离助手', () => {
