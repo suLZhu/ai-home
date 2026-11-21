@@ -100,7 +100,15 @@ export function toAnthropicRequest(body = {}) {
     messages: out,
     stream: true,
   }
-  if (systems.length) request.system = systems.join('\n\n')
+  if (systems.length) {
+    const dynamicIndex = systems.findIndex(text => String(text || '').startsWith('【当前时间上下文】'))
+    const cacheIndex = dynamicIndex > 0 ? dynamicIndex - 1 : (dynamicIndex < 0 ? systems.length - 1 : -1)
+    request.system = systems.map((text, index) => ({
+      type: 'text',
+      text,
+      ...(index === cacheIndex ? { cache_control: { type: 'ephemeral' } } : {}),
+    }))
+  }
   const tools = convertTools(body.tools)
   if (tools.length) {
     request.tools = tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.parameters }))
@@ -192,7 +200,7 @@ function toolCallChunk(tool, index) {
 
 function createSink(res, streaming, model) {
   let text = ''
-  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 }, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
   let finish = 'stop'
   let tools = []
   return {
@@ -210,9 +218,15 @@ function createSink(res, streaming, model) {
     },
     setUsage(value) {
       if (!value) return
-      usage.prompt_tokens = Number(value.prompt_tokens) || 0
-      usage.completion_tokens = Number(value.completion_tokens) || 0
-      usage.total_tokens = Number(value.total_tokens) || usage.prompt_tokens + usage.completion_tokens
+      if (value.prompt_tokens != null) usage.prompt_tokens = Number(value.prompt_tokens) || 0
+      if (value.completion_tokens != null) usage.completion_tokens = Number(value.completion_tokens) || 0
+      if (value.cached_tokens != null) usage.prompt_tokens_details.cached_tokens = Number(value.cached_tokens) || 0
+      if (value.cache_creation_input_tokens != null) usage.cache_creation_input_tokens = Number(value.cache_creation_input_tokens) || 0
+      if (value.cache_read_input_tokens != null) {
+        usage.cache_read_input_tokens = Number(value.cache_read_input_tokens) || 0
+        usage.prompt_tokens_details.cached_tokens = usage.cache_read_input_tokens
+      }
+      usage.total_tokens = value.total_tokens != null ? (Number(value.total_tokens) || 0) : usage.prompt_tokens + usage.completion_tokens
     },
     finish() {
       if (!streaming) return
@@ -242,7 +256,14 @@ export async function convertAnthropicStream(stream, sink) {
     let payload
     try { payload = JSON.parse(data) } catch { continue }
     const type = payload.type || event
-    if (type === 'content_block_start' && payload.content_block?.type === 'tool_use') {
+    if (type === 'message_start' && payload.message?.usage) {
+      sink.setUsage({
+        prompt_tokens: payload.message.usage.input_tokens,
+        completion_tokens: payload.message.usage.output_tokens,
+        cache_creation_input_tokens: payload.message.usage.cache_creation_input_tokens,
+        cache_read_input_tokens: payload.message.usage.cache_read_input_tokens,
+      })
+    } else if (type === 'content_block_start' && payload.content_block?.type === 'tool_use') {
       tools.set(payload.index, { id: payload.content_block.id, name: payload.content_block.name, args: '' })
     } else if (type === 'content_block_delta') {
       const delta = payload.delta || {}
@@ -256,7 +277,8 @@ export async function convertAnthropicStream(stream, sink) {
       if (payload.usage) sink.setUsage({
         prompt_tokens: payload.usage.input_tokens,
         completion_tokens: payload.usage.output_tokens,
-        total_tokens: (Number(payload.usage.input_tokens) || 0) + (Number(payload.usage.output_tokens) || 0),
+        cache_creation_input_tokens: payload.usage.cache_creation_input_tokens,
+        cache_read_input_tokens: payload.usage.cache_read_input_tokens,
       })
     } else if (type === 'message_stop') {
       break
@@ -297,6 +319,7 @@ export async function convertResponsesStream(stream, sink) {
         prompt_tokens: payload.response.usage.input_tokens,
         completion_tokens: payload.response.usage.output_tokens,
         total_tokens: payload.response.usage.total_tokens,
+        cached_tokens: payload.response.usage.input_tokens_details?.cached_tokens,
       })
     } else if (type === 'response.failed' || type === 'error') {
       throw new Error(payload.response?.error?.message || payload.error?.message || payload.message || '订阅接口返回错误')
