@@ -293,7 +293,7 @@ function createNativeStream(url, headers, body) {
 
 function subscriptionSink(controller, streaming) {
   const encoder = new TextEncoder()
-  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 }, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
   let text = ''
   let tools = []
   let finish = 'stop'
@@ -316,9 +316,15 @@ function subscriptionSink(controller, streaming) {
     },
     setUsage(value) {
       if (!value) return
-      usage.prompt_tokens = Number(value.prompt_tokens) || 0
-      usage.completion_tokens = Number(value.completion_tokens) || 0
-      usage.total_tokens = Number(value.total_tokens) || usage.prompt_tokens + usage.completion_tokens
+      if (value.prompt_tokens != null) usage.prompt_tokens = Number(value.prompt_tokens) || 0
+      if (value.completion_tokens != null) usage.completion_tokens = Number(value.completion_tokens) || 0
+      if (value.cached_tokens != null) usage.prompt_tokens_details.cached_tokens = Number(value.cached_tokens) || 0
+      if (value.cache_creation_input_tokens != null) usage.cache_creation_input_tokens = Number(value.cache_creation_input_tokens) || 0
+      if (value.cache_read_input_tokens != null) {
+        usage.cache_read_input_tokens = Number(value.cache_read_input_tokens) || 0
+        usage.prompt_tokens_details.cached_tokens = usage.cache_read_input_tokens
+      }
+      usage.total_tokens = value.total_tokens != null ? (Number(value.total_tokens) || 0) : usage.prompt_tokens + usage.completion_tokens
     },
     finish() {
       if (!streaming || !controller) return
