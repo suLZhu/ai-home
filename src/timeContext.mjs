@@ -95,11 +95,15 @@ export function timeContextText(ctx) {
   ].join('\n')
 }
 
-// 把时间上下文作为【独立】的 system 消息放到消息数组最前面。
-// 不修改传入数组，也不替换/覆盖已有的 system 消息（人物设定、
-// 世界书、长期记忆都保持原样）。
+// 把时间上下文作为【独立】的 system 消息放在稳定 system/developer 前缀之后。
+// 角色卡 / 系统设定 / 摘要等稳定前缀保持在请求最前方，便于上游 Prompt Cache
+// 复用；每分钟变化的时间不能放第 1 条，否则会让整段前缀缓存失效。
+// 不修改传入数组，也不替换/覆盖已有 system 消息。
 export function injectTimeContext(messages, now, timeZone) {
   const list = Array.isArray(messages) ? messages.slice() : []
   const ctx = buildTimeContext(now, timeZone)
-  return [{ role: 'system', content: timeContextText(ctx) }, ...list]
+  const dynamic = { role: 'system', content: timeContextText(ctx) }
+  let prefixEnd = 0
+  while (prefixEnd < list.length && (list[prefixEnd]?.role === 'system' || list[prefixEnd]?.role === 'developer')) prefixEnd += 1
+  return [...list.slice(0, prefixEnd), dynamic, ...list.slice(prefixEnd)]
 }
