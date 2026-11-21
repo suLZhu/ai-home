@@ -81,3 +81,30 @@ export async function messageWithVision(role, text, attachments, fetchAttachment
     content: parts.length > 1 ? parts : parts[0].text,
   }
 }
+
+
+// Historical image payloads are expensive and were previously outside the text
+// compaction budget. Keep only the newest N user messages with images when
+// rebuilding history; the current user message is handled separately and is
+// never affected by this helper.
+export function historyVisionMessageIndexes(messages, maxMessages = 1) {
+  const list = Array.isArray(messages) ? messages : []
+  const limit = Math.max(0, Number(maxMessages) || 0)
+  if (!limit) return new Set()
+  const indexes = []
+  for (let i = list.length - 1; i >= 0 && indexes.length < limit; i--) {
+    const message = list[i]
+    if (message?.role !== 'user' || !Array.isArray(message?.attachments)) continue
+    if (message.attachments.some(a => imageMime(a?.type))) indexes.push(i)
+  }
+  return new Set(indexes)
+}
+
+export function historicalMessageWithoutVision(message) {
+  if (!message || message.role !== 'user' || !Array.isArray(message.attachments) || !message.attachments.length) {
+    return { role: message?.role, content: message?.content }
+  }
+  const names = message.attachments.filter(a => imageMime(a?.type)).map(a => String(a?.name || '图片')).slice(0, 6)
+  const suffix = names.length ? '\n[较早图片未重复发送：' + names.join('、') + '；需要重新看图时请让用户重发或引用最近图片。]' : ''
+  return { role: message.role, content: String(message.content || '') + suffix }
+}
