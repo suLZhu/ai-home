@@ -4,6 +4,13 @@ import './SettingsSectionsPreview.css'
 type Row = { title: string; detail: string; kind?: 'toggle' | 'choice' | 'action' | 'danger'; options?: string[] }
 type Group = { heading: string; rows: Row[] }
 
+const compactTitles = new Set([
+  '主题中心','聊天背景','气泡样式','消息显示','消息操作',
+  '新消息提醒','后台生成','悬浮窗','应用锁','排除应用',
+  '备份与恢复','最近的请求','错误记录','检查更新','关于栖间',
+  '长期记忆','世界书','助手详情','独立会话','房间布置',
+])
+
 const pages: Record<string, Group[]> = {
   '外观与主题': [
     { heading: '外观', rows: [
@@ -102,7 +109,7 @@ export function SettingsSectionsPreview({ section, onTheme }: { section: string;
     {groups.map(group => <section className="qj-subpage-group" key={group.heading}>
       <h3>{group.heading}</h3><div className="qj-subpage-list">
         {group.rows.map(row => <button type="button" className="qj-subpage-row" key={row.title} onClick={() => open(row)}>
-          <span className="qj-subpage-copy"><b>{row.title}</b><small>{row.detail}</small></span>
+          <span className="qj-subpage-copy"><b>{row.title}</b>{!compactTitles.has(row.title)&&<small>{row.detail}</small>}</span>
           {row.kind === 'toggle' ? <span className={'qj-subpage-switch '+(values[row.title]?'on':'')} aria-label={values[row.title]?'已开启':'已关闭'}><i/></span> :
             <span className="qj-subpage-right">{choices[row.title] || (row.kind === 'danger' ? '谨慎操作' : '›')}</span>}
         </button>)}
