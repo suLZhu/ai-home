@@ -56,3 +56,10 @@
 .qj-dialog-options button:active{
   background:#f7f9f6;
 }
+
+
+/* 基础功能标题足够明确时，隐藏说明后同步压紧行高。 */
+.qj-subpage-row{min-height:44px;padding-top:7px;padding-bottom:7px}
+.qj-subpage-copy{gap:1px}
+.qj-subpage-copy:not(:has(small)){justify-content:center}
+.qj-subpage-copy:not(:has(small)) b{line-height:1.2}
