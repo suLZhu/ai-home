@@ -1458,7 +1458,8 @@ export default function App() {
       const previous=await Promise.all(visibleHistory.map(async (m,index)=>{
         if(m.role!=='user'||!m.attachments?.length)return {role:m.role,content:m.content}
         if(!historyVisionIndexes.has(index))return historicalMessageWithoutVision(m)
-        return messageWithVision(m.role,m.content,m.attachments,fetchVisionImage)
+        const recentImages=m.attachments.filter(a=>a.type.startsWith('image/')).slice(-2)
+        return messageWithVision(m.role,m.content,recentImages,fetchVisionImage)
       }))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
       for(const a of attachments.filter(a=>a.type.startsWith('image/'))){
