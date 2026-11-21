@@ -3406,7 +3406,9 @@ function Chat(p: any) {
       }
       loaded.push(item)
     }
-    if(uploadFailed)p.setChatError(uploadFailed+' 张图片保存到云端失败，当前仅本次会话可见，刷新后会显示为失效。')
+    // 附件持久化失败不再打断聊天：当前图片仍保留 dataUrl，可正常随本轮请求发送。
+    // 这里只记开发日志；不要把“云端失败”作为每次发图都会弹出的用户提示。
+    if(uploadFailed)console.warn('[attachments] persistence failed for',uploadFailed,'image(s); keeping in-session data only')
     setFiles(prev=>[...prev,...loaded].slice(0,8))
     if(imageInput.current)imageInput.current.value=''
     if(fileInput.current)fileInput.current.value=''
