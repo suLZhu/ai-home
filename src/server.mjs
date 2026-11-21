@@ -441,13 +441,12 @@ const apiServer = createServer(async (req, res) => {
       const accountId = String(b.accountId || '').trim()
       const headers = {
         Authorization: 'Bearer ' + token,
-        originator: 'qijian',
-        version: '0.159.0',
-        'User-Agent': 'qijian/2.2',
+        originator: 'codex_cli_rs',
+        'User-Agent': 'codex_cli_rs/0.167.1 (Qijian Android)',
         Accept: 'application/json',
       }
       if (accountId) headers['chatgpt-account-id'] = accountId
-      const upstream = await fetch('https://chatgpt.com/backend-api/codex/models?client_version=0.159.0', {
+      const upstream = await fetch('https://chatgpt.com/backend-api/codex/models?client_version=0.167.1', {
         headers, redirect: 'error', signal: AbortSignal.timeout(15000),
       })
       const text = await upstream.text()
