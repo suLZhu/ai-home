@@ -122,7 +122,7 @@ function alignCardNames(cards:Record<string,CharacterCard>|null|undefined, names
 }
 type Tool = '人物设置' | '世界书' | '记忆面板' | '工作流' | '自主生活' | 'MCP' | '模型设置' | 'SKILL 技能库' | '角色外观' | '工具调用看板' | '助手档案'
 type MessageAttachment = { name: string; type: string; size: number; preview?: string; dataUrl?: string; textContent?: string; assetId?: string }
-type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; tokensPerSecond?: number }
+type TokenUsage = { at?: string; model?: string; promptTokens?: number; completionTokens?: number; cachedTokens?: number; cacheReadTokens?: number; elapsedMs?: number; preflightMs?: number; firstTokenMs?: number; streamMs?: number; tokensPerSecond?: number }
 type ChatMessage = { role: 'user' | 'assistant'; content: string; at?: string; id?: string; contextNote?: string; attachments?: MessageAttachment[]; usage?: TokenUsage; taskRunId?: string; reasoning?: string }
 type Conversation = { id:string; title:string; messages:ChatMessage[]; updatedAt:string; summary?:string; summaryThroughId?:string; summaryThrough?:number; summaryAt?:string }
 
@@ -342,6 +342,7 @@ export default function App() {
   const [activeConversationIds,setActiveConversationIds] = useState<Record<Person,string>>(()=>{const saved=read<Record<string,string>>('ai-home.activeConversationIds',{});const all=initialConversations();return Object.fromEntries(ASSISTANT_PEOPLE.map(id=>[id,all[id].some(c=>c.id===saved[id])?saved[id]:all[id][0]?.id||''])) as Record<Person,string>})
   // Drafts are isolated by assistant AND conversation, including during background generation.
   const [sendingScopes, setSendingScopes] = useState<Record<string,boolean>>({})
+  const [generationStages, setGenerationStages] = useState<Record<string,''|'preparing'|'connecting'|'streaming'|'tools'>>({})
   const draftKey = pendingScopeKey(person, activeConversationIds[person] || '')
   const sending = !!sendingScopes[draftKey]
   const draft = drafts[draftKey] || ''
@@ -1370,7 +1371,7 @@ export default function App() {
     if(options.insertUser!==false)setDrafts(previous=>({...previous,[pendingScopeKey(target,sendConversationId)]:''}))
     // 用户气泡一入列就算「发出去了」：待发送卡片立刻消失，不必等助手回复生成完。
     options.onUserInserted?.()
-    setChatError('');sendingRef.current[sendScope]=true;setSendingScopes(prev=>({...prev,[sendScope]:true}))
+    setChatError('');sendingRef.current[sendScope]=true;setSendingScopes(prev=>({...prev,[sendScope]:true}));setGenerationStages(prev=>({...prev,[sendScope]:'preparing'}))
     // 进程被系统回收时靠这条标记恢复「上次未完成的生成」，不丢空白占位气泡。
     startGeneration(localStorage,{person:target,conversationId:sendConversationId,messageId:assistantMessageId},Date.now())
     genDebug('generation_started',{person:target,conversationId:sendConversationId,messageId:assistantMessageId})
@@ -1425,6 +1426,7 @@ export default function App() {
       }
     }
     const requestStartedAt=preflightStartedAt
+    const preflightFinishedAt=performance.now()
 
     const usageTotals:TokenUsage={promptTokens:0,completionTokens:0,cachedTokens:0,cacheReadTokens:0}
     // 真机证据：流式过程中每 2s 打一次「仍在接收」，用于判断后台是否被系统暂停。
@@ -1601,6 +1603,8 @@ export default function App() {
         const requestBody:any={model:activeModel.model.trim(),messages:requestMessages,stream:true,stream_options:{include_usage:true}}
         if(openAITools.length){requestBody.tools=openAITools;requestBody.tool_choice='auto'}
         const chatProxy=()=>apiFetch('/api/chat',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},signal:abortController.signal,body:JSON.stringify({endpoint:activeModel.endpoint.trim(),chatUrl:activeChatUrl,apiKey:activeApiKey.trim(),apiKeys:apiKeyCandidates,timeZone,body:requestBody,...(subscriptionProtocol?{subscriptionProtocol,subscriptionAccountId}:{}),...(routeMode?{routes:routePlan}:{})})})
+        setGenerationStages(prev=>({...prev,[sendScope]:'connecting'}))
+        const upstreamStartedAt=performance.now()
         let response=await chatProxy()
         if(!response.ok){
           const detail=await response.text()
@@ -1622,8 +1626,9 @@ export default function App() {
         // 清洗后的增量才写进 answer / thinking（持久化与通知因此天然都是干净的）。
         const contentCleanup=createStreamCleanup();const reasoningCleanup=createStreamCleanup()
         const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let roundText='';let thinking='';const calls:Record<number,{id:string;type:string;function:{name:string;arguments:string}}>={}
+        let firstTokenAt=0
         let toolPayloadChars=0
-      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){thinking+=reasoningCleanup.push(thinkPiece);queueStreamPaint(answer,thinking)}const piece=delta?.content;if(typeof piece==='string'&&piece){const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}queueStreamPaint(answer,thinking)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
+      while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split(/\r?\n/);buffer=lines.pop()||'';for(const line of lines){if(!line.startsWith('data:'))continue;const data=line.slice(5).trim();if(!data||data==='[DONE]')continue;try{const chunk=JSON.parse(data);const usage=chunk.usage;if(usage&&typeof usage==='object'){const promptTokens=Number(usage.prompt_tokens??usage.input_tokens??0);const completionTokens=Number(usage.completion_tokens??usage.output_tokens??0);const cachedTokens=Number(usage.prompt_tokens_details?.cached_tokens??usage.input_tokens_details?.cached_tokens??0);const cacheReadTokens=Number(usage.prompt_tokens_details?.cache_read_input_tokens??usage.input_tokens_details?.cache_read_input_tokens??usage.cache_read_input_tokens??0);if(Number.isFinite(promptTokens))usageTotals.promptTokens=(usageTotals.promptTokens||0)+promptTokens;if(Number.isFinite(completionTokens))usageTotals.completionTokens=(usageTotals.completionTokens||0)+completionTokens;if(Number.isFinite(cachedTokens))usageTotals.cachedTokens=(usageTotals.cachedTokens||0)+cachedTokens;if(Number.isFinite(cacheReadTokens))usageTotals.cacheReadTokens=(usageTotals.cacheReadTokens||0)+cacheReadTokens}const delta=chunk.choices?.[0]?.delta;const thinkPiece=(delta as any)?.reasoning_content ?? (delta as any)?.reasoning;if(typeof thinkPiece==='string'&&thinkPiece){if(!firstTokenAt){firstTokenAt=performance.now();setGenerationStages(prev=>({...prev,[sendScope]:'streaming'}))}thinking+=reasoningCleanup.push(thinkPiece);queueStreamPaint(answer,thinking)}const piece=delta?.content;if(typeof piece==='string'&&piece){if(!firstTokenAt){firstTokenAt=performance.now();setGenerationStages(prev=>({...prev,[sendScope]:'streaming'}))}const cleanPiece=contentCleanup.push(piece);roundText+=cleanPiece;answer+=cleanPiece;{const _now=Date.now();if(_now-lastStreamLog>2000){lastStreamLog=_now;genDebug('stream_receiving',{person:target,conversationId:sendConversationId,messageId:assistantMessageId,len:answer.length})}queueStreamPaint(answer,thinking)}}for(const call of (delta?.tool_calls||[])){const idx=call.index??0;calls[idx]??={id:'',type:'function',function:{name:'',arguments:''}};if(call.id)calls[idx].id+=call.id;if(call.type)calls[idx].type=call.type;if(call.function?.name)calls[idx].function.name+=call.function.name;if(call.function?.arguments)calls[idx].function.arguments+=call.function.arguments}}catch{}}}
         // 本轮流结束：冲刷清洗器缓冲，把暂缓的尾部补回；未闭合的抑制块由 flush 丢弃，
         // 绝不把半截系统注入写进聊天记录或下一轮工具请求。
         const contentTail=contentCleanup.flush()
@@ -1632,6 +1637,7 @@ export default function App() {
         if(reasoningTail){thinking+=reasoningTail;updateActiveConversationMessages(target,prev=>prev.map(m=>m.id===assistantMessageId?{...m,reasoning:thinking}:m),sendConversationId)}
         const toolCalls=Object.keys(calls).map(k=>calls[Number(k)]).filter(c=>c.id&&c.function.name)
         if(!toolCalls.length){finished=true;break}
+        setGenerationStages(prev=>({...prev,[sendScope]:'tools'}))
         requestMessages.push({role:'assistant',content:roundText||null,tool_calls:toolCalls})
         for(const call of toolCalls){
           if(!toolBudget.tryStartTool()) throw new Error('本次消息的工具调用已达到安全上限（64 次），请缩小任务后继续。')
@@ -1850,7 +1856,10 @@ export default function App() {
       const elapsedMs=Math.max(1,Math.round(performance.now()-requestStartedAt))
       const completionTokens=usageTotals.completionTokens||0
       const hasUsage=Boolean(usageTotals.promptTokens||usageTotals.completionTokens||usageTotals.cachedTokens||usageTotals.cacheReadTokens)
-      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,tokensPerSecond:completionTokens?Math.round(completionTokens/(elapsedMs/1000)*10)/10:undefined}:undefined
+      const preflightMs=Math.max(0,Math.round(preflightFinishedAt-requestStartedAt))
+      const firstTokenMs=firstTokenAt?Math.max(0,Math.round(firstTokenAt-upstreamStartedAt)):undefined
+      const streamMs=firstTokenAt?Math.max(0,Math.round(performance.now()-firstTokenAt)):undefined
+      const finalUsage:TokenUsage|undefined=hasUsage?{...usageTotals,model:activeModel.model,at:new Date().toISOString(),elapsedMs,preflightMs,firstTokenMs,streamMs,tokensPerSecond:completionTokens&&streamMs?Math.round(completionTokens/(streamMs/1000)*10)/10:undefined}:undefined
       if(!answer){
         // 重新生成拿到空白回复：不覆盖旧回复，恢复原样并提示（防止有效回复被空白顶掉）。
         if(regen){restoreRegenerate();setChatError('重新生成没有返回内容，已保留原来的回复。');return 'fail'}
@@ -1886,7 +1895,7 @@ export default function App() {
       if (streamPaintTimer !== undefined) flushStreamPaint()
       if(sendAbortRef.current[sendScope]?.id===assistantMessageId)delete sendAbortRef.current[sendScope]
       delete sendingRef.current[sendScope]
-      setSendingScopes(prev=>({...prev,[sendScope]:false}))
+      setSendingScopes(prev=>({...prev,[sendScope]:false}));setGenerationStages(prev=>({...prev,[sendScope]:''}))
       finishGeneration(localStorage, assistantMessageId)
       setGenerationForeground({action:'stop', messageId:assistantMessageId})
       // 生成成功 → 自动补发同会话的 pending，开启下一轮；报错/中断不自动发（保留给用户）。
@@ -2249,7 +2258,7 @@ export default function App() {
          activeTool={activeTool} setActiveTool={(v)=>{ if(v===''&&toolReturnToSettings){ setToolReturnToSettings(false); setActiveTool(''); setPage('settings') } else setActiveTool(v) }} memory={memory} setMemory={setMemory}
         prompt={prompt} setPrompt={setPrompt} characters={characters} setCharacters={setCharacters} worldbook={worldbook} setWorldbook={setWorldbook} worldEntries={worldEntries} setWorldEntries={setWorldEntries} memoryEntries={memoryEntries} setMemoryEntries={setMemoryEntries} mcpConnections={mcpConnections} setMcpConnections={setMcpConnections}
         modelConfig={modelConfig[person]} setModelConfig={(v:React.SetStateAction<ModelConfig>)=>setModelConfig(old=>({...old,[person]:typeof v==='function'?v(old[person]):v}))} apiKey={apiKey[person]||''} setApiKey={(v:string)=>setApiKey(old=>({...old,[person]:v}))}
-        sending={sending} chatError={chatError} setChatError={setChatError}
+        sending={sending} generationStage={generationStages[draftKey]||''} chatError={chatError} setChatError={setChatError}
         personAppearance={personAppearance} setPersonAppearance={setPersonAppearance} customAssets={customAssets}
         pendingSends={pendingSends}
         enqueuePending={enqueuePending} flushPending={flushPending} cancelPending={cancelPending} editPendingText={editPendingText} stopGeneration={stopGeneration}
@@ -2467,7 +2476,7 @@ function Room(props: {
   userSettings:Record<Person,UserSettings>, setUserSettings:React.Dispatch<React.SetStateAction<Record<Person,UserSettings>>>,
   profileFromChat:boolean, setProfileFromChat:(v:boolean)=>void, openAssistantProfile:(fromChat?:boolean)=>void,
   modelConfig: ModelConfig, setModelConfig: React.Dispatch<React.SetStateAction<ModelConfig>>, apiKey: string, setApiKey: (v:string)=>void,
-  sending: boolean, chatError: string, setChatError: (v:string)=>void,
+  sending: boolean, generationStage?: ''|'preparing'|'connecting'|'streaming'|'tools', chatError: string, setChatError: (v:string)=>void,
   personAppearance: Record<string,PersonAppearancePref>, setPersonAppearance: React.Dispatch<React.SetStateAction<Record<string,PersonAppearancePref>>>, customAssets: CustomAssets,
   // 生成态待发送队列（conversation queue）：pending 由 App 持有（跨会话/刷新不丢），
   // Chat 只负责输入状态机与待发送卡片的展示/交互。
@@ -3549,7 +3558,7 @@ function Chat(p: any) {
             </details>:null}
           {m.role==='assistant'&&shownContent
             ? <RichText text={shownContent}/>
-            : (shownContent || (p.sending&&isLast?'正在思考……':''))}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><IconWarning size={14}/> {a.preview?'图片已失效':'图片 '+a.name}</span>}</div>:<div className="sent-file"><span><IconFile size={18}/></span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
+            : (shownContent || (p.sending&&isLast?(p.generationStage==='preparing'?'正在准备上下文…':p.generationStage==='connecting'?'正在连接模型…':p.generationStage==='tools'?'正在调用工具…':'正在生成…'):'') )}{m.attachments?.map((a:MessageAttachment,j:number)=><div className="sent-attachment" key={j}>{a.type.startsWith('image/')?<div className="sent-image-placeholder">{a.preview&&!brokenPreviews[a.preview]?<button type="button" className="image-open-button" title="点击放大图片" onClick={()=>{if(selectMode)return;setLightbox({src:a.preview!,name:a.name})}}><img src={assetUrl(a.preview)} alt={a.name} onError={()=>setBrokenPreviews(prev=>({...prev,[String(a.preview)]:true}))}/></button>:<span className="attachment-missing" title={a.preview?'原始图片数据已丢失，无法恢复':'这条历史消息只保留了文件名'}><IconWarning size={14}/> {a.preview?'图片已失效':'图片 '+a.name}</span>}</div>:<div className="sent-file"><span><IconFile size={18}/></span><div><b>{a.name}</b><small>{formatSize(a.size)}</small>{a.textContent&&<button type="button" className="download-text" onClick={()=>{if(selectMode)return;downloadText(a)}}>下载文本副本</button>}</div></div>}</div>)}
           {m.role==='assistant'&&m.id&&<MessageToolCalls messageId={m.id}/>}
         </div>
           </>}
