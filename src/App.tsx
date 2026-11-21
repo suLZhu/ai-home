@@ -42,7 +42,7 @@ import { formatDuration, summarizeTokenUsage, groupToolCalls, needsChineseTransl
 // 消息操作：重新生成目标解析 + 历史消息 id 补齐/对齐（编辑、删除、重新生成按 id 定位）。
 import { resolveRegenerateContext, alignMessageIds } from './messageOps.mjs'
 import { needsUpload, assetIdsOfMessages, collectReferencedAssetIds, releasedAssetIds } from './attachmentRefs.mjs'
-import { messageWithVision } from './visionAttachments.mjs'
+import { messageWithVision, historyVisionMessageIndexes, historicalMessageWithoutVision } from './visionAttachments.mjs'
 // 会话内消息搜索（微信式）：纯字符串匹配 + 上一条/下一条循环 + messageId 定位。
 import { searchMessages, stepMatchIndex, type ChatSearchResult } from './chatSearch.mjs'
 // 云端恢复决策（数据安全）：启动动作判定、覆盖前本地备份、快照→视图提取。
@@ -1437,8 +1437,13 @@ export default function App() {
       const fetchVisionImage = (url:string) => url.startsWith('/api/attachments/')
         ? apiFetch(url,{signal:abortController.signal})
         : fetch(url,{signal:abortController.signal,credentials:'omit'})
-      const previous=await Promise.all(visibleHistory.map(async m=>{
+      // 历史图片不再无限重放：文字压缩预算无法衡量 base64/视觉输入成本，
+      // 过去会导致“文字不多但单次请求几十万 token”。只保留最近 1 条历史图片消息；
+      // 当前用户本轮新发的图片仍完整发送，不受影响。
+      const historyVisionIndexes=historyVisionMessageIndexes(visibleHistory,1)
+      const previous=await Promise.all(visibleHistory.map(async (m,index)=>{
         if(m.role!=='user'||!m.attachments?.length)return {role:m.role,content:m.content}
+        if(!historyVisionIndexes.has(index))return historicalMessageWithoutVision(m)
         return messageWithVision(m.role,m.content,m.attachments,fetchVisionImage)
       }))
       const content:any[]=[{type:'text',text:text+(attachments.filter(a=>a.textContent).map(a=>'\n\n【文件 '+a.name+' 内容】\n'+a.textContent).join(''))+(attachments.filter(a=>!a.dataUrl&&!a.textContent).map(a=>'\n[附带文件：'+a.name+'；当前未提取该文件内容]').join(''))}]
