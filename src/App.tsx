@@ -1469,11 +1469,21 @@ export default function App() {
         }else if(resolved.content)content[0].text+='\n'+resolved.content
       }
       let currentContent:any=content.some(c=>c.type==='image_url')||attachments.some(a=>a.textContent)?content:text+(attachmentLabel)
-      const userTop=matched.filter(e=>e.target==='user'&&e.position==='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
-      const userTail=matched.filter(e=>e.target==='user'&&e.position!=='top').map(e=>'['+e.title+']\n'+e.content).join('\n\n')
+      const userTop=takeWithinBudget(
+        matched.filter(e=>e.target==='user'&&e.position==='top').map(e=>'['+clipContextText(e.title,120)+']\n'+clipContextText(e.content,1800)),
+        6000,2000
+      ).join('\n\n')
+      const userTail=takeWithinBudget(
+        matched.filter(e=>e.target==='user'&&e.position!=='top'&&e.position!=='depth').map(e=>'['+clipContextText(e.title,120)+']\n'+clipContextText(e.content,1800)),
+        6000,2000
+      ).join('\n\n')
       if(Array.isArray(currentContent)){if(userTop)currentContent=[{type:'text',text:'【世界书】\n'+userTop+'\n\n'},...currentContent];if(userTail)currentContent=[...currentContent,{type:'text',text:'\n\n【世界书】\n'+userTail}]}else currentContent=[userTop&&'【世界书】\n'+userTop,currentContent,userTail&&'【世界书】\n'+userTail].filter(Boolean).join('\n\n')
       const historyWithWorld:any[]=[...previous]
-      for(const e of matched.filter(e=>e.target==='assistant')){const item={role:'assistant',content:'【世界书：'+e.title+'】\n'+e.content};const at=e.position==='top'?0:e.position==='tail'?historyWithWorld.length:Math.max(0,historyWithWorld.length-Math.max(0,e.depth));historyWithWorld.splice(at,0,item)}
+      const assistantWorld=takeWithinBudget(
+        matched.filter(e=>e.target==='assistant').map(e=>'【世界书：'+clipContextText(e.title,120)+'】\n'+clipContextText(e.content,1800)),
+        6000,2000
+      )
+      for(const content of assistantWorld){historyWithWorld.push({role:'assistant',content})}
       const requestMessages:any[]=[
         ...(system?[{role:'system',content:system}]:[]),
         ...(contextSummary?[{role:'system',content:buildSummarySystemMessage(contextSummary,summaryCovered||Math.max(0,coveredIndex+1))}]:[]),
@@ -1482,8 +1492,8 @@ export default function App() {
         ...historyWithWorld,
         {role:'user',content:currentContent},
       ]
-      for(const e of matched.filter(e=>e.target==='system'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'system',content:'【世界书：'+e.title+'】\n'+e.content})}
-      for(const e of matched.filter(e=>e.target==='user'&&e.position==='depth')){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'user',content:'【世界书：'+e.title+'】\n'+e.content})}
+      for(const e of matched.filter(e=>e.target==='system'&&e.position==='depth').slice(0,4)){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'system',content:'【世界书：'+clipContextText(e.title,120)+'】\n'+clipContextText(e.content,1800)})}
+      for(const e of matched.filter(e=>e.target==='user'&&e.position==='depth').slice(0,4)){const at=Math.max(system?1:0,requestMessages.length-1-Math.max(0,e.depth));requestMessages.splice(at,0,{role:'user',content:'【世界书：'+clipContextText(e.title,120)+'】\n'+clipContextText(e.content,1800)})}
       // Load tools only from the active character's server-side MCP bindings.
       const toolRoutes=new Map<string,{id:string;person:Person;name:string;connectionName:string}>()
       const openAITools:any[]=[]
