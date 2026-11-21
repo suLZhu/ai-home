@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import type { IconComponent } from './icons'
+import { IconChevronRight, type IconComponent } from './icons'
 
 type IconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'> & {
   icon: IconComponent
@@ -53,7 +53,7 @@ export function SettingsRow({
         {detail ? <small>{detail}</small> : null}
       </span>
       {meta ? <span className="settings-row-meta">{meta}</span> : null}
-      {trailing ?? <span className="settings-row-chev" aria-hidden="true">›</span>}
+      {trailing ?? <span className="settings-row-chev" aria-hidden="true"><IconChevronRight size={14} /></span>}
     </button>
   )
 }
