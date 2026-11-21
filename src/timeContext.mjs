@@ -84,7 +84,7 @@ export function buildTimeContext(now, timeZone) {
 // 用户自述作息（补觉/上夜班等）优先于时段推断。
 export function timeContextText(ctx) {
   return [
-    '【现在】' + ctx.date + ' ' + ctx.weekday + ' ' + ctx.time + '｜' + ctx.partOfDay + '｜' + ctx.timeZone + '（' + ctx.utcOffset + '）',
+    '【当前时间上下文】当前时间：' + ctx.date + ' ' + ctx.weekday + ' ' + ctx.time + '（' + ctx.partOfDay + '，' + ctx.timeZone + ' ' + ctx.utcOffset + '）',
     '这是本轮请求实时生成的当前时刻基准（24 小时制）。',
     '使用说明：',
     '1. 以上日期与时间就是本轮对话的“现在”，属于当前时刻基准。不要说“我无法知道当前时间”，也不要使用训练数据中的旧日期代替它。',
