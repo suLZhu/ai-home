@@ -24,7 +24,7 @@ import { applyPackVars, getActivePackId, loadThemePacks, normalizeThemePack, set
 import { DEFAULT_ROOM_LAYOUT, loadRoomLayout, saveRoomLayout, resetRoomLayout, type RoomItem, type RoomLayout } from './roomLayout.mjs'
 import { WorkspaceSettings, type WorkspaceConfig } from './WorkspaceSettings'
 import { confirmDialog } from './uiDialog'
-import { planCompaction, buildSummarySystemMessage, searchHistory, CONTEXT_LIMITS } from './contextCompression.mjs'
+import { planCompaction, buildSummarySystemMessage, searchHistory, searchMessageList, CONTEXT_LIMITS } from './contextCompression.mjs'
 import { IconHome, IconChat, IconSettings, IconClock, IconMemory, IconCalendar, IconSun, IconPalette, IconPlug, IconChart, IconSparkles, IconFolder, IconShield, IconInfo, IconFlower, IconPlus, IconBack, IconChevronRight, IconChevronDown, IconChevronUp, IconClose, IconEdit, IconTrash, IconEye, IconEyeOff, IconArrowUp, IconArrowDown, IconSwitch, IconShare, IconTest, IconSearch, IconMinus, IconFile, IconWarning, IconMail, IconBook, IconCheck, IconCopy, IconRefresh, IconEmoji, IconPhoto, IconCoffee, IconMusic, IconLedger, IconGrid, IconMore, IconStar, IconMenu, IconMic, IconStop, IconSend, type IconComponent } from './icons'
 import { IconButton, SettingsRow } from './uiPrimitives'
 import { DEFAULT_BEAUTIFY_PACK, BEAUTIFY_PACKS } from './beautify'
@@ -1459,6 +1459,15 @@ export default function App() {
         summaryFailed=true
         visibleHistory=visibleHistory.slice(-CONTEXT_LIMITS.keepMessages)
       }
+      // 当前聊天窗优先召回：凡是因为已有摘要或本轮窗口裁剪而没有逐条发送的旧消息，
+      // 都先做一次本地关键词检索。零网络、零模型调用，不增加首包前置耗时。
+      const omittedCount=Math.max(0,priorHistory.length-visibleHistory.length)
+      const omittedHistory=omittedCount?priorHistory.slice(0,omittedCount):[]
+      const localRecallHits=text.length>=2?searchMessageList(omittedHistory,text,4):[]
+      const localRecallContext=localRecallHits.length
+        ? '【当前聊天窗旧原文召回（优先级高于跨会话记忆；仅补充与本轮相关的旧细节）】\n'
+          + localRecallHits.map((hit:any)=>'【'+(hit.role==='user'?'用户':'助手')+'旧原话】\n'+clipContextText(hit.content,900)).join('\n\n')
+        : ''
       // Restore previously uploaded image bytes for the model; a filename is not vision.
       const fetchVisionImage = (url:string) => url.startsWith('/api/attachments/')
         ? apiFetch(url,{signal:abortController.signal})
@@ -1499,7 +1508,8 @@ export default function App() {
       const requestMessages:any[]=[
         ...(system?[{role:'system',content:system}]:[]),
         ...(contextSummary?[{role:'system',content:buildSummarySystemMessage(contextSummary,summaryCovered||Math.max(0,coveredIndex+1))}]:[]),
-        ...(summaryFailed?[{role:'system',content:'【上下文提示】更早的对话因为压缩失败没有带上。需要细节时用 conversation_search 工具按关键词回顾原文，不要假装记得没看到的内容。'}]:[]),
+        ...(summaryFailed?[{role:'system',content:'【上下文提示】更早的对话因为压缩失败没有逐条带上；本轮已自动召回部分相关旧原文。仍缺细节时用 conversation_search 工具按关键词回顾原文，不要假装记得没看到的内容。'}]:[]),
+        ...(localRecallContext?[{role:'system',content:localRecallContext}]:[]),
         ...(recalledContext?[{role:'system',content:recalledContext}]:[]),
         ...historyWithWorld,
         {role:'user',content:currentContent},
