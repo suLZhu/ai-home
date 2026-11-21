@@ -87,7 +87,7 @@ test('非法或空时区回退 Asia/Shanghai', () => {
 
 // --- 纯函数：注入形态与文案 -------------------------------------------------
 
-test('injectTimeContext 追加独立 system 消息，不覆盖原 system、不改动原数组', () => {
+test('injectTimeContext 追加独立 system 消息，保留稳定前缀用于缓存且不改动原数组', () => {
   const original = [
     { role: 'system', content: '【当前扮演角色】你是测试角色。' },
     { role: 'user', content: '你好' },
@@ -97,10 +97,10 @@ test('injectTimeContext 追加独立 system 消息，不覆盖原 system、不�
   const out = injectTimeContext(frozen, new Date('2026-10-26T16:30:00Z'), 'Asia/Shanghai')
   assert.equal(JSON.stringify(original), snapshot) // 原数组未被修改
   assert.equal(out.length, 3)
-  assert.equal(out[0].role, 'system')
-  assert.match(out[0].content, /【当前时间上下文】/)
-  assert.match(out[0].content, /2026-10-27/) // 当前（该时区）日期
-  assert.equal(out[1].content, '【当前扮演角色】你是测试角色。') // 原 system 原样保留
+  assert.equal(out[0].content, '【当前扮演角色】你是测试角色。') // 稳定 system 保持请求前缀，便于 Prompt Cache 命中
+  assert.equal(out[1].role, 'system')
+  assert.match(out[1].content, /【当前时间上下文】/)
+  assert.match(out[1].content, /2026-10-27/) // 当前（该时区）日期
   assert.equal(out[2].content, '你好')
 })
 
