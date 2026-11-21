@@ -9,6 +9,17 @@
 
 export const DEFAULT_TIME_ZONE = 'Asia/Shanghai'
 
+// 客户端首次启动时优先跟随设备 IANA 时区；这里只读取系统时区配置，
+// 不读取 GPS、IP、地址或任何位置数据。服务端仍以请求中显式 timeZone 为准。
+export function deviceTimeZone(fallback = DEFAULT_TIME_ZONE) {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return normalizeTimeZone(tz || fallback)
+  } catch {
+    return normalizeTimeZone(fallback)
+  }
+}
+
 // 校验 IANA 时区名；非法或空值回退到默认时区（Asia/Shanghai UTC+8）。
 export function normalizeTimeZone(tz) {
   const raw = String(tz == null ? '' : tz).trim()
@@ -89,9 +100,11 @@ export function timeContextText(ctx) {
     '时段：' + ctx.partOfDay,
     '时区：' + ctx.timeZone + '（' + ctx.utcOffset + '）',
     '使用说明：',
-    '1. 如果用户询问现在几点、今天星期几，优先使用上面这轮请求的日期与时间，不要用训练时的旧时间。以上时间仅用于合理安排与时间有关的表达（例如把上午 9 点理解为通常的活动时间，而不是睡觉时间）。',
-    '2. 若用户在对话中明确说自己在补觉、上夜班或作息与此时段不符，一律以用户所说的为准，不要机械套用常规作息。',
-    '3. 本上下文不包含天气、位置、地址或任何地理推断信息；不要据此虚构天气或地点。',
+    '1. 以上日期与时间就是本轮对话的“现在”，属于当前时刻基准。不要说“我无法知道当前时间”，也不要使用训练数据中的旧日期代替它。',
+    '2. 涉及“刚才、过一会儿、今天、明天、昨晚、几点了、上午/下午/晚上”等表达时，必须以上述当前时刻为基准理解和推理；必要时先计算日期跨越与时间先后，再回答。',
+    '3. 时间不相关时无需机械报时；但涉及作息、吃饭、上班、睡觉、提醒等时间敏感建议时，应让措辞与当前时段一致。例如上午 9 点通常是活动时间，不应仅因模板习惯催用户睡觉。',
+    '4. 若用户在对话中明确说自己在补觉、上夜班或作息与常规时段不符，一律以用户所说的为准，不要机械套用常规作息。',
+    '5. 本上下文不包含天气、位置、地址或任何地理推断信息；不要据此虚构天气或地点。',
   ].join('\n')
 }
 
