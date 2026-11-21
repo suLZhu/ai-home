@@ -113,7 +113,7 @@ test('injectTimeContext 对空/非数组消息也返回合法数组', () => {
 test('时间上下文文案含星期、时段与「补觉/上夜班以对话为准」，且不含天气/位置数据', () => {
   const text = timeContextText(buildTimeContext(new Date('2026-10-27T01:00:00Z'), 'Asia/Shanghai'))
   assert.match(text, /星期二/)
-  assert.match(text, /时段：上午/)
+  assert.match(text, /当前时间：.*（上午，Asia\/Shanghai UTC\+08:00）/)
   assert.match(text, /24 小时制/)
   assert.match(text, /补觉/)
   assert.match(text, /上夜班/)
@@ -231,7 +231,7 @@ test('相邻两轮请求刷新分钟时间，不把旧时间永久写入会话',
   const second = injectTimeContext(messages, new Date('2026-11-16T13:01:00Z'), 'Asia/Shanghai')
   assert.match(first[0].content, /当前时间：2026-11-16 星期一 20:59/)
   assert.match(second[0].content, /当前时间：2026-11-16 星期一 21:01/)
-  assert.match(second[0].content, /本轮请求时实时生成/)
+  assert.match(second[0].content, /本轮请求实时生成/)
   assert.equal(messages.length, 1)
   assert.doesNotMatch(second[0].content, /天气预报|用户位置|GPS/)
 })
